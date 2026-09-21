@@ -44,6 +44,10 @@ _Avoid_: relates to, relation
 One Issue naming another in its text, which the Tracker notes. A Mention is not a Link.
 _Avoid_: cross-reference, crosslink
 
+**Link Suggestion**:
+A Link Claude proposes from an Issue's text that the Tracker doesn't record. It is never drawn, and it becomes a Link only once the user confirms it and it is written to the Tracker.
+_Avoid_: inferred Link, guessed Link, implied Link
+
 **Blocked Issue**:
 An open Issue that at least one open Issue, in any Project, Blocks. Being Blocked does not pass along Parent Links.
 _Avoid_: waiting, dependent
