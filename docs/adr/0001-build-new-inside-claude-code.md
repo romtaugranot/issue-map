@@ -1,0 +1,15 @@
+# Build a new plugin that shows the Map only inside Claude Code
+
+Every existing Map of Issue Links is a web page or a separate app, and none of them covers GitHub and GitLab (self-hosted and Free tier included) with private Projects. So we build a new Claude Code plugin rather than adopt, wrap, fork or contribute to one. The plugin shows the Map only inside Claude Code: in the conversation, through pickers, and optionally in the status line. The Issue the user picks is then already in the session, and the user never has to leave the terminal. We take ideas from prior art but copy no code, and the plugin reads the Trackers itself using the `gh`/`glab` logins the machine already has.
+
+## Considered Options
+
+- **Adopt as-is** (`vanilla-bar/gh-issue-graph` for GitHub, `ngruychev/issue-graph` for GitLab): two tools, one per Tracker, and neither runs inside a session.
+- **Contribute upstream or fork** `martonpaulo/issues-graph`: it has the closest intent and is MIT-licensed. But it refuses private Projects by design, covers GitHub only, and is a static web page.
+- **Wrap** existing Maps or MCP servers at runtime: GitHub's official MCP server has no tools for `blocked by` Links, and each wrapped tool adds a third-party dependency.
+- **A browser page** (an artifact or a local page) alongside the in-session Map: it shows a large Map whole, but brings availability limits and needs a way to send the chosen Issue back into the session.
+
+## Consequences
+
+- No surface can draw an interactive Map inside Claude Code. The Map is text in the conversation, and the user moves through it with pickers, so a large Project can't be seen whole at once and has to be summarised.
+- A status line is terminal-only, and a user has just one. The plugin can't declare one itself, so a setup command has to write it into the user's settings.
