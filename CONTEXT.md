@@ -13,7 +13,7 @@ The system that holds a Project's Issues — GitHub, GitLab (gitlab.com or self-
 _Avoid_: forge, provider, platform
 
 **Project**:
-One collection of Issues on a Tracker — a GitHub repository or a GitLab project.
+One collection of Issues on a Tracker — a GitHub repository or a GitLab project. Not a GitHub Projects planning board.
 _Avoid_: repo (when meaning the Issues' container)
 
 **Home Project**:
