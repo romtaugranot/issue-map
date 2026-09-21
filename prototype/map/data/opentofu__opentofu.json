@@ -1,0 +1,6422 @@
+{
+ "project": "opentofu/opentofu",
+ "tracker": "github.com",
+ "canRecordBlocks": true,
+ "issues": [
+  {
+   "number": 317,
+   "title": "Add workspaces support to HTTP backend",
+   "url": "https://github.com/opentofu/opentofu/issues/317",
+   "createdAt": "2023-08-26T08:37:12Z",
+   "updatedAt": "2025-04-14T15:45:49Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 10,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 304,
+   "title": "Add support for lifecycle meta-argument in modules",
+   "url": "https://github.com/opentofu/opentofu/issues/304",
+   "createdAt": "2023-08-28T10:18:05Z",
+   "updatedAt": "2026-04-10T14:19:03Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 15,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1329,
+     "title": "Use variables in lifecycle attributes such as prevent_destroy or ignore_changes",
+     "url": "https://github.com/opentofu/opentofu/issues/1329",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 285,
+   "title": "Improve support for bootstrapping",
+   "url": "https://github.com/opentofu/opentofu/issues/285",
+   "createdAt": "2023-09-05T21:44:08Z",
+   "updatedAt": "2026-08-18T22:03:19Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 307,
+   "title": "Support keyless provider signing/verification using Sigstore",
+   "url": "https://github.com/opentofu/opentofu/issues/307",
+   "createdAt": "2023-09-06T12:58:28Z",
+   "updatedAt": "2025-07-29T14:58:30Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "frozen",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 21,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 315,
+   "title": "Generate SLSA provenance for OpenTF release builds",
+   "url": "https://github.com/opentofu/opentofu/issues/315",
+   "createdAt": "2023-09-06T19:43:38Z",
+   "updatedAt": "2025-07-29T14:58:31Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 381,
+   "title": "Add opentf plan -detailed-exitcode X when init needs to be run",
+   "url": "https://github.com/opentofu/opentofu/issues/381",
+   "createdAt": "2023-09-11T11:20:37Z",
+   "updatedAt": "2025-09-30T17:04:03Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 382,
+   "title": "Backends as plugins",
+   "url": "https://github.com/opentofu/opentofu/issues/382",
+   "createdAt": "2023-09-11T12:03:00Z",
+   "updatedAt": "2026-03-19T19:14:52Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision",
+    "needs-improvement",
+    "provider-protocol"
+   ],
+   "assigned": true,
+   "comments": 32,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "hashicorp/terraform",
+     "number": 5877,
+     "title": "Make remote state backends a pluggable option",
+     "url": "https://github.com/hashicorp/terraform/issues/5877",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4279,
+     "title": "Support OVHcloud KMS key provider for state encryption",
+     "url": "https://github.com/opentofu/opentofu/issues/4279",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4074,
+     "title": "`tofu plan` should not lock the state file",
+     "url": "https://github.com/opentofu/opentofu/issues/4074",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 317,
+     "title": "Add workspaces support to HTTP backend",
+     "url": "https://github.com/opentofu/opentofu/issues/317",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1343,
+     "title": "Add Huawei Cloud OBS remote storage backend support",
+     "url": "https://github.com/opentofu/opentofu/issues/1343",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1746,
+     "title": "Add git as backend",
+     "url": "https://github.com/opentofu/opentofu/issues/1746",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 907,
+     "title": "Add OpenBao as a remote state store",
+     "url": "https://github.com/opentofu/opentofu/issues/907",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3217,
+     "title": "AWS DSQL as backend",
+     "url": "https://github.com/opentofu/opentofu/issues/3217",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3992,
+     "title": "Less special casing for the default workspace",
+     "url": "https://github.com/opentofu/opentofu/issues/3992",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1011,
+     "title": "Backend with Oracle Cloud Infrastructure Object Storage",
+     "url": "https://github.com/opentofu/opentofu/issues/1011",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3798,
+     "title": "Option to specify lock id or save lock id for `plan` and `apply`",
+     "url": "https://github.com/opentofu/opentofu/issues/3798",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 549,
+     "title": "Bring back swift backend for tfstate",
+     "url": "https://github.com/opentofu/opentofu/issues/549",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1302,
+     "title": "get-lock-info subcommand",
+     "url": "https://github.com/opentofu/opentofu/issues/1302",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1230,
+     "title": "Add OCI Registry as a Remote State Storage Backend",
+     "url": "https://github.com/opentofu/opentofu/issues/1230",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2007,
+     "title": "Support specifying the username in state locks",
+     "url": "https://github.com/opentofu/opentofu/issues/2007",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2215,
+     "title": "Skip plugin installation during tofu init",
+     "url": "https://github.com/opentofu/opentofu/issues/2215",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3075,
+     "title": "Support Cloudflare R2 as a native remote-state backend",
+     "url": "https://github.com/opentofu/opentofu/issues/3075",
+     "state": "OPEN"
+    }
+   ],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 549,
+   "title": "Bring back swift backend for tfstate",
+   "url": "https://github.com/opentofu/opentofu/issues/549",
+   "createdAt": "2023-09-22T07:31:41Z",
+   "updatedAt": "2026-02-25T10:21:16Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 550,
+   "title": "Introduce optional delay between actions for different instances of a resource (f.e. nodes in a cluster)",
+   "url": "https://github.com/opentofu/opentofu/issues/550",
+   "createdAt": "2023-09-22T09:27:09Z",
+   "updatedAt": "2026-01-27T16:56:14Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 24,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 585,
+   "title": "Support replacing a provider with configuration",
+   "url": "https://github.com/opentofu/opentofu/issues/585",
+   "createdAt": "2023-09-26T10:51:29Z",
+   "updatedAt": "2024-05-22T10:47:53Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 17,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 586,
+   "title": "Support locking modules",
+   "url": "https://github.com/opentofu/opentofu/issues/586",
+   "createdAt": "2023-09-26T10:59:31Z",
+   "updatedAt": "2025-10-10T18:28:35Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 38,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2807,
+     "title": "Automatically perform `tofu init` behavior in other commands like `tofu plan` and `tofu apply`, when it's safe to do so",
+     "url": "https://github.com/opentofu/opentofu/issues/2807",
+     "state": "OPEN"
+    }
+   ],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 618,
+   "title": "Allow the default registry used by OpenTofu to be configurable",
+   "url": "https://github.com/opentofu/opentofu/issues/618",
+   "createdAt": "2023-09-29T07:18:49Z",
+   "updatedAt": "2026-07-07T09:36:31Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 18,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 641,
+   "title": "Introducing OPENTOFU_ environment variables",
+   "url": "https://github.com/opentofu/opentofu/issues/641",
+   "createdAt": "2023-10-03T17:08:14Z",
+   "updatedAt": "2025-07-29T14:58:32Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 649,
+   "title": "Add MacOS Notarization to release process",
+   "url": "https://github.com/opentofu/opentofu/issues/649",
+   "createdAt": "2023-10-04T12:26:52Z",
+   "updatedAt": "2024-05-21T14:13:42Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 673,
+   "title": "GPG Key Expiration Strategies in OpenTofu: A Call for Community Input",
+   "url": "https://github.com/opentofu/opentofu/issues/673",
+   "createdAt": "2023-10-06T10:28:49Z",
+   "updatedAt": "2024-02-15T15:24:01Z",
+   "labels": [
+    "needs-community-input"
+   ],
+   "assigned": false,
+   "comments": 11,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 707,
+   "title": "Also support YAML along with/instead of HCL (or whatever OpenTofu calls it)",
+   "url": "https://github.com/opentofu/opentofu/issues/707",
+   "createdAt": "2023-10-11T08:34:57Z",
+   "updatedAt": "2026-02-23T19:37:46Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 31,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 748,
+   "title": "Adhere to POSIX and GNU command line argument standards",
+   "url": "https://github.com/opentofu/opentofu/issues/748",
+   "createdAt": "2023-10-18T15:36:12Z",
+   "updatedAt": "2024-01-29T20:36:25Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "frozen"
+   ],
+   "assigned": false,
+   "comments": 11,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 757,
+   "title": "Add a flag to treat warnings as errors",
+   "url": "https://github.com/opentofu/opentofu/issues/757",
+   "createdAt": "2023-10-19T16:15:40Z",
+   "updatedAt": "2025-07-11T01:28:14Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": true,
+   "comments": 31,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 812,
+   "title": "Allow specifying input variables as unknown in `tofu plan`",
+   "url": "https://github.com/opentofu/opentofu/issues/812",
+   "createdAt": "2023-11-03T13:42:05Z",
+   "updatedAt": "2025-12-01T22:13:55Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "unknown-values"
+   ],
+   "assigned": false,
+   "comments": 15,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 907,
+   "title": "Add OpenBao as a remote state store",
+   "url": "https://github.com/opentofu/opentofu/issues/907",
+   "createdAt": "2023-11-21T19:44:18Z",
+   "updatedAt": "2026-04-28T16:31:37Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 19,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 931,
+   "title": "Implement the stack concept",
+   "url": "https://github.com/opentofu/opentofu/issues/931",
+   "createdAt": "2023-11-28T04:44:53Z",
+   "updatedAt": "2026-05-06T20:59:25Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 45,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 949,
+   "title": "Interfaces for Environments",
+   "url": "https://github.com/opentofu/opentofu/issues/949",
+   "createdAt": "2023-11-30T20:00:55Z",
+   "updatedAt": "2024-01-29T19:48:35Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 960,
+   "title": "Document how someone could implement their own cloud backend",
+   "url": "https://github.com/opentofu/opentofu/issues/960",
+   "createdAt": "2023-12-03T15:45:32Z",
+   "updatedAt": "2024-01-12T21:24:44Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1011,
+   "title": "Backend with Oracle Cloud Infrastructure Object Storage",
+   "url": "https://github.com/opentofu/opentofu/issues/1011",
+   "createdAt": "2023-12-14T10:21:28Z",
+   "updatedAt": "2026-01-09T09:11:24Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 18,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1053,
+   "title": "Conditionally load tfvars/tf file based on Workspace",
+   "url": "https://github.com/opentofu/opentofu/issues/1053",
+   "createdAt": "2023-12-25T19:54:00Z",
+   "updatedAt": "2024-12-18T01:34:45Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1079,
+   "title": "Make `tofu fmt` enforce all OpenTofu Style Conventions",
+   "url": "https://github.com/opentofu/opentofu/issues/1079",
+   "createdAt": "2024-01-09T09:17:52Z",
+   "updatedAt": "2025-12-12T05:12:08Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1086,
+   "title": "Don't make redundant copies of the same module package.",
+   "url": "https://github.com/opentofu/opentofu/issues/1086",
+   "createdAt": "2024-01-10T04:46:44Z",
+   "updatedAt": "2026-08-18T00:17:29Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 18,
+   "milestone": "1.14.0",
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1124,
+   "title": "Add force-lock command",
+   "url": "https://github.com/opentofu/opentofu/issues/1124",
+   "createdAt": "2024-01-15T22:53:40Z",
+   "updatedAt": "2025-07-29T14:58:34Z",
+   "labels": [
+    "enhancement",
+    "question",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1148,
+   "title": "Certifications such as soc2, iso21007",
+   "url": "https://github.com/opentofu/opentofu/issues/1148",
+   "createdAt": "2024-01-19T01:47:40Z",
+   "updatedAt": "2024-01-19T15:01:05Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1157,
+   "title": "Runtime files and folders are still named after Terraform.",
+   "url": "https://github.com/opentofu/opentofu/issues/1157",
+   "createdAt": "2024-01-20T05:47:54Z",
+   "updatedAt": "2025-05-09T08:54:58Z",
+   "labels": [
+    "bug",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1199,
+   "title": "Implement TF_MODULE_CACHE_DIR",
+   "url": "https://github.com/opentofu/opentofu/issues/1199",
+   "createdAt": "2024-01-26T13:35:41Z",
+   "updatedAt": "2025-12-15T19:21:32Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 21,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1211,
+   "title": "Generate error from `object` type conversion if additional keys are provided",
+   "url": "https://github.com/opentofu/opentofu/issues/1211",
+   "createdAt": "2024-01-30T00:27:06Z",
+   "updatedAt": "2026-03-23T22:40:52Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3271,
+     "title": "Report on unused object attributes values to an input variable",
+     "url": "https://github.com/opentofu/opentofu/issues/3271",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1222,
+   "title": "Leverage DynamoDB TTLs in State Locks",
+   "url": "https://github.com/opentofu/opentofu/issues/1222",
+   "createdAt": "2024-02-01T18:50:25Z",
+   "updatedAt": "2025-07-29T14:58:34Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "rfc"
+   ],
+   "assigned": false,
+   "comments": 20,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1230,
+   "title": "Add OCI Registry as a Remote State Storage Backend",
+   "url": "https://github.com/opentofu/opentofu/issues/1230",
+   "createdAt": "2024-02-04T13:08:53Z",
+   "updatedAt": "2026-01-19T13:34:04Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1246,
+   "title": "Cryptographic signing of plans",
+   "url": "https://github.com/opentofu/opentofu/issues/1246",
+   "createdAt": "2024-02-12T07:37:48Z",
+   "updatedAt": "2024-05-03T12:59:04Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 13,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1256,
+   "title": "CI: Build pipeline should be runnable from a different organization",
+   "url": "https://github.com/opentofu/opentofu/issues/1256",
+   "createdAt": "2024-02-13T14:10:52Z",
+   "updatedAt": "2026-05-07T02:54:10Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1258,
+   "title": "Allow destroy-time provisioners to access variables",
+   "url": "https://github.com/opentofu/opentofu/issues/1258",
+   "createdAt": "2024-02-13T18:46:00Z",
+   "updatedAt": "2025-10-31T20:49:54Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1272,
+   "title": "Extract formatting into a standalone library.",
+   "url": "https://github.com/opentofu/opentofu/issues/1272",
+   "createdAt": "2024-02-15T22:02:37Z",
+   "updatedAt": "2024-04-29T06:38:33Z",
+   "labels": [
+    "enhancement",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1302,
+   "title": "get-lock-info subcommand",
+   "url": "https://github.com/opentofu/opentofu/issues/1302",
+   "createdAt": "2024-02-23T17:22:54Z",
+   "updatedAt": "2024-02-26T12:00:20Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1329,
+   "title": "Use variables in lifecycle attributes such as prevent_destroy or ignore_changes",
+   "url": "https://github.com/opentofu/opentofu/issues/1329",
+   "createdAt": "2024-02-29T13:03:33Z",
+   "updatedAt": "2025-12-09T09:23:34Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 11,
+   "milestone": null,
+   "parent": null,
+   "children": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2525,
+     "title": "Allow arbitrary expressions in the `ignore_changes` argument of a `resource` lifecycle block",
+     "url": "https://github.com/opentofu/opentofu/issues/2525",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2522,
+     "title": "Allow arbitrary expressions in the `prevent_destroy` argument of a `resource` lifecycle block",
+     "url": "https://github.com/opentofu/opentofu/issues/2522",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2524,
+     "title": "Allow arbitrary expressions in the `replace_triggered_by` argument of a `resource` lifecycle block",
+     "url": "https://github.com/opentofu/opentofu/issues/2524",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2523,
+     "title": "Allow arbitrary expressions in the `create_before_destroy` argument of a `resource` lifecycle block",
+     "url": "https://github.com/opentofu/opentofu/issues/2523",
+     "state": "OPEN"
+    }
+   ],
+   "blockedBy": [],
+   "blocking": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 304,
+     "title": "Add support for lifecycle meta-argument in modules",
+     "url": "https://github.com/opentofu/opentofu/issues/304",
+     "state": "OPEN"
+    }
+   ],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1343,
+   "title": "Add Huawei Cloud OBS remote storage backend support",
+   "url": "https://github.com/opentofu/opentofu/issues/1343",
+   "createdAt": "2024-03-05T03:36:11Z",
+   "updatedAt": "2026-04-28T16:33:06Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1353,
+   "title": "Creating a style guide/framework for documentation and user interface",
+   "url": "https://github.com/opentofu/opentofu/issues/1353",
+   "createdAt": "2024-03-08T17:38:52Z",
+   "updatedAt": "2025-07-29T14:58:34Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1418,
+   "title": "Iterate over all resources of a type with `for` expressions",
+   "url": "https://github.com/opentofu/opentofu/issues/1418",
+   "createdAt": "2024-03-21T12:09:02Z",
+   "updatedAt": "2025-06-10T14:53:03Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1432,
+   "title": "Allow ignore_changes on resource as variable and/or from command args",
+   "url": "https://github.com/opentofu/opentofu/issues/1432",
+   "createdAt": "2024-03-25T13:35:23Z",
+   "updatedAt": "2025-04-09T16:05:13Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 13,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1467,
+   "title": "Configuration Validation not functional with overrides",
+   "url": "https://github.com/opentofu/opentofu/issues/1467",
+   "createdAt": "2024-04-04T17:43:26Z",
+   "updatedAt": "2026-06-10T10:35:36Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1473,
+   "title": "Add riscv64 Support ",
+   "url": "https://github.com/opentofu/opentofu/issues/1473",
+   "createdAt": "2024-04-08T10:14:48Z",
+   "updatedAt": "2024-08-09T11:45:51Z",
+   "labels": [
+    "enhancement"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1475,
+   "title": "Allow for variables inside `moved` blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/1475",
+   "createdAt": "2024-04-08T12:54:36Z",
+   "updatedAt": "2025-09-03T17:30:49Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1477,
+   "title": "Detect module loop references and fast failure",
+   "url": "https://github.com/opentofu/opentofu/issues/1477",
+   "createdAt": "2024-04-08T20:53:53Z",
+   "updatedAt": "2025-05-09T08:54:56Z",
+   "labels": [
+    "bug",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1496,
+   "title": "Top-Ranking Issues \ud83d\udcca",
+   "url": "https://github.com/opentofu/opentofu/issues/1496",
+   "createdAt": "2024-04-16T11:45:32Z",
+   "updatedAt": "2026-09-20T10:09:13Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1516,
+   "title": "Proposal: per-provider parallelism limit",
+   "url": "https://github.com/opentofu/opentofu/issues/1516",
+   "createdAt": "2024-04-19T13:29:37Z",
+   "updatedAt": "2024-04-29T07:02:27Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1534,
+   "title": "Allow to inspect submodule resources in OpenTofu console",
+   "url": "https://github.com/opentofu/opentofu/issues/1534",
+   "createdAt": "2024-04-23T12:18:33Z",
+   "updatedAt": "2026-08-12T08:02:35Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": "1.14.0",
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1592,
+   "title": "Invalid configuration generated on import with generate-config-out flag",
+   "url": "https://github.com/opentofu/opentofu/issues/1592",
+   "createdAt": "2024-05-02T09:30:28Z",
+   "updatedAt": "2025-05-09T08:54:54Z",
+   "labels": [
+    "bug",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1633,
+   "title": "\"CSS-like\" resource definition extensions for OpenTofu",
+   "url": "https://github.com/opentofu/opentofu/issues/1633",
+   "createdAt": "2024-05-08T15:48:14Z",
+   "updatedAt": "2026-08-04T16:29:11Z",
+   "labels": [
+    "enhancement",
+    "rfc"
+   ],
+   "assigned": false,
+   "comments": 11,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1636,
+   "title": "Allow splat inside `moved` blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/1636",
+   "createdAt": "2024-05-09T13:22:39Z",
+   "updatedAt": "2024-08-22T13:12:29Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1639,
+   "title": "Tofu Graph Target Reduction",
+   "url": "https://github.com/opentofu/opentofu/issues/1639",
+   "createdAt": "2024-05-10T11:49:38Z",
+   "updatedAt": "2025-11-26T13:07:40Z",
+   "labels": [
+    "enhancement",
+    "rfc",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1641,
+   "title": "Allow full state encryption configuration in terraform_remote_state data blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/1641",
+   "createdAt": "2024-05-10T17:09:36Z",
+   "updatedAt": "2024-05-13T13:18:46Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "frozen"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1651,
+   "title": "Inexact operators for prerelease version constraints",
+   "url": "https://github.com/opentofu/opentofu/issues/1651",
+   "createdAt": "2024-05-15T22:23:04Z",
+   "updatedAt": "2024-10-07T22:32:12Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1677,
+   "title": "Allow import blocks to access resources that are implicitly created by applying the plan",
+   "url": "https://github.com/opentofu/opentofu/issues/1677",
+   "createdAt": "2024-05-24T15:55:22Z",
+   "updatedAt": "2025-01-14T23:17:08Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc",
+    "theme:import"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1685,
+   "title": "Some providers fail in a confusing way when their configuration contains unknown values",
+   "url": "https://github.com/opentofu/opentofu/issues/1685",
+   "createdAt": "2024-05-27T17:53:16Z",
+   "updatedAt": "2026-05-05T00:01:12Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "unknown-values"
+   ],
+   "assigned": false,
+   "comments": 28,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1703,
+   "title": "Option to skip refreshing resource instances whose configuration hasn't changed since the last apply",
+   "url": "https://github.com/opentofu/opentofu/issues/1703",
+   "createdAt": "2024-06-04T12:06:18Z",
+   "updatedAt": "2026-07-17T16:51:52Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "frozen"
+   ],
+   "assigned": false,
+   "comments": 15,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1704,
+   "title": "Request for --no-destroy flag",
+   "url": "https://github.com/opentofu/opentofu/issues/1704",
+   "createdAt": "2024-06-04T12:09:34Z",
+   "updatedAt": "2025-01-22T17:00:44Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 25,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1707,
+   "title": "Treat built-in functions as syntactic sugar",
+   "url": "https://github.com/opentofu/opentofu/issues/1707",
+   "createdAt": "2024-06-06T09:20:20Z",
+   "updatedAt": "2024-06-06T13:18:54Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1739,
+   "title": "Use a less aggressive metadata_expire setting in the RPM repository",
+   "url": "https://github.com/opentofu/opentofu/issues/1739",
+   "createdAt": "2024-06-20T08:25:28Z",
+   "updatedAt": "2024-08-29T10:36:17Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1743,
+   "title": "Allow variable default value to be statically evaluated",
+   "url": "https://github.com/opentofu/opentofu/issues/1743",
+   "createdAt": "2024-06-21T10:31:59Z",
+   "updatedAt": "2025-01-23T20:46:06Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1746,
+   "title": "Add git as backend",
+   "url": "https://github.com/opentofu/opentofu/issues/1746",
+   "createdAt": "2024-06-25T07:57:06Z",
+   "updatedAt": "2026-04-28T16:32:04Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1747,
+   "title": "Tofu json version still lists terraform_version",
+   "url": "https://github.com/opentofu/opentofu/issues/1747",
+   "createdAt": "2024-06-25T16:26:12Z",
+   "updatedAt": "2025-05-09T08:54:51Z",
+   "labels": [
+    "bug",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1760,
+   "title": "Ability to have OpenTofu automatically import an existing object if it exists, or create it otherwise",
+   "url": "https://github.com/opentofu/opentofu/issues/1760",
+   "createdAt": "2024-07-01T21:38:11Z",
+   "updatedAt": "2025-11-17T17:31:07Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 23,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1767,
+   "title": "Add include statement to use external .tf file in the root module",
+   "url": "https://github.com/opentofu/opentofu/issues/1767",
+   "createdAt": "2024-07-03T15:11:37Z",
+   "updatedAt": "2024-09-12T13:54:41Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1769,
+   "title": "Disallow expired GPG keys for new releases",
+   "url": "https://github.com/opentofu/opentofu/issues/1769",
+   "createdAt": "2024-07-03T16:29:50Z",
+   "updatedAt": "2024-07-03T16:47:28Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1778,
+   "title": "add special mock files for tofu test (.tfmock.hcl and .tofumock.hcl)",
+   "url": "https://github.com/opentofu/opentofu/issues/1778",
+   "createdAt": "2024-07-08T14:05:35Z",
+   "updatedAt": "2026-08-10T06:53:44Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "accepted",
+    "test-command"
+   ],
+   "assigned": true,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1784,
+   "title": "Feature request: some more debugging insights",
+   "url": "https://github.com/opentofu/opentofu/issues/1784",
+   "createdAt": "2024-07-09T13:55:43Z",
+   "updatedAt": "2024-07-18T13:08:53Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1786,
+   "title": "Re-build release github workflow",
+   "url": "https://github.com/opentofu/opentofu/issues/1786",
+   "createdAt": "2024-07-09T14:19:05Z",
+   "updatedAt": "2025-12-01T17:31:18Z",
+   "labels": [
+    "accepted",
+    "core-team"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1838,
+   "title": "Open Tofu Tutorials and Beginner Guides",
+   "url": "https://github.com/opentofu/opentofu/issues/1838",
+   "createdAt": "2024-07-21T09:06:44Z",
+   "updatedAt": "2024-10-24T17:09:02Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1842,
+   "title": "Add OpenTofu CI examples to TACOS docs",
+   "url": "https://github.com/opentofu/opentofu/issues/1842",
+   "createdAt": "2024-07-22T14:55:51Z",
+   "updatedAt": "2024-10-03T00:35:36Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1850,
+   "title": "Allow for variables inside of `required_providers` blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/1850",
+   "createdAt": "2024-07-23T15:11:17Z",
+   "updatedAt": "2025-01-03T16:42:05Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1896,
+   "title": "Allow provider declarations in submodules",
+   "url": "https://github.com/opentofu/opentofu/issues/1896",
+   "createdAt": "2024-08-07T15:34:19Z",
+   "updatedAt": "2024-11-26T17:49:37Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2155,
+     "title": "Allow provider for_each to refer to data resources, child module output values, etc",
+     "url": "https://github.com/opentofu/opentofu/issues/2155",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1914,
+   "title": "Import blocks inside child modules",
+   "url": "https://github.com/opentofu/opentofu/issues/1914",
+   "createdAt": "2024-08-14T10:14:58Z",
+   "updatedAt": "2026-08-06T01:01:31Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "theme:import"
+   ],
+   "assigned": false,
+   "comments": 16,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1933,
+   "title": "Support splat argument in lifecycle -> ignore_changes",
+   "url": "https://github.com/opentofu/opentofu/issues/1933",
+   "createdAt": "2024-08-20T11:48:06Z",
+   "updatedAt": "2026-08-14T23:36:21Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1943,
+   "title": "Add option for signed S3 payload upload for S3 backends",
+   "url": "https://github.com/opentofu/opentofu/issues/1943",
+   "createdAt": "2024-08-26T19:55:32Z",
+   "updatedAt": "2024-09-19T12:46:40Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1962,
+   "title": "Add the ability to create custom types",
+   "url": "https://github.com/opentofu/opentofu/issues/1962",
+   "createdAt": "2024-09-02T15:26:17Z",
+   "updatedAt": "2025-11-12T23:13:54Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 10,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1967,
+   "title": "HTTP Backend fails on MacOS when using HTTPS: tls handshake timeout",
+   "url": "https://github.com/opentofu/opentofu/issues/1967",
+   "createdAt": "2024-09-03T16:49:00Z",
+   "updatedAt": "2025-05-13T11:34:11Z",
+   "labels": [
+    "bug",
+    "help wanted",
+    "needs-community-input",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 11,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1969,
+   "title": "Module version pinning should warn user if a tag has been moved",
+   "url": "https://github.com/opentofu/opentofu/issues/1969",
+   "createdAt": "2024-09-05T12:48:16Z",
+   "updatedAt": "2025-06-17T15:11:04Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1973,
+   "title": "Remote backend configuration ENV vars are not unique to backends",
+   "url": "https://github.com/opentofu/opentofu/issues/1973",
+   "createdAt": "2024-09-09T16:54:44Z",
+   "updatedAt": "2025-01-07T16:31:13Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 1995,
+   "title": "Support instances in remove blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/1995",
+   "createdAt": "2024-09-17T21:01:38Z",
+   "updatedAt": "2026-05-04T18:48:31Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": true,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2001,
+   "title": "Ability to omit or template `error_message` in test assertions",
+   "url": "https://github.com/opentofu/opentofu/issues/2001",
+   "createdAt": "2024-09-19T18:38:25Z",
+   "updatedAt": "2026-08-11T20:51:09Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2007,
+   "title": "Support specifying the username in state locks",
+   "url": "https://github.com/opentofu/opentofu/issues/2007",
+   "createdAt": "2024-09-20T18:17:56Z",
+   "updatedAt": "2026-01-08T20:57:53Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "blocked",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 15,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2034,
+   "title": "Update moved semantics to allow moving a resource managed by an attribute or inline block to a separate resource",
+   "url": "https://github.com/opentofu/opentofu/issues/2034",
+   "createdAt": "2024-09-30T15:18:04Z",
+   "updatedAt": "2025-08-18T16:58:57Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "upstream-fix-required",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2058,
+   "title": "Allow tofu init to define backend type as a command line option",
+   "url": "https://github.com/opentofu/opentofu/issues/2058",
+   "createdAt": "2024-10-09T12:39:24Z",
+   "updatedAt": "2026-05-06T23:48:27Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2063,
+   "title": "Please allow module outputs to be used in static context",
+   "url": "https://github.com/opentofu/opentofu/issues/2063",
+   "createdAt": "2024-10-10T07:12:57Z",
+   "updatedAt": "2026-03-04T15:09:39Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 16,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2083,
+   "title": "State compression",
+   "url": "https://github.com/opentofu/opentofu/issues/2083",
+   "createdAt": "2024-10-18T07:57:51Z",
+   "updatedAt": "2025-05-31T20:55:34Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2112,
+   "title": "Export OpenTelemetry of Provider Execution",
+   "url": "https://github.com/opentofu/opentofu/issues/2112",
+   "createdAt": "2024-10-28T17:21:27Z",
+   "updatedAt": "2026-02-09T22:22:35Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2664,
+     "title": "RFC Tracker: Tracing For Extra Context",
+     "url": "https://github.com/opentofu/opentofu/issues/2664",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2141,
+   "title": "Evaluate refactoring NodeImportResource",
+   "url": "https://github.com/opentofu/opentofu/issues/2141",
+   "createdAt": "2024-11-05T12:28:58Z",
+   "updatedAt": "2025-03-11T16:58:33Z",
+   "labels": [
+    "accepted",
+    "technical-debt"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2147,
+   "title": "Module installer's version constraint matching for prereleases is quirky",
+   "url": "https://github.com/opentofu/opentofu/issues/2147",
+   "createdAt": "2024-11-06T20:07:54Z",
+   "updatedAt": "2025-05-09T08:54:44Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2151,
+   "title": "Improve the abstraction level of OpenTofu with \"virtual providers\"",
+   "url": "https://github.com/opentofu/opentofu/issues/2151",
+   "createdAt": "2024-11-07T15:28:29Z",
+   "updatedAt": "2025-03-10T23:27:50Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2155,
+   "title": "Allow provider for_each to refer to data resources, child module output values, etc",
+   "url": "https://github.com/opentofu/opentofu/issues/2155",
+   "createdAt": "2024-11-08T18:34:42Z",
+   "updatedAt": "2025-10-23T12:20:05Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 1896,
+     "title": "Allow provider declarations in submodules",
+     "url": "https://github.com/opentofu/opentofu/issues/1896",
+     "state": "OPEN"
+    }
+   ],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2159,
+   "title": "View the effective configuration (with expressions resolved) without configuring any providers",
+   "url": "https://github.com/opentofu/opentofu/issues/2159",
+   "createdAt": "2024-11-12T09:24:07Z",
+   "updatedAt": "2024-11-26T16:45:28Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2160,
+   "title": "Deprecate (and eventually remove?) the concept of \"workspaces\"",
+   "url": "https://github.com/opentofu/opentofu/issues/2160",
+   "createdAt": "2024-11-12T19:35:07Z",
+   "updatedAt": "2025-10-03T19:11:14Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 19,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2213,
+   "title": "Add first party linting support i.e. `tofu lint`",
+   "url": "https://github.com/opentofu/opentofu/issues/2213",
+   "createdAt": "2024-11-22T21:03:15Z",
+   "updatedAt": "2026-07-16T22:16:29Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 14,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2215,
+   "title": "Skip plugin installation during tofu init",
+   "url": "https://github.com/opentofu/opentofu/issues/2215",
+   "createdAt": "2024-11-25T09:44:50Z",
+   "updatedAt": "2024-11-26T16:23:58Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2222,
+   "title": "`tofu refactor` command (moving code and state to a different project)",
+   "url": "https://github.com/opentofu/opentofu/issues/2222",
+   "createdAt": "2024-11-27T20:12:52Z",
+   "updatedAt": "2026-07-23T12:33:20Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2229,
+   "title": "Allow config generation using a CLI command",
+   "url": "https://github.com/opentofu/opentofu/issues/2229",
+   "createdAt": "2024-11-28T14:05:49Z",
+   "updatedAt": "2025-01-14T23:17:11Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "pending-decision",
+    "needs-rfc",
+    "theme:import"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2238,
+   "title": "Feature parity and ongoing support for `cloud` backend",
+   "url": "https://github.com/opentofu/opentofu/issues/2238",
+   "createdAt": "2024-12-04T00:45:28Z",
+   "updatedAt": "2024-12-05T01:46:39Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2239,
+   "title": "Provide pre-generated autocompletion configuration scripts for inclusion in deb/rpm/homebrew/etc packages",
+   "url": "https://github.com/opentofu/opentofu/issues/2239",
+   "createdAt": "2024-12-04T04:51:05Z",
+   "updatedAt": "2026-02-02T20:19:14Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 15,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2282,
+   "title": "\"tofu eval\" command for evaluating arbitrary expressions with machine-readable results",
+   "url": "https://github.com/opentofu/opentofu/issues/2282",
+   "createdAt": "2024-12-11T10:37:21Z",
+   "updatedAt": "2024-12-24T09:07:19Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 17,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2290,
+   "title": "Conditional resource import",
+   "url": "https://github.com/opentofu/opentofu/issues/2290",
+   "createdAt": "2024-12-12T15:52:31Z",
+   "updatedAt": "2025-01-14T23:17:12Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "theme:import"
+   ],
+   "assigned": false,
+   "comments": 10,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2292,
+   "title": "Enhancement: Tofu Test Mocks - Add ability to omit targeted resources from mocking",
+   "url": "https://github.com/opentofu/opentofu/issues/2292",
+   "createdAt": "2024-12-13T03:30:18Z",
+   "updatedAt": "2026-03-26T17:56:31Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2297,
+   "title": "Directly integrate some non-OpenTofu-specific language as an alternative to the HCL native syntax and its JSON variant",
+   "url": "https://github.com/opentofu/opentofu/issues/2297",
+   "createdAt": "2024-12-15T02:54:41Z",
+   "updatedAt": "2025-10-27T01:46:50Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 13,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2308,
+   "title": "Support for mTLS in Provider Network Mirrors",
+   "url": "https://github.com/opentofu/opentofu/issues/2308",
+   "createdAt": "2024-12-19T22:25:45Z",
+   "updatedAt": "2026-08-04T20:50:36Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2321,
+   "title": "Auto Import Resources If Possible",
+   "url": "https://github.com/opentofu/opentofu/issues/2321",
+   "createdAt": "2024-12-31T14:34:33Z",
+   "updatedAt": "2025-10-01T14:06:31Z",
+   "labels": [
+    "enhancement",
+    "question",
+    "pending-decision",
+    "theme:import",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 13,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2322,
+   "title": "OpenTofu can't plan when `count`, `for_each`, or `enabled` is an unknown value",
+   "url": "https://github.com/opentofu/opentofu/issues/2322",
+   "createdAt": "2025-01-02T07:02:21Z",
+   "updatedAt": "2026-08-04T22:27:08Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "unknown-values"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2338,
+   "title": "Enhancement: Terraform Test Mocks - Allow providers to define resource mock value patterns",
+   "url": "https://github.com/opentofu/opentofu/issues/2338",
+   "createdAt": "2025-01-07T18:25:24Z",
+   "updatedAt": "2026-03-26T17:55:53Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2351,
+   "title": "Make Import Block more flexible in handling missing resources",
+   "url": "https://github.com/opentofu/opentofu/issues/2351",
+   "createdAt": "2025-01-09T16:37:35Z",
+   "updatedAt": "2025-01-14T23:17:14Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "theme:import"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2355,
+   "title": "data source with for_each don't evaluate postconditions",
+   "url": "https://github.com/opentofu/opentofu/issues/2355",
+   "createdAt": "2025-01-10T08:44:12Z",
+   "updatedAt": "2025-07-08T15:49:31Z",
+   "labels": [
+    "bug",
+    "needs-community-input",
+    "accepted",
+    "blocked"
+   ],
+   "assigned": true,
+   "comments": 19,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2417,
+   "title": "Validate Variables Based on JSON spec",
+   "url": "https://github.com/opentofu/opentofu/issues/2417",
+   "createdAt": "2025-01-23T21:10:10Z",
+   "updatedAt": "2025-08-12T15:50:25Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2453,
+   "title": "Copywrite (tool) is inaccurate",
+   "url": "https://github.com/opentofu/opentofu/issues/2453",
+   "createdAt": "2025-01-29T13:08:19Z",
+   "updatedAt": "2026-09-07T10:30:55Z",
+   "labels": [
+    "bug",
+    "help wanted",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 19,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2456,
+   "title": "Publish JSON schema documents for JSON output",
+   "url": "https://github.com/opentofu/opentofu/issues/2456",
+   "createdAt": "2025-01-29T18:44:14Z",
+   "updatedAt": "2025-02-04T16:59:13Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2461,
+   "title": "Allow static datablocks in tofu test provide proper output with mocked providers",
+   "url": "https://github.com/opentofu/opentofu/issues/2461",
+   "createdAt": "2025-01-30T17:07:33Z",
+   "updatedAt": "2026-03-26T17:56:03Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2464,
+   "title": "impossible to plan providers based on re-read data sources",
+   "url": "https://github.com/opentofu/opentofu/issues/2464",
+   "createdAt": "2025-01-31T08:48:20Z",
+   "updatedAt": "2025-12-01T22:06:56Z",
+   "labels": [
+    "bug",
+    "pending-decision",
+    "unknown-values"
+   ],
+   "assigned": false,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2466,
+   "title": "Implement parallelism at the provider block",
+   "url": "https://github.com/opentofu/opentofu/issues/2466",
+   "createdAt": "2025-02-03T02:44:03Z",
+   "updatedAt": "2025-11-24T15:51:38Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2477,
+   "title": "chore: upgrade goreleaser to v2",
+   "url": "https://github.com/opentofu/opentofu/issues/2477",
+   "createdAt": "2025-02-05T12:33:08Z",
+   "updatedAt": "2025-04-21T20:32:40Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2495,
+   "title": "Module versions should support version constraints for git and more",
+   "url": "https://github.com/opentofu/opentofu/issues/2495",
+   "createdAt": "2025-02-07T13:14:54Z",
+   "updatedAt": "2025-09-10T08:56:49Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 14,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2501,
+   "title": "tofu test output junit",
+   "url": "https://github.com/opentofu/opentofu/issues/2501",
+   "createdAt": "2025-02-10T22:09:07Z",
+   "updatedAt": "2026-05-21T17:35:13Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "accepted",
+    "core-team",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 32,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2507,
+   "title": "Provider vulnerability reporting",
+   "url": "https://github.com/opentofu/opentofu/issues/2507",
+   "createdAt": "2025-02-12T07:46:24Z",
+   "updatedAt": "2026-08-17T23:31:17Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": true,
+   "comments": 0,
+   "milestone": "1.14.0",
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2523,
+   "title": "Allow arbitrary expressions in the `create_before_destroy` argument of a `resource` lifecycle block",
+   "url": "https://github.com/opentofu/opentofu/issues/2523",
+   "createdAt": "2025-02-14T21:47:59Z",
+   "updatedAt": "2026-05-18T12:57:03Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 1329,
+    "title": "Use variables in lifecycle attributes such as prevent_destroy or ignore_changes",
+    "url": "https://github.com/opentofu/opentofu/issues/1329",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2524,
+   "title": "Allow arbitrary expressions in the `replace_triggered_by` argument of a `resource` lifecycle block",
+   "url": "https://github.com/opentofu/opentofu/issues/2524",
+   "createdAt": "2025-02-14T22:30:59Z",
+   "updatedAt": "2025-08-18T16:47:09Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 1329,
+    "title": "Use variables in lifecycle attributes such as prevent_destroy or ignore_changes",
+    "url": "https://github.com/opentofu/opentofu/issues/1329",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2525,
+   "title": "Allow arbitrary expressions in the `ignore_changes` argument of a `resource` lifecycle block",
+   "url": "https://github.com/opentofu/opentofu/issues/2525",
+   "createdAt": "2025-02-14T22:52:55Z",
+   "updatedAt": "2026-08-24T16:25:24Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 1329,
+    "title": "Use variables in lifecycle attributes such as prevent_destroy or ignore_changes",
+    "url": "https://github.com/opentofu/opentofu/issues/1329",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2537,
+   "title": "unused provider block is not being validated",
+   "url": "https://github.com/opentofu/opentofu/issues/2537",
+   "createdAt": "2025-02-21T12:48:40Z",
+   "updatedAt": "2026-05-05T20:33:35Z",
+   "labels": [
+    "bug",
+    "accepted",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3414,
+     "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+     "url": "https://github.com/opentofu/opentofu/issues/3414",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2542,
+   "title": "Support parallel test for parity with Terraform",
+   "url": "https://github.com/opentofu/opentofu/issues/2542",
+   "createdAt": "2025-02-25T07:02:48Z",
+   "updatedAt": "2026-07-09T17:51:11Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2569,
+   "title": "Unwanted blank lines between unknown blocks in the plan diff",
+   "url": "https://github.com/opentofu/opentofu/issues/2569",
+   "createdAt": "2025-03-05T18:42:30Z",
+   "updatedAt": "2025-03-12T18:48:01Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2589,
+   "title": "Provide Go library for interacting with state storage backends and state snapshot storage format",
+   "url": "https://github.com/opentofu/opentofu/issues/2589",
+   "createdAt": "2025-03-13T10:36:27Z",
+   "updatedAt": "2025-03-18T21:33:10Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2603,
+   "title": "Unexpected(Unnecessary) provider resolution during `tofu test` using module in run",
+   "url": "https://github.com/opentofu/opentofu/issues/2603",
+   "createdAt": "2025-03-17T08:57:21Z",
+   "updatedAt": "2026-09-17T14:14:34Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2614,
+   "title": "Improving the Reliability of Applies",
+   "url": "https://github.com/opentofu/opentofu/issues/2614",
+   "createdAt": "2025-03-18T23:36:32Z",
+   "updatedAt": "2026-08-04T23:13:58Z",
+   "labels": [
+    "enhancement"
+   ],
+   "assigned": false,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2639,
+   "title": "Ability to access prior state from preconditions, postconditions, and check blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/2639",
+   "createdAt": "2025-03-27T17:54:06Z",
+   "updatedAt": "2025-09-24T23:28:01Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2642,
+   "title": "Remove the GODEBUG tlsmlkem=0 configuration once the new encryption algorithm is widely accepted",
+   "url": "https://github.com/opentofu/opentofu/issues/2642",
+   "createdAt": "2025-03-28T11:16:36Z",
+   "updatedAt": "2025-10-22T22:24:51Z",
+   "labels": [
+    "bug",
+    "accepted",
+    "core-team",
+    "technical-debt"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2653,
+   "title": "Use Code Signing for the Windows binary file",
+   "url": "https://github.com/opentofu/opentofu/issues/2653",
+   "createdAt": "2025-04-03T14:46:24Z",
+   "updatedAt": "2025-04-15T15:27:42Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "pending-steering-committee-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2655,
+   "title": "Implement proper XDG Base Directory spec or amend documentation",
+   "url": "https://github.com/opentofu/opentofu/issues/2655",
+   "createdAt": "2025-04-08T10:12:42Z",
+   "updatedAt": "2026-09-03T15:58:22Z",
+   "labels": [
+    "bug",
+    "help wanted",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": true,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2659,
+   "title": "Allow http backend to specify Authorization: Bearer header from environment variable",
+   "url": "https://github.com/opentofu/opentofu/issues/2659",
+   "createdAt": "2025-04-14T01:16:04Z",
+   "updatedAt": "2026-07-02T08:58:28Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2662,
+   "title": "More granular state storage, locking, and planning",
+   "url": "https://github.com/opentofu/opentofu/issues/2662",
+   "createdAt": "2025-04-15T00:00:52Z",
+   "updatedAt": "2026-05-01T18:53:16Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2680,
+   "title": "tofu shows \"no changes\" when output sensitivity has changed",
+   "url": "https://github.com/opentofu/opentofu/issues/2680",
+   "createdAt": "2025-04-17T15:32:25Z",
+   "updatedAt": "2026-07-31T19:03:07Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 17,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2684,
+   "title": "`terraform_remote_state` doesn't respect sensitivity of an output",
+   "url": "https://github.com/opentofu/opentofu/issues/2684",
+   "createdAt": "2025-04-18T11:21:26Z",
+   "updatedAt": "2025-05-13T19:27:19Z",
+   "labels": [
+    "bug",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2698,
+   "title": "Create USERS.md for OpenTofu users",
+   "url": "https://github.com/opentofu/opentofu/issues/2698",
+   "createdAt": "2025-04-23T16:12:07Z",
+   "updatedAt": "2025-08-12T15:33:36Z",
+   "labels": [],
+   "assigned": true,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2704,
+   "title": "Define variable type from provider schema",
+   "url": "https://github.com/opentofu/opentofu/issues/2704",
+   "createdAt": "2025-04-24T15:17:42Z",
+   "updatedAt": "2025-08-18T17:02:29Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2719,
+   "title": "Use symlinks consistently when \"installing\" `file:`-schemed modules into the local cache directory",
+   "url": "https://github.com/opentofu/opentofu/issues/2719",
+   "createdAt": "2025-04-25T17:28:40Z",
+   "updatedAt": "2025-08-12T15:47:05Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2738,
+   "title": "Resource/Module argument splatting",
+   "url": "https://github.com/opentofu/opentofu/issues/2738",
+   "createdAt": "2025-04-29T19:43:18Z",
+   "updatedAt": "2025-08-12T15:44:37Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2794,
+   "title": "Reverse dependency injection",
+   "url": "https://github.com/opentofu/opentofu/issues/2794",
+   "createdAt": "2025-05-13T11:25:18Z",
+   "updatedAt": "2025-08-12T15:38:34Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2795,
+   "title": "Generate config including sensitive values",
+   "url": "https://github.com/opentofu/opentofu/issues/2795",
+   "createdAt": "2025-05-13T15:15:39Z",
+   "updatedAt": "2025-08-12T15:37:40Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2807,
+   "title": "Automatically perform `tofu init` behavior in other commands like `tofu plan` and `tofu apply`, when it's safe to do so",
+   "url": "https://github.com/opentofu/opentofu/issues/2807",
+   "createdAt": "2025-05-15T17:10:55Z",
+   "updatedAt": "2025-09-30T18:58:21Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 16,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 586,
+     "title": "Support locking modules",
+     "url": "https://github.com/opentofu/opentofu/issues/586",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2814,
+   "title": "Add code coverage support for `tofu` tests",
+   "url": "https://github.com/opentofu/opentofu/issues/2814",
+   "createdAt": "2025-05-16T18:52:51Z",
+   "updatedAt": "2026-07-28T15:01:11Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2831,
+   "title": "Validation of Output Types",
+   "url": "https://github.com/opentofu/opentofu/issues/2831",
+   "createdAt": "2025-05-21T09:35:27Z",
+   "updatedAt": "2025-06-10T15:34:44Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2832,
+   "title": "Spread (Expand) Operator for Maps (Sets/Objects)",
+   "url": "https://github.com/opentofu/opentofu/issues/2832",
+   "createdAt": "2025-05-21T11:54:41Z",
+   "updatedAt": "2025-06-10T18:56:45Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2860,
+   "title": "Make Terraliths a Thing of the Past \u2013 Enable Scalable Root Modules in OpenTofu",
+   "url": "https://github.com/opentofu/opentofu/issues/2860",
+   "createdAt": "2025-05-26T15:55:06Z",
+   "updatedAt": "2026-08-14T14:48:47Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 20,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2874,
+   "title": "Expose environment variables natively",
+   "url": "https://github.com/opentofu/opentofu/issues/2874",
+   "createdAt": "2025-05-28T18:47:42Z",
+   "updatedAt": "2026-04-28T16:36:12Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4542,
+   "title": "How to differentiate OpenTofu user-agent from Terraform?",
+   "url": "https://github.com/opentofu/opentofu/issues/4542",
+   "createdAt": "2025-06-02T10:11:17Z",
+   "updatedAt": "2026-09-01T16:04:25Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2888,
+   "title": "replace-provider command with provider for_each instances",
+   "url": "https://github.com/opentofu/opentofu/issues/2888",
+   "createdAt": "2025-06-05T12:16:56Z",
+   "updatedAt": "2026-08-04T18:09:06Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2912,
+   "title": "Built-in TOML functions: Add `tomlencode` and `tomldecode`",
+   "url": "https://github.com/opentofu/opentofu/issues/2912",
+   "createdAt": "2025-06-12T15:22:59Z",
+   "updatedAt": "2026-08-30T22:07:32Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2930,
+   "title": "Versioning capability for PostgreSQL Backend",
+   "url": "https://github.com/opentofu/opentofu/issues/2930",
+   "createdAt": "2025-06-17T11:44:37Z",
+   "updatedAt": "2025-06-24T16:43:52Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2934,
+   "title": "Unexpected destruction of resources when using resource targeting and for_each",
+   "url": "https://github.com/opentofu/opentofu/issues/2934",
+   "createdAt": "2025-06-18T07:32:12Z",
+   "updatedAt": "2025-07-28T22:30:39Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2958,
+   "title": "Cannot use `tofu login` to obtain new credentials when previously-issued credentials are invalid and service discovery endpoint rejects them",
+   "url": "https://github.com/opentofu/opentofu/issues/2958",
+   "createdAt": "2025-06-25T10:05:17Z",
+   "updatedAt": "2025-10-15T19:15:04Z",
+   "labels": [
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2969,
+   "title": "Consider propogating TF_LOG to TF_LOG_PROVIDER and TF_LOG_SDK if unset",
+   "url": "https://github.com/opentofu/opentofu/issues/2969",
+   "createdAt": "2025-06-27T11:23:30Z",
+   "updatedAt": "2025-07-17T15:11:05Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 2971,
+   "title": "Remove dead code",
+   "url": "https://github.com/opentofu/opentofu/issues/2971",
+   "createdAt": "2025-06-27T21:23:39Z",
+   "updatedAt": "2025-07-01T19:42:55Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "core-team"
+   ],
+   "assigned": true,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3004,
+   "title": "Feature request: parameterised test cases",
+   "url": "https://github.com/opentofu/opentofu/issues/3004",
+   "createdAt": "2025-07-09T04:03:06Z",
+   "updatedAt": "2026-03-26T17:56:10Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3018,
+   "title": "Nested Data Queries Simplify Module Interfaces But Create Maintenance Issues",
+   "url": "https://github.com/opentofu/opentofu/issues/3018",
+   "createdAt": "2025-07-11T14:31:03Z",
+   "updatedAt": "2025-07-22T15:52:52Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3023,
+   "title": "Option to export reproducible consolidated pre-execution configuration in JSON format",
+   "url": "https://github.com/opentofu/opentofu/issues/3023",
+   "createdAt": "2025-07-14T01:39:59Z",
+   "updatedAt": "2025-07-22T21:49:21Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3044,
+   "title": "Create man pages",
+   "url": "https://github.com/opentofu/opentofu/issues/3044",
+   "createdAt": "2025-07-20T14:30:19Z",
+   "updatedAt": "2026-09-08T14:41:34Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3050,
+   "title": "Errors are reported on standard output",
+   "url": "https://github.com/opentofu/opentofu/issues/3050",
+   "createdAt": "2025-07-21T11:58:56Z",
+   "updatedAt": "2026-08-18T10:22:21Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3059,
+   "title": "Generally Expose More OpenTofu functionality via Public Packages",
+   "url": "https://github.com/opentofu/opentofu/issues/3059",
+   "createdAt": "2025-07-22T20:38:53Z",
+   "updatedAt": "2026-04-24T19:00:25Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3067,
+   "title": "Instanced module without resources/outputs does not report correct length.",
+   "url": "https://github.com/opentofu/opentofu/issues/3067",
+   "createdAt": "2025-07-23T17:18:49Z",
+   "updatedAt": "2026-08-10T15:38:50Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 11,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3075,
+   "title": "Support Cloudflare R2 as a native remote-state backend",
+   "url": "https://github.com/opentofu/opentofu/issues/3075",
+   "createdAt": "2025-07-27T05:00:47Z",
+   "updatedAt": "2025-07-27T16:27:09Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3086,
+   "title": "Unable to use OCI module source with Azure Container Registry",
+   "url": "https://github.com/opentofu/opentofu/issues/3086",
+   "createdAt": "2025-07-31T08:40:29Z",
+   "updatedAt": "2026-09-10T21:51:26Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "docker/docker-credential-helpers",
+     "number": 396,
+     "title": "`StoreExample` in client package uses full URL, which seems to disagree with other implementations",
+     "url": "https://github.com/docker/docker-credential-helpers/issues/396",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3107,
+   "title": "`-detailed-exitcode` should exit with status 2 when `-refresh-only` mode detects changes outside of OpenTofu",
+   "url": "https://github.com/opentofu/opentofu/issues/3107",
+   "createdAt": "2025-08-06T12:44:59Z",
+   "updatedAt": "2026-04-06T18:47:00Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3595,
+     "title": "RFC tracker: CLI layer rework and integration of a new CLI library (cobra)",
+     "url": "https://github.com/opentofu/opentofu/issues/3595",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3112,
+   "title": "Create automation for acceptance tests",
+   "url": "https://github.com/opentofu/opentofu/issues/3112",
+   "createdAt": "2025-08-07T14:04:53Z",
+   "updatedAt": "2026-03-03T17:37:45Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": true,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3119,
+   "title": "Support for Custom Endpoints in Tencent Cloud COS Remote State",
+   "url": "https://github.com/opentofu/opentofu/issues/3119",
+   "createdAt": "2025-08-11T02:47:08Z",
+   "updatedAt": "2025-12-16T16:59:46Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": true,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3145,
+   "title": "Allow passing provider configuration with multiple instances as a whole to child module",
+   "url": "https://github.com/opentofu/opentofu/issues/3145",
+   "createdAt": "2025-08-14T17:25:31Z",
+   "updatedAt": "2025-08-20T00:05:03Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3148,
+   "title": "Remove dependent resources like k8s deployments without destroying on apply",
+   "url": "https://github.com/opentofu/opentofu/issues/3148",
+   "createdAt": "2025-08-15T13:53:06Z",
+   "updatedAt": "2026-08-18T17:21:18Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3157,
+   "title": "Way to prevent replacing a resource if arguments change",
+   "url": "https://github.com/opentofu/opentofu/issues/3157",
+   "createdAt": "2025-08-19T17:48:23Z",
+   "updatedAt": "2025-08-26T16:28:27Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3163,
+   "title": "Support http protocol or insecure mode for oci_mirror registries",
+   "url": "https://github.com/opentofu/opentofu/issues/3163",
+   "createdAt": "2025-08-21T13:55:16Z",
+   "updatedAt": "2025-09-16T22:02:14Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked",
+    "upstream-fix-required"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "golang/go",
+     "number": 71924,
+     "title": "proposal: crypto/x509: allow user override of the system roots on all platforms",
+     "url": "https://github.com/golang/go/issues/71924",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3167,
+   "title": "Enhancement of the rendered write-only attribute's hint",
+   "url": "https://github.com/opentofu/opentofu/issues/3167",
+   "createdAt": "2025-08-22T09:55:35Z",
+   "updatedAt": "2025-10-15T13:40:31Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input"
+   ],
+   "assigned": true,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3190,
+   "title": "Enhance `tofu schema -json` to include attributes' `DefaultFunc` behaviour",
+   "url": "https://github.com/opentofu/opentofu/issues/3190",
+   "createdAt": "2025-08-27T00:08:44Z",
+   "updatedAt": "2025-08-27T19:02:06Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3199,
+   "title": "Add token refresh to the `azurerm` backend's OpenID Connect authentication",
+   "url": "https://github.com/opentofu/opentofu/issues/3199",
+   "createdAt": "2025-08-27T15:56:29Z",
+   "updatedAt": "2025-09-09T15:58:21Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3217,
+   "title": "AWS DSQL as backend",
+   "url": "https://github.com/opentofu/opentofu/issues/3217",
+   "createdAt": "2025-08-30T14:23:26Z",
+   "updatedAt": "2026-05-28T11:02:16Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "blocked",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3238,
+   "title": "Support for temporarily ignore resources attached to a provider",
+   "url": "https://github.com/opentofu/opentofu/issues/3238",
+   "createdAt": "2025-09-04T09:42:46Z",
+   "updatedAt": "2026-06-29T17:07:53Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3257,
+   "title": "OpenTelemetry - Gather metrics across `tofu` execution",
+   "url": "https://github.com/opentofu/opentofu/issues/3257",
+   "createdAt": "2025-09-10T08:56:06Z",
+   "updatedAt": "2026-03-19T14:07:20Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3258,
+   "title": "OpenTelemetry - Gather traces around provider execution and from inside providers too",
+   "url": "https://github.com/opentofu/opentofu/issues/3258",
+   "createdAt": "2025-09-10T09:00:06Z",
+   "updatedAt": "2025-09-16T18:17:30Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3263,
+   "title": "Using for_each on a module and its references causes dependency on all instances the whole module",
+   "url": "https://github.com/opentofu/opentofu/issues/3263",
+   "createdAt": "2025-09-11T06:24:40Z",
+   "updatedAt": "2025-09-19T06:42:10Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3270,
+   "title": "Display module versions in a similar fashion that provider versions are displayed with `version`",
+   "url": "https://github.com/opentofu/opentofu/issues/3270",
+   "createdAt": "2025-09-15T18:36:02Z",
+   "updatedAt": "2026-04-16T10:33:30Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "needs-community-input",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 10,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3287,
+   "title": "Read BAO_TOKEN from ~/.vault-token",
+   "url": "https://github.com/opentofu/opentofu/issues/3287",
+   "createdAt": "2025-09-17T17:19:02Z",
+   "updatedAt": "2026-03-10T21:30:50Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "openbao/openbao",
+     "number": 2575,
+     "title": "JWT Authentication for the OpenBao Go API Client",
+     "url": "https://github.com/openbao/openbao/issues/2575",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3309,
+   "title": "Support action blocks and action_trigger lifecycle properties",
+   "url": "https://github.com/opentofu/opentofu/issues/3309",
+   "createdAt": "2025-09-26T17:04:44Z",
+   "updatedAt": "2026-09-11T17:15:49Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 26,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3322,
+   "title": "Resolve resources using `tofu graph` from `terraform_remote_state` data blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/3322",
+   "createdAt": "2025-10-01T05:34:49Z",
+   "updatedAt": "2025-10-08T17:08:00Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3339,
+   "title": "Module Filesystem Mirror",
+   "url": "https://github.com/opentofu/opentofu/issues/3339",
+   "createdAt": "2025-10-08T20:17:30Z",
+   "updatedAt": "2025-10-28T15:45:55Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3383,
+   "title": "Allow creating locals in tftest files",
+   "url": "https://github.com/opentofu/opentofu/issues/3383",
+   "createdAt": "2025-10-15T20:51:03Z",
+   "updatedAt": "2026-03-19T16:39:25Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3384,
+   "title": "Partial sensitivity for fields inside complex output objects",
+   "url": "https://github.com/opentofu/opentofu/issues/3384",
+   "createdAt": "2025-10-16T08:44:42Z",
+   "updatedAt": "2025-12-17T00:11:58Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3392,
+   "title": "A way to configure retries and timeout for the `oci_mirror` installation method",
+   "url": "https://github.com/opentofu/opentofu/issues/3392",
+   "createdAt": "2025-10-17T15:02:55Z",
+   "updatedAt": "2025-10-29T10:00:39Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3404,
+   "title": "Tofu crash: Duplicate status report for module",
+   "url": "https://github.com/opentofu/opentofu/issues/3404",
+   "createdAt": "2025-10-21T16:00:39Z",
+   "updatedAt": "2026-08-14T11:22:04Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3406,
+   "title": "Remove WinRM support in provisioners",
+   "url": "https://github.com/opentofu/opentofu/issues/3406",
+   "createdAt": "2025-10-21T20:04:07Z",
+   "updatedAt": "2026-03-03T19:37:02Z",
+   "labels": [
+    "accepted",
+    "dependencies"
+   ],
+   "assigned": true,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3825,
+     "title": "Produce warning when `type = \"winrm\"` is used in a `connection` block",
+     "url": "https://github.com/opentofu/opentofu/issues/3825",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3826,
+     "title": "Produce error when `type = \"winrm\"` is used in a `connection` block, suggesting to use SSH instead",
+     "url": "https://github.com/opentofu/opentofu/issues/3826",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3827,
+     "title": "Remove all codepaths that are only used for WinRM-based provisioner connections",
+     "url": "https://github.com/opentofu/opentofu/issues/3827",
+     "state": "OPEN"
+    }
+   ],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3414,
+   "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+   "url": "https://github.com/opentofu/opentofu/issues/3414",
+   "createdAt": "2025-10-22T19:24:16Z",
+   "updatedAt": "2026-06-23T14:48:02Z",
+   "labels": [
+    "rfc",
+    "rfc-implementing"
+   ],
+   "assigned": true,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3570,
+     "title": "New implementation approach: Walking Skeleton Phase",
+     "url": "https://github.com/opentofu/opentofu/issues/3570",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4057,
+     "title": "`create_before_destroy` support in the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4057",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4065,
+     "title": "Implement `depends_on` for the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4065",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4061,
+     "title": "Implement provider-defined functions in the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4061",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4059,
+     "title": "Implement provider instances and ephemeral resource instances in the new runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4059",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4346,
+     "title": "New planning engine creates spurious dependency from downstream destroy to upstream create, causing a cycle",
+     "url": "https://github.com/opentofu/opentofu/issues/4346",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4060,
+     "title": "Reimplement `tofu init`'s behavior in terms of the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4060",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4229,
+     "title": "`moved` support for the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4229",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4297,
+     "title": "Implement the \"destroy\" planning mode in the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4297",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4058,
+     "title": "Implement data resource planning and applying in the new runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4058",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4227,
+     "title": "`-target` and `-exclude` options for the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4227",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4360,
+     "title": "cty and HCL mark-handling gaps for the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4360",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4390,
+     "title": "Support for preconditions and postconditions in the new language runtime",
+     "url": "https://github.com/opentofu/opentofu/issues/4390",
+     "state": "OPEN"
+    }
+   ],
+   "blockedBy": [],
+   "blocking": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4443,
+     "title": "Dynamic depends_on values",
+     "url": "https://github.com/opentofu/opentofu/issues/4443",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4299,
+     "title": "`tofu graph` should support MermaidJS format",
+     "url": "https://github.com/opentofu/opentofu/issues/4299",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4296,
+     "title": "Generic `Graph` and `AcyclicGraph` in the `dag` package",
+     "url": "https://github.com/opentofu/opentofu/issues/4296",
+     "state": "OPEN"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2537,
+     "title": "unused provider block is not being validated",
+     "url": "https://github.com/opentofu/opentofu/issues/2537",
+     "state": "OPEN"
+    }
+   ],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3415,
+   "title": "Remove GODEBUG winsymlink=0 from our go.mod",
+   "url": "https://github.com/opentofu/opentofu/issues/3415",
+   "createdAt": "2025-10-22T22:21:40Z",
+   "updatedAt": "2026-08-10T15:32:21Z",
+   "labels": [
+    "accepted",
+    "technical-debt"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": "1.14.0",
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3427,
+   "title": "Write-Ahead Log (WAL)",
+   "url": "https://github.com/opentofu/opentofu/issues/3427",
+   "createdAt": "2025-10-24T07:11:56Z",
+   "updatedAt": "2026-02-02T20:03:18Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3428,
+   "title": "Custom provider/resource/hook for pre/post tofu local executions",
+   "url": "https://github.com/opentofu/opentofu/issues/3428",
+   "createdAt": "2025-10-24T09:40:17Z",
+   "updatedAt": "2025-10-28T22:07:47Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3430,
+   "title": "File-scoped local value definitions",
+   "url": "https://github.com/opentofu/opentofu/issues/3430",
+   "createdAt": "2025-10-24T18:45:00Z",
+   "updatedAt": "2025-12-01T21:29:40Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 10,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3449,
+   "title": "FAQ Maintenance",
+   "url": "https://github.com/opentofu/opentofu/issues/3449",
+   "createdAt": "2025-10-31T00:39:37Z",
+   "updatedAt": "2025-11-24T08:15:59Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": [
+    {
+     "repo": "opentofu/org",
+     "number": 30,
+     "title": "Repository Upkeep Tracker",
+     "url": "https://github.com/opentofu/org/issues/30",
+     "state": "OPEN"
+    }
+   ]
+  },
+  {
+   "number": 3472,
+   "title": "`tofu destroy` ignores `skip_final_snapshot = true` in plan, requires manual state file edit",
+   "url": "https://github.com/opentofu/opentofu/issues/3472",
+   "createdAt": "2025-11-05T16:50:55Z",
+   "updatedAt": "2025-11-11T17:47:55Z",
+   "labels": [
+    "bug",
+    "pending-decision",
+    "blocked",
+    "provider-protocol"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3500,
+   "title": "Expose shell completion content",
+   "url": "https://github.com/opentofu/opentofu/issues/3500",
+   "createdAt": "2025-11-16T13:03:58Z",
+   "updatedAt": "2026-08-10T08:15:42Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": true,
+   "comments": 8,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3520,
+   "title": "Azure KeyVault Encryption Conflict With azurerm Environment Variable",
+   "url": "https://github.com/opentofu/opentofu/issues/3520",
+   "createdAt": "2025-11-22T23:01:33Z",
+   "updatedAt": "2025-12-19T18:15:28Z",
+   "labels": [
+    "bug",
+    "accepted",
+    "upstream-fix-required"
+   ],
+   "assigned": true,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "Azure/azure-sdk-for-go",
+     "number": 25758,
+     "title": "keyvault: Providing a subscription generates a tenant, conflicts with CLI authentication method",
+     "url": "https://github.com/Azure/azure-sdk-for-go/issues/25758",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3527,
+   "title": "State path migration functionality",
+   "url": "https://github.com/opentofu/opentofu/issues/3527",
+   "createdAt": "2025-11-25T12:57:25Z",
+   "updatedAt": "2025-12-02T16:46:33Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3532,
+   "title": "Allow `import` blocks to be dynamically enabled/disabled, e.g. using an `enabled` argument similar to resources",
+   "url": "https://github.com/opentofu/opentofu/issues/3532",
+   "createdAt": "2025-11-26T23:00:09Z",
+   "updatedAt": "2026-02-10T17:54:19Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3557,
+   "title": "Add support for ephemeral resources in OpenTofu testing framework",
+   "url": "https://github.com/opentofu/opentofu/issues/3557",
+   "createdAt": "2025-12-09T14:37:58Z",
+   "updatedAt": "2025-12-09T16:32:00Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 2834,
+     "title": "RFC tracker: Ephemeral resources and write-only arguments",
+     "url": "https://github.com/opentofu/opentofu/issues/2834",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3572,
+   "title": "`tofu graph -draw-cycles` errors instead of showing cycles",
+   "url": "https://github.com/opentofu/opentofu/issues/3572",
+   "createdAt": "2025-12-10T19:40:21Z",
+   "updatedAt": "2025-12-18T14:31:31Z",
+   "labels": [
+    "bug",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": true,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3591,
+   "title": "Quote Resource Addresses In for_each Errors",
+   "url": "https://github.com/opentofu/opentofu/issues/3591",
+   "createdAt": "2025-12-15T17:19:01Z",
+   "updatedAt": "2025-12-16T22:29:05Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3622,
+   "title": "Informative messages displayed during init",
+   "url": "https://github.com/opentofu/opentofu/issues/3622",
+   "createdAt": "2025-12-23T08:08:55Z",
+   "updatedAt": "2026-03-24T16:51:03Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 13,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3629,
+   "title": "support Evaluation against a Plan (aka `console -plan`)",
+   "url": "https://github.com/opentofu/opentofu/issues/3629",
+   "createdAt": "2025-12-29T21:03:02Z",
+   "updatedAt": "2026-04-10T15:41:07Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3631,
+   "title": "Add support for path.fileName",
+   "url": "https://github.com/opentofu/opentofu/issues/3631",
+   "createdAt": "2025-12-30T17:00:31Z",
+   "updatedAt": "2026-01-06T18:49:17Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3664,
+   "title": "cos: Authorize using TenCent CLI credentials",
+   "url": "https://github.com/opentofu/opentofu/issues/3664",
+   "createdAt": "2026-01-12T20:35:55Z",
+   "updatedAt": "2026-01-13T16:45:10Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": true,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3668,
+   "title": "Cleaner diffs when updating entry in the middle of a map/set/list",
+   "url": "https://github.com/opentofu/opentofu/issues/3668",
+   "createdAt": "2026-01-13T16:27:36Z",
+   "updatedAt": "2026-01-14T21:12:12Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3707,
+   "title": "Fix new line issue with tofu fmt",
+   "url": "https://github.com/opentofu/opentofu/issues/3707",
+   "createdAt": "2026-01-27T14:43:30Z",
+   "updatedAt": "2026-01-28T07:59:32Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3754,
+   "title": "`run.*` references resolve to empty object after `command = plan` run blocks in `tofu test`",
+   "url": "https://github.com/opentofu/opentofu/issues/3754",
+   "createdAt": "2026-02-11T13:14:10Z",
+   "updatedAt": "2026-08-14T11:26:13Z",
+   "labels": [
+    "enhancement",
+    "help wanted",
+    "accepted",
+    "needs-rfc",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3768,
+   "title": "Support JWT authentication for state encryption with OpenBao",
+   "url": "https://github.com/opentofu/opentofu/issues/3768",
+   "createdAt": "2026-02-12T21:19:26Z",
+   "updatedAt": "2026-03-11T18:04:14Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3787,
+   "title": "Support 'query' CLI and provider 'list' resources as in Terraform 1.14",
+   "url": "https://github.com/opentofu/opentofu/issues/3787",
+   "createdAt": "2026-02-20T13:41:01Z",
+   "updatedAt": "2026-07-30T18:25:10Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 9,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3827,
+   "title": "Remove all codepaths that are only used for WinRM-based provisioner connections",
+   "url": "https://github.com/opentofu/opentofu/issues/3827",
+   "createdAt": "2026-03-03T17:19:13Z",
+   "updatedAt": "2026-09-01T00:00:45Z",
+   "labels": [],
+   "assigned": true,
+   "comments": 1,
+   "milestone": "1.14.0",
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 3406,
+    "title": "Remove WinRM support in provisioners",
+    "url": "https://github.com/opentofu/opentofu/issues/3406",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3826,
+     "title": "Produce error when `type = \"winrm\"` is used in a `connection` block, suggesting to use SSH instead",
+     "url": "https://github.com/opentofu/opentofu/issues/3826",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3869,
+   "title": "Support multiple versions of the same provider source in a single configuration",
+   "url": "https://github.com/opentofu/opentofu/issues/3869",
+   "createdAt": "2026-03-11T14:12:57Z",
+   "updatedAt": "2026-03-24T16:44:26Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3876,
+   "title": "Make `tofu test` output unbuffered",
+   "url": "https://github.com/opentofu/opentofu/issues/3876",
+   "createdAt": "2026-03-13T17:27:33Z",
+   "updatedAt": "2026-03-26T17:54:52Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision",
+    "test-command"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3900,
+   "title": "Could `tofu import` spend less time refreshing?",
+   "url": "https://github.com/opentofu/opentofu/issues/3900",
+   "createdAt": "2026-03-18T21:12:05Z",
+   "updatedAt": "2026-03-31T20:01:31Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 6,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3926,
+   "title": "Allow `check` blocks to be iterated",
+   "url": "https://github.com/opentofu/opentofu/issues/3926",
+   "createdAt": "2026-03-23T15:45:58Z",
+   "updatedAt": "2026-03-31T18:30:09Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3932,
+   "title": "Override parts of resource definitions in a child module from its parent module",
+   "url": "https://github.com/opentofu/opentofu/issues/3932",
+   "createdAt": "2026-03-24T18:29:04Z",
+   "updatedAt": "2026-03-27T00:21:30Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3978,
+   "title": "genconfig: doesn't quote map keys containing dots",
+   "url": "https://github.com/opentofu/opentofu/issues/3978",
+   "createdAt": "2026-04-02T10:44:19Z",
+   "updatedAt": "2026-08-10T15:19:13Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 13,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3985,
+   "title": "Google Cloud Platform integrations are using deprecated `WithCredentialsJSON` option",
+   "url": "https://github.com/opentofu/opentofu/issues/3985",
+   "createdAt": "2026-04-02T19:55:41Z",
+   "updatedAt": "2026-04-02T19:55:41Z",
+   "labels": [
+    "enhancement",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3990,
+   "title": "Allow setting minimum age for modules",
+   "url": "https://github.com/opentofu/opentofu/issues/3990",
+   "createdAt": "2026-04-03T16:24:24Z",
+   "updatedAt": "2026-06-16T16:25:52Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 3992,
+   "title": "Less special casing for the default workspace",
+   "url": "https://github.com/opentofu/opentofu/issues/3992",
+   "createdAt": "2026-04-03T22:08:51Z",
+   "updatedAt": "2026-04-07T15:23:49Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4009,
+   "title": "remote-exec: Allow specifying a target shell and/or direct execution of simple commands",
+   "url": "https://github.com/opentofu/opentofu/issues/4009",
+   "createdAt": "2026-04-08T06:31:13Z",
+   "updatedAt": "2026-04-29T16:35:21Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4020,
+   "title": "Allow setting global CLI args via environment variables",
+   "url": "https://github.com/opentofu/opentofu/issues/4020",
+   "createdAt": "2026-04-10T13:50:00Z",
+   "updatedAt": "2026-06-17T04:22:48Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4041,
+   "title": "moved block fails and plans resource destruction when state is partially updated following an apply timeout",
+   "url": "https://github.com/opentofu/opentofu/issues/4041",
+   "createdAt": "2026-04-16T18:47:45Z",
+   "updatedAt": "2026-06-02T10:43:12Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4050,
+   "title": "Allow factoring out complex expressions in input variable `validation` blocks",
+   "url": "https://github.com/opentofu/opentofu/issues/4050",
+   "createdAt": "2026-04-23T03:36:57Z",
+   "updatedAt": "2026-04-28T16:56:44Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4058,
+   "title": "Implement data resource planning and applying in the new runtime",
+   "url": "https://github.com/opentofu/opentofu/issues/4058",
+   "createdAt": "2026-04-27T20:58:12Z",
+   "updatedAt": "2026-08-17T19:17:20Z",
+   "labels": [],
+   "assigned": true,
+   "comments": 0,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 3414,
+    "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+    "url": "https://github.com/opentofu/opentofu/issues/3414",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4074,
+   "title": "`tofu plan` should not lock the state file",
+   "url": "https://github.com/opentofu/opentofu/issues/4074",
+   "createdAt": "2026-04-30T15:26:01Z",
+   "updatedAt": "2026-05-05T15:57:28Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4085,
+   "title": "Ephemeral `lifecycle { enabled = terraform.applying }` results in unsuitable argument value error",
+   "url": "https://github.com/opentofu/opentofu/issues/4085",
+   "createdAt": "2026-05-08T14:10:57Z",
+   "updatedAt": "2026-06-16T11:55:11Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4108,
+   "title": "Silence refresh output from plans and applies",
+   "url": "https://github.com/opentofu/opentofu/issues/4108",
+   "createdAt": "2026-05-14T20:43:54Z",
+   "updatedAt": "2026-08-11T14:36:54Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 14,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4115,
+   "title": "Refactor and externalize the `config` package",
+   "url": "https://github.com/opentofu/opentofu/issues/4115",
+   "createdAt": "2026-05-18T18:47:38Z",
+   "updatedAt": "2026-05-28T17:37:33Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "needs-rfc"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4131,
+   "title": "Destroy-time provisioners cannot access Ephemeral values, preventing zero-state secret cleanup patterns",
+   "url": "https://github.com/opentofu/opentofu/issues/4131",
+   "createdAt": "2026-05-23T20:42:57Z",
+   "updatedAt": "2026-05-27T18:39:55Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 4,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4163,
+   "title": "Deprecated variables produce no warning when referenced within the same root module",
+   "url": "https://github.com/opentofu/opentofu/issues/4163",
+   "createdAt": "2026-05-28T15:32:20Z",
+   "updatedAt": "2026-06-09T21:22:11Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4238,
+     "title": "When passing entire resources to a for_each, deprecation value warnings appear.",
+     "url": "https://github.com/opentofu/opentofu/issues/4238",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4205,
+   "title": "tofu init panics intermittently while verifying a provider's GPG signature (nil deref in go-crypto)",
+   "url": "https://github.com/opentofu/opentofu/issues/4205",
+   "createdAt": "2026-06-02T10:30:01Z",
+   "updatedAt": "2026-09-07T09:15:22Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4206,
+   "title": "Support additional encryption context for cloud-based key providers",
+   "url": "https://github.com/opentofu/opentofu/issues/4206",
+   "createdAt": "2026-06-02T10:56:45Z",
+   "updatedAt": "2026-06-12T15:30:40Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4259,
+     "title": "Add `EncryptionContext` support to `aws_kms` key provider",
+     "url": "https://github.com/opentofu/opentofu/issues/4259",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4260,
+     "title": "Add `AdditionalAuthenticatedData` support to `gcs_kms` key provider",
+     "url": "https://github.com/opentofu/opentofu/issues/4260",
+     "state": "CLOSED"
+    },
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4261,
+     "title": "Add `associated_data` support to `openbao` key provider",
+     "url": "https://github.com/opentofu/opentofu/issues/4261",
+     "state": "CLOSED"
+    }
+   ],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4225,
+   "title": "The -lock-timeout flag isn't always respected when using the azurerm backend",
+   "url": "https://github.com/opentofu/opentofu/issues/4225",
+   "createdAt": "2026-06-03T22:20:54Z",
+   "updatedAt": "2026-08-16T05:44:35Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 14,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4227,
+   "title": "`-target` and `-exclude` options for the new language runtime",
+   "url": "https://github.com/opentofu/opentofu/issues/4227",
+   "createdAt": "2026-06-03T23:28:14Z",
+   "updatedAt": "2026-06-03T23:28:44Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 3414,
+    "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+    "url": "https://github.com/opentofu/opentofu/issues/3414",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4238,
+   "title": "When passing entire resources to a for_each, deprecation value warnings appear.",
+   "url": "https://github.com/opentofu/opentofu/issues/4238",
+   "createdAt": "2026-06-08T09:15:28Z",
+   "updatedAt": "2026-08-25T01:36:23Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 7,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 4163,
+     "title": "Deprecated variables produce no warning when referenced within the same root module",
+     "url": "https://github.com/opentofu/opentofu/issues/4163",
+     "state": "OPEN"
+    }
+   ],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4279,
+   "title": "Support OVHcloud KMS key provider for state encryption",
+   "url": "https://github.com/opentofu/opentofu/issues/4279",
+   "createdAt": "2026-06-16T13:36:29Z",
+   "updatedAt": "2026-06-25T16:21:02Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 382,
+     "title": "Backends as plugins",
+     "url": "https://github.com/opentofu/opentofu/issues/382",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4281,
+   "title": "OpenTofu crashes on multiple nested parentheses",
+   "url": "https://github.com/opentofu/opentofu/issues/4281",
+   "createdAt": "2026-06-16T17:58:54Z",
+   "updatedAt": "2026-06-17T13:04:22Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4296,
+   "title": "Generic `Graph` and `AcyclicGraph` in the `dag` package",
+   "url": "https://github.com/opentofu/opentofu/issues/4296",
+   "createdAt": "2026-06-18T16:50:11Z",
+   "updatedAt": "2026-06-23T16:14:34Z",
+   "labels": [
+    "enhancement",
+    "pending-decision",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3414,
+     "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+     "url": "https://github.com/opentofu/opentofu/issues/3414",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4297,
+   "title": "Implement the \"destroy\" planning mode in the new language runtime",
+   "url": "https://github.com/opentofu/opentofu/issues/4297",
+   "createdAt": "2026-06-18T23:47:17Z",
+   "updatedAt": "2026-06-29T21:27:13Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 3414,
+    "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+    "url": "https://github.com/opentofu/opentofu/issues/3414",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4299,
+   "title": "`tofu graph` should support MermaidJS format",
+   "url": "https://github.com/opentofu/opentofu/issues/4299",
+   "createdAt": "2026-06-20T02:23:43Z",
+   "updatedAt": "2026-07-21T17:01:08Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3414,
+     "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+     "url": "https://github.com/opentofu/opentofu/issues/3414",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4310,
+   "title": "RFC tracker: Linting support",
+   "url": "https://github.com/opentofu/opentofu/issues/4310",
+   "createdAt": "2026-06-25T08:04:06Z",
+   "updatedAt": "2026-09-15T09:10:27Z",
+   "labels": [
+    "rfc",
+    "rfc-implementing"
+   ],
+   "assigned": true,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4314,
+   "title": "tofu does not supply available credentials (for example from credentials.tfrc.json) to the http request attempting to download a provider package from a registry.",
+   "url": "https://github.com/opentofu/opentofu/issues/4314",
+   "createdAt": "2026-06-25T12:38:22Z",
+   "updatedAt": "2026-09-18T09:23:13Z",
+   "labels": [
+    "enhancement",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 19,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4331,
+   "title": "support dynamic `tofu` version in Dependabot so a version constraint doesn't break Dependabot updates",
+   "url": "https://github.com/opentofu/opentofu/issues/4331",
+   "createdAt": "2026-07-02T18:22:14Z",
+   "updatedAt": "2026-07-14T15:26:08Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": true,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4334,
+   "title": "provider_meta schema not exposed by `tofu providers schema -json`",
+   "url": "https://github.com/opentofu/opentofu/issues/4334",
+   "createdAt": "2026-07-04T10:35:14Z",
+   "updatedAt": "2026-07-04T10:35:14Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4335,
+   "title": "Module caching optimization (`CopyDir`) skips dot-prefixed directories",
+   "url": "https://github.com/opentofu/opentofu/issues/4335",
+   "createdAt": "2026-07-07T13:28:15Z",
+   "updatedAt": "2026-07-08T00:00:46Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4343,
+   "title": "Suggest command automatically when a wrong one is asked",
+   "url": "https://github.com/opentofu/opentofu/issues/4343",
+   "createdAt": "2026-07-09T08:40:21Z",
+   "updatedAt": "2026-07-21T15:28:01Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "blocked"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3595,
+     "title": "RFC tracker: CLI layer rework and integration of a new CLI library (cobra)",
+     "url": "https://github.com/opentofu/opentofu/issues/3595",
+     "state": "CLOSED"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4348,
+   "title": "Investigate and fix documentation around `replace_triggered_by`",
+   "url": "https://github.com/opentofu/opentofu/issues/4348",
+   "createdAt": "2026-07-10T11:59:30Z",
+   "updatedAt": "2026-07-27T10:41:17Z",
+   "labels": [
+    "bug",
+    "help wanted",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4360,
+   "title": "cty and HCL mark-handling gaps for the new language runtime",
+   "url": "https://github.com/opentofu/opentofu/issues/4360",
+   "createdAt": "2026-07-14T22:19:34Z",
+   "updatedAt": "2026-09-18T00:00:19Z",
+   "labels": [],
+   "assigned": true,
+   "comments": 2,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 3414,
+    "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+    "url": "https://github.com/opentofu/opentofu/issues/3414",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4372,
+   "title": "Refreshing takes a long time for moderate-to-large configurations",
+   "url": "https://github.com/opentofu/opentofu/issues/4372",
+   "createdAt": "2026-07-17T16:27:37Z",
+   "updatedAt": "2026-08-02T09:41:14Z",
+   "labels": [
+    "enhancement"
+   ],
+   "assigned": false,
+   "comments": 3,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4380,
+   "title": "sensitive() in conditional expression marks result as sensitive regardless of condition value",
+   "url": "https://github.com/opentofu/opentofu/issues/4380",
+   "createdAt": "2026-07-21T06:40:18Z",
+   "updatedAt": "2026-07-21T17:15:43Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4390,
+   "title": "Support for preconditions and postconditions in the new language runtime",
+   "url": "https://github.com/opentofu/opentofu/issues/4390",
+   "createdAt": "2026-07-21T23:37:43Z",
+   "updatedAt": "2026-07-21T23:37:43Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": {
+    "repo": "opentofu/opentofu",
+    "number": 3414,
+    "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+    "url": "https://github.com/opentofu/opentofu/issues/3414",
+    "state": "OPEN"
+   },
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4412,
+   "title": "azurerm backend - store remote state on onelake",
+   "url": "https://github.com/opentofu/opentofu/issues/4412",
+   "createdAt": "2026-07-30T07:40:54Z",
+   "updatedAt": "2026-08-18T18:06:28Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4443,
+   "title": "Dynamic depends_on values",
+   "url": "https://github.com/opentofu/opentofu/issues/4443",
+   "createdAt": "2026-08-06T18:07:41Z",
+   "updatedAt": "2026-08-11T20:33:41Z",
+   "labels": [
+    "pending-decision",
+    "accepted"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "opentofu/opentofu",
+     "number": 3414,
+     "title": "RFC Tracker: A new implementation approach for configuration evaluation, planning, and applying",
+     "url": "https://github.com/opentofu/opentofu/issues/3414",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4486,
+   "title": "Start silently ignoring `provider_meta` blocks when they appear in modules",
+   "url": "https://github.com/opentofu/opentofu/issues/4486",
+   "createdAt": "2026-08-17T17:20:49Z",
+   "updatedAt": "2026-09-21T17:45:47Z",
+   "labels": [
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 8,
+   "milestone": "1.14.0",
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4497,
+   "title": "Improve string handling performance",
+   "url": "https://github.com/opentofu/opentofu/issues/4497",
+   "createdAt": "2026-08-19T23:16:20Z",
+   "updatedAt": "2026-08-25T19:57:35Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4517,
+   "title": "Continue the breaking down of the `Meta` god structure",
+   "url": "https://github.com/opentofu/opentofu/issues/4517",
+   "createdAt": "2026-08-25T14:55:22Z",
+   "updatedAt": "2026-08-25T14:55:34Z",
+   "labels": [
+    "enhancement"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": "1.14.0",
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4520,
+   "title": "log() and pow() leak an internal panic (Float.SetFloat64(NaN)) instead of a clean error",
+   "url": "https://github.com/opentofu/opentofu/issues/4520",
+   "createdAt": "2026-08-26T08:58:07Z",
+   "updatedAt": "2026-08-26T09:11:05Z",
+   "labels": [],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [
+    {
+     "repo": "zclconf/go-cty",
+     "number": 219,
+     "title": "function/stdlib: Log and Pow panic on NaN results (Float.SetFloat64(NaN))",
+     "url": "https://github.com/zclconf/go-cty/issues/219",
+     "state": "OPEN"
+    }
+   ],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4528,
+   "title": "Add support for the terraform_data store block as per latest terraform",
+   "url": "https://github.com/opentofu/opentofu/issues/4528",
+   "createdAt": "2026-08-27T16:13:30Z",
+   "updatedAt": "2026-09-08T15:15:52Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4540,
+   "title": "Mocked module executing code in test scenario",
+   "url": "https://github.com/opentofu/opentofu/issues/4540",
+   "createdAt": "2026-08-31T08:08:07Z",
+   "updatedAt": "2026-09-16T08:52:41Z",
+   "labels": [
+    "bug",
+    "accepted"
+   ],
+   "assigned": true,
+   "comments": 5,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4566,
+   "title": "Sequential Groupings",
+   "url": "https://github.com/opentofu/opentofu/issues/4566",
+   "createdAt": "2026-09-09T05:00:29Z",
+   "updatedAt": "2026-09-15T15:21:41Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4567,
+   "title": "tofu test: a run block's `variables` cannot reference the test file's top-level `variables`",
+   "url": "https://github.com/opentofu/opentofu/issues/4567",
+   "createdAt": "2026-09-09T18:09:53Z",
+   "updatedAt": "2026-09-16T12:06:03Z",
+   "labels": [
+    "enhancement",
+    "needs-community-input",
+    "core-team"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4568,
+   "title": "override_data / override_resource: `values` naming a non-computed argument is rejected (Terraform accepts it)",
+   "url": "https://github.com/opentofu/opentofu/issues/4568",
+   "createdAt": "2026-09-09T18:10:01Z",
+   "updatedAt": "2026-09-18T13:13:07Z",
+   "labels": [
+    "enhancement",
+    "accepted",
+    "core-team"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4569,
+   "title": "prevent_destroy from a variable makes destroy unplannable when a count/for_each module instance is removed",
+   "url": "https://github.com/opentofu/opentofu/issues/4569",
+   "createdAt": "2026-09-09T19:23:27Z",
+   "updatedAt": "2026-09-18T17:40:27Z",
+   "labels": [],
+   "assigned": true,
+   "comments": 12,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4571,
+   "title": "A first-class `tofu drift` command for detecting infrastructure changed outside of OpenTofu",
+   "url": "https://github.com/opentofu/opentofu/issues/4571",
+   "createdAt": "2026-09-09T22:43:16Z",
+   "updatedAt": "2026-09-14T21:24:39Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 2,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4574,
+   "title": "`-target` makes a non-targeted module instance evaluate its resources as an empty tuple, failing the plan",
+   "url": "https://github.com/opentofu/opentofu/issues/4574",
+   "createdAt": "2026-09-14T20:05:41Z",
+   "updatedAt": "2026-09-14T22:04:33Z",
+   "labels": [
+    "bug",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4585,
+   "title": "State Based Deletion Protection",
+   "url": "https://github.com/opentofu/opentofu/issues/4585",
+   "createdAt": "2026-09-18T17:39:52Z",
+   "updatedAt": "2026-09-18T17:58:36Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4590,
+   "title": "GO-2026-6348 reported",
+   "url": "https://github.com/opentofu/opentofu/issues/4590",
+   "createdAt": "2026-09-21T15:13:44Z",
+   "updatedAt": "2026-09-21T15:27:23Z",
+   "labels": [
+    "govulncheck"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4591,
+   "title": "Upgrade github.com/Azure/go-ntlmssp:v0.0.0-20200615164410-66371956d46c to 0.1.1",
+   "url": "https://github.com/opentofu/opentofu/issues/4591",
+   "createdAt": "2026-09-21T15:56:20Z",
+   "updatedAt": "2026-09-21T15:56:40Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 1,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  },
+  {
+   "number": 4592,
+   "title": "Upgrade packages in opentofu",
+   "url": "https://github.com/opentofu/opentofu/issues/4592",
+   "createdAt": "2026-09-21T17:30:18Z",
+   "updatedAt": "2026-09-21T17:30:18Z",
+   "labels": [
+    "enhancement",
+    "pending-decision"
+   ],
+   "assigned": false,
+   "comments": 0,
+   "milestone": null,
+   "parent": null,
+   "children": [],
+   "blockedBy": [],
+   "blocking": [],
+   "tracks": [],
+   "trackedIn": []
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+{"mcpServers": {"issue-map-prototype": {"command": "python3", "args": ["prototype/map/elicit_server.py"]}}}
