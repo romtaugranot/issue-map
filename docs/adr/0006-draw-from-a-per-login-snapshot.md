@@ -14,4 +14,5 @@ The Map is drawn from a Snapshot on disk, not from a live read. A full read take
 
 - **Incremental refreshes can drift.** GitHub doesn't mark a Link change on either Issue, GitLab occasionally misses one end, and Closing Requests are read from recently updated pull and merge requests. So the Snapshot is read again in full, in the background, whenever a refresh can't prove it caught up, and otherwise once a week.
 - **Offline, the Map can't tell lost access from a lost network.** It keeps drawing, with a note, until the Tracker actually refuses the login.
+- **A partial Snapshot is never drawn.** The first read of a large Project takes minutes — 5.4 for `rust-lang/rust`, about 37 for `gitlab-org/gitlab` — and until it finishes the Map shows progress instead of a Map. Issue cards still open, because a card reads its Issue live. An interrupted first read resumes from its last page.
 - **A refresher runs outside the conversation**, as a detached process with one lock per Snapshot, so concurrent sessions share one refresh.
