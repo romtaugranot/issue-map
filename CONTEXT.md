@@ -57,11 +57,11 @@ An open Issue that at least one open Issue, in any Project, Blocks. Being Blocke
 _Avoid_: dependent
 
 **Waits on**:
-An Issue waits on another when that one Blocks it, or Blocks an Issue it waits on. A Blocked Issue is one that waits on an open Issue.
+An Issue waits on another when that one Blocks it, or Blocks an open Issue it waits on. A Blocked Issue is one that waits on an open Issue.
 _Avoid_: depends on, downstream of, behind
 
 **Unblocked Issue**:
-An open Issue with at least one Link that no open Issue Blocks, in a Project whose Blocks Links the Map can read. Where the Map can't read them, because the Project can't record them or the Map can't see them, no Issue is Unblocked.
+An open Issue that no open Issue Blocks, and that has a Link to another open Issue or that a closed Issue Blocks, in a Project whose Blocks Links the Map can read. Where the Map can't read them, because the Project can't record them or the Map can't see them, no Issue is Unblocked.
 _Avoid_: ready, available, actionable
 
 ### The Map
@@ -75,7 +75,7 @@ An open Issue outside the Project that a Link reaches. The Map draws it but does
 _Avoid_: stub, foreign issue, external issue
 
 **Unlinked Issue**:
-An open Issue with no Link to another open Issue, listed beside the Map rather than drawn in it.
+An open Issue with no Link to another open Issue, listed beside the Map rather than drawn in it. It is still Unblocked if a closed Issue Blocks it and no open one does.
 _Avoid_: orphan, loose issue
 
 **Group**:
