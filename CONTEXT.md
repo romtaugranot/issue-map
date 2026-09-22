@@ -45,7 +45,7 @@ A Link placing one Issue inside another. An Issue can have more than one parent.
 _Avoid_: sub-issue link, epic link, tracked-by
 
 **Related Link**:
-A Link saying two Issues belong together, with no direction or order. Any other kind someone set, other than duplicates, counts as a Related Link and keeps the Tracker's own name for it on the Issue card.
+A Link saying two Issues belong together, with no direction or order. Any other kind someone set, other than duplicates, counts as a Related Link and keeps the Tracker's own name for it on the Issue card. It is drawn but joins no Group, except between Issues that have no Parent or Blocks Link.
 _Avoid_: relates to, relation
 
 **Mention**:
@@ -87,7 +87,7 @@ An open Issue with no Link to another open Issue, listed beside the Map rather t
 _Avoid_: orphan, loose issue
 
 **Group**:
-A set of open Issues joined by Links, directly, through one another or through an Outside Issue they share, together with the Outside Issues those Links reach. The Map lists a Project's Groups.
+A set of open Issues joined by Parent and Blocks Links, directly, through one another or through an Outside Issue they share, together with the Outside Issues those Links reach. An Issue with neither kind is grouped with the Issues it is Related to that likewise have neither. The Map lists a Project's Groups.
 _Avoid_: cluster, component, subgraph
 
 **Take next**:
