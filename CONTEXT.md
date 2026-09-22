@@ -11,8 +11,8 @@ One unit of work recorded on a Tracker, whatever the Tracker calls or types it; 
 _Avoid_: ticket, work item, task
 
 **Tracker**:
-The system that holds a Project's Issues — GitHub, GitLab (gitlab.com or self-hosted, any tier), or another.
-_Avoid_: forge, provider, platform
+One running system, at one host, that holds Projects' Issues — github.com, a GitHub Enterprise Server, gitlab.com, a self-hosted GitLab, or another. GitHub and GitLab are kinds of Tracker; each Tracker runs its own version.
+_Avoid_: forge, provider, platform, instance, deployment
 
 **Project**:
 One collection of Issues on a Tracker — a GitHub repository or a GitLab project. Not a GitHub Projects planning board.
@@ -53,7 +53,7 @@ An open Issue that at least one open Issue, in any Project, Blocks. Being Blocke
 _Avoid_: waiting, dependent
 
 **Unblocked Issue**:
-An open Issue with at least one Link that no open Issue Blocks, in a Project that can record Blocks Links. Where a Project can't record them, no Issue is Unblocked.
+An open Issue with at least one Link that no open Issue Blocks, in a Project whose Blocks Links the Map can read. Where the Map can't read them, because the Project can't record them or the Map can't see them, no Issue is Unblocked.
 _Avoid_: ready, available, actionable
 
 ### The Map
