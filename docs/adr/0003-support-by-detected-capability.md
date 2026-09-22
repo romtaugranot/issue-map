@@ -6,6 +6,8 @@ The plugin doesn't keep a table of which Link kinds each Tracker version has. Ea
 - **Best effort**: the Map opens if it can read at least one Link kind, and it says the version is untested. Nothing is written here. This covers older GHES and GitLab 13.4–15.11.
 - **Refused**: the Tracker records no Link kind the Map can read, for example GitLab before 13.4.
 
+What "tested" means where the build can't run a Tracker is set by ADR 0004.
+
 Self-hosted GitLab has a long tail of installs stuck on old versions, which a rolling window would drop. The GHES window rolls because GitHub retires releases after about a year. The 16.0 floor matches `glab`, whose login the plugin borrows. Writing wrong changes someone's Tracker, while reading wrong costs one bad draw, so untested versions only read.
 
 ## Considered Options
