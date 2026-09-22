@@ -52,6 +52,10 @@ _Avoid_: inferred Link, guessed Link, implied Link
 An open Issue that at least one open Issue, in any Project, Blocks. Being Blocked does not pass along Parent Links.
 _Avoid_: waiting, dependent
 
+**Unblocked Issue**:
+An open Issue with at least one Link that no open Issue Blocks, in a Project that can record Blocks Links. Where a Project can't record them, no Issue is Unblocked.
+_Avoid_: ready, available, actionable
+
 ### The Map
 
 **Map**:
@@ -65,3 +69,11 @@ _Avoid_: stub, foreign issue, external issue
 **Unlinked Issue**:
 An open Issue with no Link to another open Issue, listed beside the Map rather than drawn in it.
 _Avoid_: orphan, loose issue
+
+**Group**:
+A set of open Issues joined by Links, directly or through one another, together with the Outside Issues those Links reach. The Map lists a Project's Groups.
+_Avoid_: cluster, component, subgraph
+
+**Issue card**:
+What the Map shows about one Issue: its name, whether it is Blocked, and its Links by kind. Moving through the Map goes from one Issue card to the next.
+_Avoid_: focus view, detail view, node
