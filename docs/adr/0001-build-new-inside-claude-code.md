@@ -1,6 +1,6 @@
 # Build a new plugin that shows the Map only inside Claude Code
 
-Every existing Map of Issue Links is a web page or a separate app, and none of them covers GitHub and GitLab (self-hosted and Free tier included) with private Projects. So we build a new Claude Code plugin rather than adopt, wrap, fork or contribute to one. The plugin shows the Map only inside Claude Code: in the conversation, through pickers, and optionally in the status line. The Issue the user picks is then already in the session, and the user never has to leave the terminal. We take ideas from prior art but copy no code, and the plugin reads the Trackers itself using the `gh`/`glab` logins the machine already has.
+Every existing Map of Issue Links is a web page or a separate app, and none of them covers GitHub and GitLab (self-hosted and Free tier included) with private Projects. So we build a new Claude Code plugin rather than adopt, wrap, fork or contribute to one. The plugin shows the Map only inside Claude Code: in the conversation, through pickers, and optionally in the status line. The Issue the user picks is then already in the session, and the user never has to leave the terminal. We take ideas from prior art but copy no code, and the plugin reads the Trackers itself by borrowing the login of the Tracker's own CLI, wherever that CLI offers a raw API call — `gh` and `glab` today. A Tracker whose CLI offers no raw call, or has no CLI, needs a login the plugin doesn't yet have a way to get; that is left to whoever adds one.
 
 ## Considered Options
 
