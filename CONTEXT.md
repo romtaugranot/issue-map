@@ -70,6 +70,10 @@ _Avoid_: ready, available, actionable
 The drawing of one Project's open Issues joined by their Links, which the user moves through. It never holds another Project's Issues; they appear only as Outside Issues. Not the `wayfinder:map` issue that plans this effort.
 _Avoid_: graph, board, tree
 
+**Snapshot**:
+The saved copy of one Project's open Issues and Links, as one login last read them from the Tracker. The Map is drawn from it, and it says how old it is once it stops being fresh.
+_Avoid_: cache, saved copy
+
 **Outside Issue**:
 An open Issue outside the Project that a Link reaches. The Map draws it but does not follow its own Links; the Project's Links to it are still drawn, so it can join Issues into one Group and pass Waits on. An Issue the user can't read is drawn as one without a name.
 _Avoid_: stub, foreign issue, external issue
