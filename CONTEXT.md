@@ -10,16 +10,20 @@ A Claude Code plugin that draws a Project's open Issues as a Map joined by their
 One unit of work recorded on a Tracker, whatever the Tracker calls or types it; GitLab's tasks count. A pull or merge request is not an Issue.
 _Avoid_: ticket, work item, task
 
+**Task-level child**:
+An Issue the Tracker puts at its smallest level, under an ordinary Issue rather than beside it — on GitLab, a task. A Parent whose open children are all task-level children stays in Take next itself; they never stand in for it.
+_Avoid_: subtask, checklist item
+
 **Tracker**:
 One running system, at one host, that holds Projects' Issues — github.com, a GitHub Enterprise Server, gitlab.com, a self-hosted GitLab, or another. GitHub and GitLab are kinds of Tracker; each Tracker runs its own version.
 _Avoid_: forge, provider, platform, instance, deployment
 
 **Project**:
-One collection of Issues on a Tracker — a GitHub repository or a GitLab project. Not a GitHub Projects planning board.
+One collection of Issues on a Tracker: the container every Issue belongs to exactly one of. On GitHub it is a repository, on GitLab a project. Not a planning board or an initiative that gathers Issues from several Projects, such as a GitHub Projects board.
 _Avoid_: repo (when meaning the Issues' container)
 
 **Closing Request**:
-A pull or merge request that closes an Issue when it is merged. It is not an Issue, and the Map never follows it.
+A pull or merge request that closes an Issue when it is merged, as the Tracker records it. It is not an Issue, and the Map never follows it.
 _Avoid_: linked PR, development link, fix
 
 **Home Project**:
@@ -29,7 +33,7 @@ _Avoid_: current repo, default project
 ### Links
 
 **Link**:
-A relationship with a meaning that someone set between two Issues on the Tracker: a Blocks Link, a Parent Link or a Related Link.
+A relationship with a meaning that someone set between two Issues on the Tracker: a Blocks Link, a Parent Link or a Related Link. A relationship the Tracker sets by itself is not a Link.
 _Avoid_: dependency, relation, edge
 
 **Blocks Link**:
@@ -41,11 +45,11 @@ A Link placing one Issue inside another. An Issue can have more than one parent.
 _Avoid_: sub-issue link, epic link, tracked-by
 
 **Related Link**:
-A Link saying two Issues belong together, with no direction or order.
+A Link saying two Issues belong together, with no direction or order. Any other kind someone set, other than duplicates, counts as a Related Link and keeps the Tracker's own name for it on the Issue card.
 _Avoid_: relates to, relation
 
 **Mention**:
-One Issue naming another in its text, which the Tracker notes. A Mention is not a Link.
+One Issue naming another in its text, which the Tracker notes. A Mention is not a Link. Where a Tracker records Mentions as Related Links, with nothing to tell the two apart, they count as Related Links.
 _Avoid_: cross-reference, crosslink
 
 **Link Suggestion**:
@@ -87,8 +91,12 @@ A set of open Issues joined by Links, directly, through one another or through a
 _Avoid_: cluster, component, subgraph
 
 **Take next**:
-The Unblocked Issues the viewer could take, in the order the Map suggests taking them: unassigned or their own, and without someone else's open Closing Request. A Parent with open children, other than GitLab tasks, is not in it; its Unblocked children stand in for it.
+The Unblocked Issues the viewer could take, in the order the Map suggests taking them: unassigned or their own, and without someone else's open Closing Request. A Parent with open children, other than task-level children, is not in it; its Unblocked children stand in for it. Where the Tracker doesn't record Closing Requests or their authors, none is assumed and the Map says so.
 _Avoid_: ready queue, up next, recommendations
+
+**Planned date**:
+The date an Issue is planned for, as the Tracker records it — on GitHub and GitLab, its milestone's due date. Take next orders by the earliest one.
+_Avoid_: deadline, target date, milestone date
 
 **Issue card**:
 What the Map shows about one Issue: its name and URL, whether it is Blocked, its Links by kind, and its open Closing Requests. Moving through the Map goes from one Issue card to the next.
