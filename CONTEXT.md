@@ -19,7 +19,7 @@ One collection of Issues on a Tracker — a GitHub repository or a GitLab projec
 _Avoid_: repo (when meaning the Issues' container)
 
 **Home Project**:
-The Project behind the local git checkout Claude Code is running in; the Map opens on it.
+The Project the Map opens on for the local git checkout Claude Code is running in. When the checkout's remotes lead to several Projects with open Issues, it is the one the user picked.
 _Avoid_: current repo, default project
 
 ### Links
