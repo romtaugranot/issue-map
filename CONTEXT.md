@@ -18,6 +18,10 @@ _Avoid_: forge, provider, platform, instance, deployment
 One collection of Issues on a Tracker — a GitHub repository or a GitLab project. Not a GitHub Projects planning board.
 _Avoid_: repo (when meaning the Issues' container)
 
+**Closing Request**:
+A pull or merge request that closes an Issue when it is merged. It is not an Issue, and the Map never follows it.
+_Avoid_: linked PR, development link, fix
+
 **Home Project**:
 The Project the Map opens on for the local git checkout Claude Code is running in. When the checkout's remotes lead to several Projects with open Issues, it is the one the user picked.
 _Avoid_: current repo, default project
@@ -79,9 +83,9 @@ A set of open Issues joined by Links, directly or through one another, together 
 _Avoid_: cluster, component, subgraph
 
 **Take next**:
-The Unblocked Issues the viewer could take, unassigned or their own, in the order the Map suggests taking them. A Parent with open children, other than GitLab tasks, is not in it; its Unblocked children stand in for it.
+The Unblocked Issues the viewer could take, in the order the Map suggests taking them: unassigned or their own, and without someone else's open Closing Request. A Parent with open children, other than GitLab tasks, is not in it; its Unblocked children stand in for it.
 _Avoid_: ready queue, up next, recommendations
 
 **Issue card**:
-What the Map shows about one Issue: its name, whether it is Blocked, and its Links by kind. Moving through the Map goes from one Issue card to the next.
+What the Map shows about one Issue: its name and URL, whether it is Blocked, its Links by kind, and its open Closing Requests. Moving through the Map goes from one Issue card to the next.
 _Avoid_: focus view, detail view, node
