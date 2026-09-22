@@ -50,7 +50,11 @@ _Avoid_: inferred Link, guessed Link, implied Link
 
 **Blocked Issue**:
 An open Issue that at least one open Issue, in any Project, Blocks. Being Blocked does not pass along Parent Links.
-_Avoid_: waiting, dependent
+_Avoid_: dependent
+
+**Waits on**:
+An Issue waits on another when that one Blocks it, or Blocks an Issue it waits on. A Blocked Issue is one that waits on an open Issue.
+_Avoid_: depends on, downstream of, behind
 
 **Unblocked Issue**:
 An open Issue with at least one Link that no open Issue Blocks, in a Project whose Blocks Links the Map can read. Where the Map can't read them, because the Project can't record them or the Map can't see them, no Issue is Unblocked.
@@ -73,6 +77,10 @@ _Avoid_: orphan, loose issue
 **Group**:
 A set of open Issues joined by Links, directly or through one another, together with the Outside Issues those Links reach. The Map lists a Project's Groups.
 _Avoid_: cluster, component, subgraph
+
+**Take next**:
+The Unblocked Issues the viewer could take, unassigned or their own, in the order the Map suggests taking them. A Parent with open children, other than GitLab tasks, is not in it; its Unblocked children stand in for it.
+_Avoid_: ready queue, up next, recommendations
 
 **Issue card**:
 What the Map shows about one Issue: its name, whether it is Blocked, and its Links by kind. Moving through the Map goes from one Issue card to the next.
