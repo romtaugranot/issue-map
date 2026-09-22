@@ -1,0 +1,4 @@
+data/*.json
+data/*.stdout
+data/*.stderr
+__pycache__/

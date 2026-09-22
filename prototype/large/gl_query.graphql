@@ -1,0 +1,22 @@
+query($p:ID!,$after:String,$first:Int!){
+  queryComplexity{score limit}
+  project(fullPath:$p){
+    workItems(state:opened,sort:CREATED_ASC,first:$first,after:$after){
+      count
+      pageInfo{hasNextPage endCursor}
+      nodes{
+        iid title webUrl createdAt updatedAt userDiscussionsCount
+        workItemType{name}
+        widgets{
+          ... on WorkItemWidgetAssignees{assignees{count}}
+          ... on WorkItemWidgetMilestone{milestone{title dueDate}}
+          ... on WorkItemWidgetHierarchy{
+            parent{iid title webUrl state closedAt namespace{fullPath} workItemType{name}}
+            children{nodes{iid title webUrl state closedAt namespace{fullPath} workItemType{name}}}
+          }
+          ... on WorkItemWidgetLinkedItems{linkedItems{nodes{linkType workItem{iid title webUrl state closedAt namespace{fullPath} workItemType{name}}}}}
+        }
+      }
+    }
+  }
+}
