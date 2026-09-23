@@ -4,7 +4,8 @@
  */
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import type { OpenIssue } from "../tracker/tracker.ts";
-import { layout, type Group, type Head } from "./links.ts";
+import { layout, type Group, type Head, type Layout } from "./links.ts";
+import { takeNext, type Pick } from "./take-next.ts";
 
 export type Command =
   | { kind: "overview" }
@@ -15,6 +16,10 @@ export interface Drawing {
   text: string;
 }
 
+/** Take next lines on the overview. */
+const TAKE_NEXT_LINES = 5;
+/** Children standing in for one Parent in Take next; the rest are held in a count, so one Parent can't fill it. */
+const STAND_INS = 3;
 /** Group lines on the overview; the rest are held in a count. */
 const GROUP_LINES = 8;
 /** Unlinked Issues a page. */
@@ -64,12 +69,15 @@ function timeLeft(ms: number): string {
 }
 
 function overview(snapshot: Snapshot): string {
-  const { onMap, unlinked, groups } = layout(snapshot);
+  const laidOut = layout(snapshot);
+  const { onMap, unlinked, groups } = laidOut;
   const header = `**${snapshot.project.path}** · ${count(snapshot.issues.length)} open · ${count(onMap.length)} on the Map · ${count(unlinked.length)} Unlinked`;
   const unlinkedLine = `**Unlinked: ${count(unlinked.length)}** — no Link to another open Issue. Ask to list them.`;
   if (onMap.length === 0) return [header, "", "No Issue here has a Link, so there's no Map to draw.", "", unlinkedLine].join("\n");
   const lines = [
     header,
+    "",
+    ...takeNextSection(snapshot, laidOut),
     "",
     `**Groups: ${count(groups.length)}** — largest first`,
     ...groups.slice(0, GROUP_LINES).map(groupLine),
@@ -80,6 +88,47 @@ function overview(snapshot: Snapshot): string {
   }
   lines.push("", unlinkedLine);
   return lines.join("\n");
+}
+
+function takeNextSection(snapshot: Snapshot, laidOut: Layout): string[] {
+  const next = takeNext(snapshot, laidOut);
+  if (next.kind === "blocks-unread") {
+    return [`**Take next: none** — the Map can't read this Project's Blocks Links (${next.reason}), so it calls no Issue Unblocked`];
+  }
+  const { picks, takenByOthers, closingRequestsUnread } = next;
+  const unread = closingRequestsUnread === null ? "" : ` · Closing Requests unread (${closingRequestsUnread}), so none leaves an Issue out`;
+  if (picks.length === 0 && takenByOthers > 0) {
+    return [`**Take next: 0** — all ${plural(takenByOthers, "Unblocked Issue")} ${takenByOthers === 1 ? "is" : "are"} taken by others${unread}`];
+  }
+  if (picks.length === 0) return [`**Take next: 0** — every Issue on the Map is Blocked, or a Parent of Blocked Issues${unread}`];
+  const taken = takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
+  return [`**Take next: ${count(picks.length)}** — most waited on first${taken}${unread}`, ...pickLines(picks)];
+}
+
+/** Take next's lines, where the children standing in for one Parent past the first few are held in a count. */
+function pickLines(picks: Pick[]): string[] {
+  const lines: string[] = [];
+  const shownUnder = new Map<OpenIssue, number>();
+  for (const pick of picks) {
+    if (lines.length === TAKE_NEXT_LINES) break;
+    const parent = pick.waiting.via;
+    if (!parent) {
+      lines.push(pickLine(pick));
+      continue;
+    }
+    const shown = shownUnder.get(parent) ?? 0;
+    shownUnder.set(parent, shown + 1);
+    if (shown < STAND_INS) lines.push(pickLine(pick));
+    else if (shown === STAND_INS) lines.push(`- … ${count(picks.filter((p) => p.waiting.via === parent).length - STAND_INS)} more under ${parent.ref}`);
+  }
+  return lines;
+}
+
+function pickLine({ issue, waiting: { count: n, via, carried }, yours }: Pick): string {
+  const waits = n === 0 ? "" : carried ? `▶${count(n)} via ${via!.ref}` : `▶${count(n)} wait on it`;
+  const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
+  const reasons = [waits, standsIn, issue.planned ? `due ${issue.planned.slice(0, 10)}` : "", yours ? "yours" : ""].filter(Boolean);
+  return `- ${issue.ref} ${trim(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
 }
 
 function unlinkedPage(unlinked: OpenIssue[], page: number): string[] {

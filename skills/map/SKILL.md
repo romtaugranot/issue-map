@@ -13,6 +13,12 @@ The Map is drawn about the checkout's **Home Project**. Run every command in the
 
 Reprint the output in your reply exactly as printed: tool output isn't reliably shown to the user, and the Map is already cut to fit one screen. Don't summarise it, reorder it or add Issues to it.
 
+## Take next
+
+The overview opens with **Take next**: the Unblocked Issues the user could take, in an order a fixed rule gives — how many open Issues wait on each (`▶n`), then the earliest Planned date, then the oldest. It is never your judgement, so it is the same on every draw. When the user asks what to take next, draw the Map and point at that list.
+
+When the user asks what *you* would pick, give your opinion in the conversation: say which Issue and why, quoting what the Map or the Issues say. Keep it separate from the list, and never reorder, redraw or trim Take next to match it.
+
 When the output says the Project is being read for the first time, that is all there is to show: the read carries on by itself, and running `issue-map map` again shows how far it has got, then the Map once it's done.
 
 ## When the Home Project is a tie

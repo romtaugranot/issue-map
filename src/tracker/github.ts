@@ -1,7 +1,7 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
 import { parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { CantAnswer, FarEnd, Identification, IssuePage, Link, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, ViewerAnswer } from "./tracker.ts";
+import type { CantAnswer, ClosingRequest, FarEnd, Identification, IssuePage, Link, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
 
@@ -19,9 +19,9 @@ fragment project on Repository {
 const VIEWER_QUERY = `query { viewer { login } }`;
 
 /**
- * Needs 3 and 4 in one request a page. GitHub allows 100 sub-issues a
+ * Needs 3, 4 and 7 in one request a page. GitHub allows 100 sub-issues a
  * parent, 50 blockers each way and 10 assignees, so only task-list Links
- * past the 100th are left unread.
+ * past the 100th are left unread. Closing Requests past the 10th are too.
  */
 const ISSUES_QUERY = `query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
@@ -38,6 +38,9 @@ const ISSUES_QUERY = `query($owner: String!, $name: String!, $after: String) {
         trackedIssues(first: 100) { nodes { ...end } }
         blockedBy(first: 100) { nodes { ...end } }
         blocking(first: 100) { nodes { ...end } }
+        closedByPullRequestsReferences(first: 10, includeClosedPrs: false) {
+          nodes { number url isDraft state author { login } repository { nameWithOwner } }
+        }
       }
     }
   }
@@ -58,6 +61,18 @@ interface IssueNode {
   trackedIssues: { nodes: (EndNode | null)[] };
   blockedBy: { nodes: (EndNode | null)[] };
   blocking: { nodes: (EndNode | null)[] };
+  /** `null` for a login that can't read pull requests. */
+  closedByPullRequestsReferences: { nodes: (PullNode | null)[] } | null;
+}
+
+interface PullNode {
+  number: number;
+  url: string;
+  isDraft: boolean;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  /** `null` once the account that opened it is deleted; GitHub then shows it as opened by `ghost`, and so does the Map. */
+  author: { login: string } | null;
+  repository: { nameWithOwner: string };
 }
 
 interface EndNode {
@@ -172,11 +187,17 @@ async function openIssues(cli: Cli, host: string, { path }: Project, after: stri
   const onlyHidden = errors.every((e) => e.type === "FORBIDDEN" && e.path?.[2] === "nodes");
   if (issues && (answer.code === 0 || onlyHidden)) {
     const hiddenParents = new Set(errors.filter((e) => e.path?.[4] === "parent").map((e) => e.path?.[3]));
+    const unread: Unread = {};
+    // A token without pull request access, such as a fine-grained one scoped to Issues, is refused this field on every Issue.
+    if (errors.some((e) => e.path?.[4] === "closedByPullRequestsReferences" && e.path.length === 5)) {
+      unread.closingRequests = "this login can't read pull requests";
+    }
     return {
       kind: "page",
       issues: issues.nodes.map((node, index) => openIssue(node, hiddenParents.has(index))),
       total: issues.totalCount,
       next: issues.pageInfo.hasNextPage ? issues.pageInfo.endCursor : null,
+      unread,
     };
   }
   return failure(answer, body, host, path);
@@ -212,6 +233,11 @@ function openIssue(node: IssueNode, hiddenParent: boolean): OpenIssue {
     // GitHub has no level below an ordinary Issue.
     taskLevel: false,
     links,
+    closingRequests: (node.closedByPullRequestsReferences?.nodes ?? []).flatMap((pull): ClosingRequest[] =>
+      pull?.state === "OPEN"
+        ? [{ ref: `${pull.repository.nameWithOwner}#${pull.number}`, url: pull.url, draft: pull.isDraft, author: pull.author?.login ?? "ghost" }]
+        : [],
+    ),
   };
 }
 

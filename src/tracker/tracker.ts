@@ -1,7 +1,7 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1, 2, 3, 4 and 6 so far.
+ * This file holds needs 1, 2, 3, 4, 6 and 7 so far.
  */
 
 /** One kind of Tracker (GitHub, GitLab), able to say whether it runs at a host. */
@@ -29,8 +29,9 @@ export interface Tracker {
   /** Need 6: who this login is. */
   viewer(): Promise<ViewerAnswer>;
   /**
-   * Needs 3 and 4: one page of a Project's open Issues with their Links, oldest
-   * first. `after` is the previous page's `next`, or `null` for the first page.
+   * Needs 3, 4 and 7: one page of a Project's open Issues with their Links and
+   * open Closing Requests, oldest first. `after` is the previous page's `next`,
+   * or `null` for the first page.
    */
   openIssues(project: Project, after: string | null): Promise<IssuePage>;
 }
@@ -52,6 +53,8 @@ export type IssuePage =
       total: number;
       /** Where the next page starts, or `null` after the last. */
       next: string | null;
+      /** What the page couldn't hold. */
+      unread: Unread;
     }
   | { kind: "not-found"; reason: string }
   | CantAnswer;
@@ -76,7 +79,18 @@ export type ProjectResolution =
   /** Nothing could be learned, for example because the Tracker couldn't be reached. */
   | { kind: "cant-tell"; reason: string };
 
-/** Needs 3 and 4: one open Issue of a Project, with its Links. */
+/**
+ * What a read of a Project couldn't give, each with why. The Map says so
+ * rather than read the gap as "none".
+ */
+export interface Unread {
+  /** Blocks Links (need 4); without them no Issue is Unblocked. */
+  blocks?: string;
+  /** Closing Requests or their authors (need 7); without them no Issue is left out of Take next as taken. */
+  closingRequests?: string;
+}
+
+/** Needs 3, 4 and 7: one open Issue of a Project, with its Links and open Closing Requests. */
 export interface OpenIssue {
   /** Stable, and the same wherever a Link names this Issue. */
   id: string;
@@ -93,6 +107,18 @@ export interface OpenIssue {
   /** Whether the Tracker puts it at its smallest level, under an ordinary Issue. */
   taskLevel: boolean;
   links: Link[];
+  /** Its open Closing Requests, drafts included; empty when the page couldn't read them. */
+  closingRequests: ClosingRequest[];
+}
+
+/** Need 7: an open pull or merge request that closes an Issue when merged. */
+export interface ClosingRequest {
+  /** The reference users type from anywhere, such as `owner/name#812`. */
+  ref: string;
+  url: string;
+  draft: boolean;
+  /** The login that opened it. */
+  author: string;
 }
 
 /** One Link, read from one of its ends. `role` is what the far end is to this Issue. */

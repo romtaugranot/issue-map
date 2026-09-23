@@ -1,11 +1,11 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1, 2, 3, 4 and 6 including their "can't" answers. Each adapter supplies
+ * needs 1, 2, 3, 4, 6 and 7 including their "can't" answers. Each adapter supplies
  * a Stage that stands a World up behind its own boundary.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { FarEnd, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind } from "../../src/tracker/tracker.ts";
+import type { FarEnd, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
   path: string;
@@ -49,6 +49,10 @@ export interface World {
   links?: [IssueAddress, "blocks" | "parent", IssueAddress][];
   /** The login's name; `fixture-viewer` by default. */
   viewer?: string;
+  /** Pull or merge requests that close an Issue when merged. */
+  closingRequests?: { closes: IssueAddress; number: number; author: string; draft?: boolean; state?: "open" | "closed" | "merged" }[];
+  /** `false` for a login that may read Issues but not pull or merge requests. */
+  readsClosingRequests?: boolean;
 }
 
 export interface Stage {
@@ -221,7 +225,7 @@ export function readContract(stage: Stage): void {
   }
 
   /** Every page of a Project's open Issues, as the Map's first read takes them. */
-  async function readAll(world: World, path: string): Promise<{ issues: OpenIssue[]; pages: number; total: number }> {
+  async function readAll(world: World, path: string): Promise<{ issues: OpenIssue[]; pages: number; total: number; unread: Unread }> {
     const tracker = await trackerIn(world);
     const resolved = await tracker.resolveProject(path);
     assert.equal(resolved.kind, "project", JSON.stringify(resolved));
@@ -230,16 +234,18 @@ export function readContract(stage: Stage): void {
     let after: string | null = null;
     let pages = 0;
     let total = 0;
+    let unread: Unread = {};
     do {
       const page = await tracker.openIssues(project, after);
       assert.equal(page.kind, "page", JSON.stringify(page));
-      const { issues: more, next, total: counted } = page as Extract<typeof page, { kind: "page" }>;
+      const { issues: more, next, total: counted, unread: missing } = page as Extract<typeof page, { kind: "page" }>;
       issues.push(...more);
+      unread = { ...unread, ...missing };
       after = next;
       total = counted;
       pages++;
     } while (after !== null && pages < 100);
-    return { issues, pages, total };
+    return { issues, pages, total, unread };
   }
 
   async function project(world: World, path: string): Promise<{ tracker: Tracker; project: Project }> {
@@ -281,7 +287,7 @@ export function readContract(stage: Stage): void {
       });
     });
 
-    describe("needs 3 and 4: list open Issues with their Links", () => {
+    describe("needs 3, 4 and 7: list open Issues with their Links and Closing Requests", () => {
       const tools = "fixture-org/tools";
       const plans = "fixture-org/plans";
 
@@ -371,6 +377,38 @@ export function readContract(stage: Stage): void {
         assert.equal(one!.links[0]!.role, "parent");
         assert.equal(one!.links[0]!.to.readable, false);
         assert.doesNotMatch(JSON.stringify(one), /Secret plan/);
+      });
+
+      test("need 7: reads each Issue's open Closing Requests with their authors, drafts included", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }],
+          closingRequests: [
+            { closes: `${tools}#1`, number: 40, author: "fixture-bot" },
+            { closes: `${tools}#1`, number: 41, author: "fixture-viewer", draft: true },
+            { closes: `${tools}#2`, number: 42, author: "fixture-bot", state: "closed" },
+            { closes: `${tools}#2`, number: 43, author: "fixture-bot", state: "merged" },
+          ],
+        };
+        const { issues, unread } = await readAll(world, tools);
+        assert.deepEqual(
+          byRef(issues, "#1").closingRequests.map((r) => [r.ref, r.draft, r.author]),
+          [[`${tools}#40`, false, "fixture-bot"], [`${tools}#41`, true, "fixture-viewer"]],
+        );
+        assert.match(byRef(issues, "#1").closingRequests[0]!.url, /fixture-org\/tools\/(pull|merge_requests)\/40$/);
+        assert.deepEqual(byRef(issues, "#2").closingRequests, [], "closed and merged ones aren't open");
+        assert.deepEqual(byRef(issues, "#3").closingRequests, []);
+        assert.equal(unread.closingRequests, undefined);
+      });
+
+      test("need 7: a login that can't read Closing Requests still lists the Issues, and says why none are given", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2 }] }],
+          closingRequests: [{ closes: `${tools}#1`, number: 40, author: "fixture-bot" }],
+          readsClosingRequests: false,
+        };
+        const { issues, unread } = await readAll(world, tools);
+        assert.deepEqual(issues.map((i) => [i.ref, i.closingRequests]), [["#1", []], ["#2", []]]);
+        assert.match(unread.closingRequests ?? "", /pull|merge/i);
       });
 
       test("says when the Project is gone", async () => {

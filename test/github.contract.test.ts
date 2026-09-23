@@ -54,7 +54,12 @@ function ghApi(world: World, args: string[]): CliResult {
   return exited(0, JSON.stringify({ data: { repository: { ...repository(spec, host), parent: spec.parent ? repository(spec.parent, host) : null } } }));
 }
 
-/** One page of open Issues in the shape github.com gives: a sub-issue parent, then task-list parents, and a `null` where the login can't see. */
+/**
+ * One page of open Issues in the shape github.com gives: a sub-issue parent,
+ * then task-list parents, and a `null` where the login can't see. A token
+ * without pull request access gets `null` for each Issue's closing pull
+ * requests, with an error at each.
+ */
 function issuesPage(world: World, spec: ProjectSpec, host: string, after: string | undefined): CliResult {
   const PAGE = 100;
   const open = (spec.issues ?? []).filter((i) => !i.closed);
@@ -75,6 +80,24 @@ function issuesPage(world: World, spec: ProjectSpec, host: string, after: string
       return null;
     }
     return { id: nodeId(path, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${path}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", repository: { nameWithOwner: path } };
+  };
+  // Asked for with `includeClosedPrs: false`, which leaves out closed pull requests but not merged ones.
+  const closingPulls = (self: string, at: (string | number)[]) => {
+    if (world.readsClosingRequests === false) {
+      errors.push({ type: "FORBIDDEN", path: at, message: "Resource not accessible by personal access token" });
+      return null;
+    }
+    const pulls = (world.closingRequests ?? []).filter((r) => r.closes === self && r.state !== "closed");
+    return {
+      nodes: pulls.map((r) => ({
+        number: r.number,
+        url: `https://${host}/${spec.path}/pull/${r.number}`,
+        isDraft: r.draft ?? false,
+        state: (r.state ?? "open").toUpperCase(),
+        author: { login: r.author },
+        repository: { nameWithOwner: spec.path },
+      })),
+    };
   };
   const nodes = open.slice(start, start + PAGE).map((issue, index) => {
     const self = address(spec.path, issue.number);
@@ -99,6 +122,7 @@ function issuesPage(world: World, spec: ProjectSpec, host: string, after: string
       trackedIssues: list("trackedIssues", children.filter((c) => subIssueParent(c) !== self)),
       blockedBy: list("blockedBy", links.filter(([, kind, b]) => kind === "blocks" && b === self).map(([a]) => a)),
       blocking: list("blocking", links.filter(([a, kind]) => kind === "blocks" && a === self).map(([, , b]) => b)),
+      closedByPullRequestsReferences: closingPulls(self, at("closedByPullRequestsReferences")),
     };
   });
   const next = start + PAGE < open.length ? String(start + PAGE) : null;
