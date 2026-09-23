@@ -6,8 +6,8 @@
  */
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { OpenIssue, Project, Tracker } from "../tracker/tracker.ts";
-import type { Snapshot } from "./snapshot.ts";
+import type { OpenIssue, Project, Tracker, Unread } from "../tracker/tracker.ts";
+import { SNAPSHOT_FORMAT, type Snapshot } from "./snapshot.ts";
 
 export interface SnapshotKey {
   /** The Tracker's host. */
@@ -48,6 +48,7 @@ export interface SnapshotStore {
 
 /** A first read part-way through. Its pages are kept one file each, so saving one doesn't rewrite the rest. */
 interface Progress {
+  format: typeof SNAPSHOT_FORMAT;
   pages: number;
   /** Issues in the saved pages. */
   read: number;
@@ -55,6 +56,8 @@ interface Progress {
   after: string | null;
   total: number;
   spentMs: number;
+  /** What the saved pages couldn't hold. */
+  unread: Unread;
   stopped?: string;
 }
 
@@ -75,9 +78,9 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
   return {
     async state(key) {
       const at = paths(key);
-      const snapshot = await readJson<Snapshot>(at.snapshot);
+      const snapshot = current(await readJson<Snapshot>(at.snapshot));
       if (snapshot) return { kind: "ready", snapshot, ageMs: clock.now() - Date.parse(snapshot.readAt) };
-      const progress = await readJson<Progress>(at.progress);
+      const progress = current(await readJson<Progress>(at.progress));
       const running = await held(at.lock);
       if (!progress && !running) return { kind: "none" };
       return {
@@ -95,13 +98,18 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
       if (!(await lock(at.lock))) return { kind: "busy" };
       try {
+        let progress = current(await readJson<Progress>(at.progress));
+        // Pages saved in another format are read again.
+        if (!progress) await rm(at.reading, { recursive: true, force: true });
         await mkdir(at.reading, { recursive: true, mode: 0o700 });
-        const progress: Progress = (await readJson<Progress>(at.progress)) ?? {
+        progress ??= {
+          format: SNAPSHOT_FORMAT,
           pages: 0,
           read: 0,
           after: null,
           total: project.issues === "off" ? 0 : project.issues.open,
           spentMs: 0,
+          unread: {},
         };
         delete progress.stopped;
         await save(at.progress, progress);
@@ -117,6 +125,7 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           progress.pages++;
           progress.read += page.issues.length;
           progress.total = page.total;
+          progress.unread = { ...page.unread, ...progress.unread };
           progress.spentMs += clock.now() - started;
           if (page.next === null) break;
           progress.after = page.next;
@@ -125,11 +134,13 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
         const issues: OpenIssue[] = [];
         for (let n = 0; n < progress.pages; n++) issues.push(...((await readJson<OpenIssue[]>(at.page(n))) ?? []));
         const snapshot: Snapshot = {
+          format: SNAPSHOT_FORMAT,
           tracker: key.tracker,
           project: { id: project.id, path: project.path, url: project.url },
           login: key.login,
           readAt: new Date(clock.now()).toISOString(),
           issues: unique(issues),
+          unread: progress.unread,
         };
         await save(at.snapshot, snapshot);
         await rm(at.reading, { recursive: true, force: true });
@@ -139,6 +150,11 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       }
     },
   };
+}
+
+/** A Snapshot or read saved in another format counts as none, so it is read again. */
+function current<T extends { format: number }>(saved: T | null): T | null {
+  return saved?.format === SNAPSHOT_FORMAT ? saved : null;
 }
 
 /** An Issue created while the read runs can land on two pages; it is kept once. */

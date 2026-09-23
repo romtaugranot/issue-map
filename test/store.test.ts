@@ -10,13 +10,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { snapshotStore, type SnapshotKey, type SnapshotState } from "../src/snapshot/store.ts";
-import type { IssuePage, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
+import type { IssuePage, OpenIssue, Project, Tracker, Unread } from "../src/tracker/tracker.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 250 } };
 const key: SnapshotKey = { tracker: "github.com", project: project.id, login: "fixture-viewer" };
 
 function issue(n: number): OpenIssue {
-  return { id: `I_${n}`, ref: `#${n}`, title: `Issue ${n}`, url: `https://github.com/fixture-org/tools/issues/${n}`, createdAt: new Date(Date.UTC(2026, 0, n)).toISOString(), assignees: [], planned: null, taskLevel: false, links: [] };
+  return { id: `I_${n}`, ref: `#${n}`, title: `Issue ${n}`, url: `https://github.com/fixture-org/tools/issues/${n}`, createdAt: new Date(Date.UTC(2026, 0, n)).toISOString(), assignees: [], planned: null, taskLevel: false, links: [], closingRequests: [] };
 }
 
 /** A clock that moves only when told to. */
@@ -33,9 +33,13 @@ interface FakeTracker {
 
 /**
  * `count` open Issues in pages of 100. Each page takes `pageMs` on the clock;
- * `fail` makes the page at that `after` answer with a failure instead, once.
+ * `fail` makes the page at that `after` answer with a failure instead, once;
+ * `unread` says what the page at each `after` couldn't hold.
  */
-function fakeTracker(count: number, options: { time?: ReturnType<typeof clock>; pageMs?: number; fail?: { at: string | null; answer: IssuePage }; onPage?: () => Promise<void> } = {}): FakeTracker {
+function fakeTracker(
+  count: number,
+  options: { time?: ReturnType<typeof clock>; pageMs?: number; fail?: { at: string | null; answer: IssuePage }; onPage?: () => Promise<void>; unread?: Record<string, Unread> } = {},
+): FakeTracker {
   const asked: (string | null)[] = [];
   let fail = options.fail;
   const all = Array.from({ length: count }, (_, i) => issue(i + 1));
@@ -56,7 +60,7 @@ function fakeTracker(count: number, options: { time?: ReturnType<typeof clock>; 
       await options.onPage?.();
       const start = after === null ? 0 : Number(after);
       const next = start + 100 < count ? String(start + 100) : null;
-      return { kind: "page", issues: all.slice(start, start + 100), total: count, next };
+      return { kind: "page", issues: all.slice(start, start + 100), total: count, next, unread: options.unread?.[String(after)] ?? {} };
     },
   };
   return { tracker, asked };
@@ -105,12 +109,22 @@ describe("the Snapshot store (ADR 0006)", () => {
     const { snapshot, ageMs } = state as Extract<SnapshotState, { kind: "ready" }>;
     assert.equal(ageMs, 45_000);
     assert.deepEqual(snapshot, {
+      format: 2,
       tracker: "github.com",
       project: { id: project.id, path: project.path, url: project.url },
       login: "fixture-viewer",
       readAt: "2026-09-23T10:00:03.000Z",
       issues: Array.from({ length: 250 }, (_, i) => issue(i + 1)),
+      unread: {},
     });
+  });
+
+  test("a Snapshot keeps what the Tracker couldn't give on any page, and why", async () => {
+    const store = snapshotStore(scratch(), clock());
+    const { tracker } = fakeTracker(250, { unread: { "100": { closingRequests: "this login can't read pull requests" } } });
+    await store.read(key, tracker, project);
+    const state = await store.state(key);
+    assert.deepEqual(state.kind === "ready" && state.snapshot.unread, { closingRequests: "this login can't read pull requests" });
   });
 
   test("an interrupted first read resumes from its last page", async () => {

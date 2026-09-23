@@ -15,7 +15,7 @@ import type { OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 150 } };
 
 function issue(n: number): OpenIssue {
-  return { id: `I_${n}`, ref: `#${n}`, title: `Issue ${n}`, url: `https://github.com/fixture-org/tools/issues/${n}`, createdAt: new Date(Date.UTC(2026, 0, n)).toISOString(), assignees: [], planned: null, taskLevel: false, links: [] };
+  return { id: `I_${n}`, ref: `#${n}`, title: `Issue ${n}`, url: `https://github.com/fixture-org/tools/issues/${n}`, createdAt: new Date(Date.UTC(2026, 0, n)).toISOString(), assignees: [], planned: null, taskLevel: false, links: [], closingRequests: [] };
 }
 
 /** 150 open Issues, #1 the Parent of #2; the second page waits until `release` is called. */
@@ -32,9 +32,9 @@ function heldTracker() {
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => ({ kind: "viewer", login: "fixture-viewer" }),
     async openIssues(_, after) {
-      if (after === null) return { kind: "page", issues: all.slice(0, 100), total: 150, next: "100" };
+      if (after === null) return { kind: "page", issues: all.slice(0, 100), total: 150, next: "100", unread: {} };
       await held;
-      return { kind: "page", issues: all.slice(100), total: 150, next: null };
+      return { kind: "page", issues: all.slice(100), total: 150, next: null, unread: {} };
     },
   };
   return { tracker, release };

@@ -43,7 +43,7 @@ export function layout(snapshot: Snapshot): Layout {
   for (const issue of snapshot.issues) {
     for (const { role, to } of issue.links) {
       // A closed Issue joins nothing and puts nothing on the Map.
-      if (to.readable && !to.open) continue;
+      if (!isOpen(to)) continue;
       if (to.id === issue.id) continue;
       if (!own.has(to.id)) outside.set(to.id, to);
       if (role === "related") {
@@ -120,7 +120,12 @@ function rank(issue: OpenIssue | undefined): number {
   return issue ? 0 : 1;
 }
 
-function oldestFirst(a: OpenIssue, b: OpenIssue): number {
+/** An end this login can't read counts as open: something is there, and it may still be. */
+export function isOpen(end: FarEnd): boolean {
+  return !end.readable || end.open;
+}
+
+export function oldestFirst(a: OpenIssue, b: OpenIssue): number {
   return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 }
 

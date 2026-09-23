@@ -1,14 +1,22 @@
 /** Small hand-written Snapshots, for the edges the recorded ones don't cover. */
-import type { Snapshot } from "../../src/snapshot/snapshot.ts";
-import type { FarEnd, Link, OpenIssue } from "../../src/tracker/tracker.ts";
+import { SNAPSHOT_FORMAT, type Snapshot } from "../../src/snapshot/snapshot.ts";
+import type { FarEnd, Link, OpenIssue, Unread } from "../../src/tracker/tracker.ts";
 
 export const PROJECT = "fixture-org/tools";
+/** The login that read every built Snapshot, so the viewer of every drawing. */
+export const VIEWER = "fixture-viewer";
 
 export interface IssueSpec {
   n: number;
   title?: string;
   /** Defaults to day `n` of 2026, so a higher number is newer. */
   createdAt?: string;
+  assignees?: string[];
+  /** The Planned date, as an ISO date. */
+  planned?: string;
+  taskLevel?: boolean;
+  /** The authors of its open Closing Requests, one each. */
+  closingRequests?: string[];
 }
 
 /** An Issue outside the Project, a closed one, or one this login can't read. */
@@ -22,7 +30,7 @@ export type End = number | Elsewhere;
 /** `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the Parent of b". */
 export type LinkSpec = [End, "blocks" | "parent" | "related", End];
 
-export function snapshot(issues: IssueSpec[], links: LinkSpec[] = []): Snapshot {
+export function snapshot(issues: IssueSpec[], links: LinkSpec[] = [], unread: Unread = {}): Snapshot {
   const built = new Map<number, OpenIssue>(issues.map((spec) => [spec.n, issue(spec)]));
   const record = (at: End, role: Link["role"], far: End) => {
     if (typeof at !== "number") return; // The Map never reads an Issue outside its Project.
@@ -35,25 +43,33 @@ export function snapshot(issues: IssueSpec[], links: LinkSpec[] = []): Snapshot 
     record(a, towardB, b);
   }
   return {
+    format: SNAPSHOT_FORMAT,
     tracker: "github.com",
     project: { id: "github.com#1", path: PROJECT, url: `https://github.com/${PROJECT}` },
-    login: "fixture-viewer",
+    login: VIEWER,
     readAt: "2026-09-23T00:00:00Z",
     issues: [...built.values()],
+    unread,
   };
 }
 
-function issue({ n, title, createdAt }: IssueSpec): OpenIssue {
+function issue({ n, title, createdAt, assignees, planned, taskLevel, closingRequests }: IssueSpec): OpenIssue {
   return {
     id: `${PROJECT}#${n}`,
     ref: `#${n}`,
     title: title ?? `Issue ${n}`,
     url: `https://github.com/${PROJECT}/issues/${n}`,
     createdAt: createdAt ?? new Date(Date.UTC(2026, 0, n)).toISOString(),
-    assignees: [],
-    planned: null,
-    taskLevel: false,
+    assignees: assignees ?? [],
+    planned: planned ?? null,
+    taskLevel: taskLevel ?? false,
     links: [],
+    closingRequests: (closingRequests ?? []).map((author, i) => ({
+      ref: `${PROJECT}#${900 + n * 10 + i}`,
+      url: `https://github.com/${PROJECT}/pull/${900 + n * 10 + i}`,
+      draft: false,
+      author,
+    })),
   };
 }
 

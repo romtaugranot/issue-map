@@ -5,17 +5,20 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { draw, drawProgress } from "../src/map/draw.ts";
-import { snapshot, type IssueSpec, type LinkSpec } from "./fakes/snapshot-builder.ts";
+import { snapshot, VIEWER, type IssueSpec, type LinkSpec } from "./fakes/snapshot-builder.ts";
 
 const overview = (s: ReturnType<typeof snapshot>) => draw(s, { kind: "overview" }).text;
 
 describe("the overview", () => {
-  test("draws a Group line naming its top Issue and how many Issues it holds, then the Unlinked count", () => {
-    const s = snapshot([{ n: 1, title: "Plan the importer" }, { n: 2 }, { n: 3 }], [[1, "parent", 2]]);
+  test("draws Take next, then a Group line naming its top Issue and how many Issues it holds, then the Unlinked count", () => {
+    const s = snapshot([{ n: 1, title: "Plan the importer" }, { n: 2 }, { n: 3 }], [[1, "blocks", 2]]);
     assert.equal(
       overview(s),
       [
         "**fixture-org/tools** · 3 open · 2 on the Map · 1 Unlinked",
+        "",
+        "**Take next: 1** — most waited on first",
+        "- #1 Plan the importer — ▶1 wait on it",
         "",
         "**Groups: 1** — largest first",
         "- #1 Plan the importer — 2 Issues",
@@ -56,6 +59,159 @@ describe("the overview", () => {
     const title = "Support reading state from every remote backend at once, in parallel, with retries";
     const s = snapshot([{ n: 1, title }, { n: 2 }], [[1, "blocks", 2]]);
     assert.equal(groupLines(overview(s))[1], "- #1 Support reading state from every remote backend at once, in… — 2 Issues");
+  });
+});
+
+describe("Take next", () => {
+  test("lists the Unblocked Issues above the Group lines, each with how many open Issues wait on it", () => {
+    // #1 Blocks #2, which Blocks #3; #4 Blocks #5.
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }], [[1, "blocks", 2], [2, "blocks", 3], [4, "blocks", 5]]);
+    assert.deepEqual(overview(s).split("\n").slice(0, 7), [
+      "**fixture-org/tools** · 5 open · 5 on the Map · 0 Unlinked",
+      "",
+      "**Take next: 2** — most waited on first",
+      "- #1 Issue 1 — ▶2 wait on it",
+      "- #4 Issue 4 — ▶1 wait on it",
+      "",
+      "**Groups: 2** — largest first",
+    ]);
+  });
+
+  test("an Issue that an open Issue in any Project Blocks is Blocked, and waits pass through Outside Issues", () => {
+    const other = { outside: "fixture-org/plans#7" };
+    // #1 Blocks the Outside Issue, which Blocks #2; another Blocks #3; one this login can't read Blocks #4.
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }, { n: 6 }],
+      [[1, "blocks", other], [other, "blocks", 2], [{ outside: "fixture-org/plans#8" }, "blocks", 3], [{ hidden: "h1" }, "blocks", 4], [6, "related", 5]],
+    );
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 3** — most waited on first",
+      "- #1 Issue 1 — ▶2 wait on it",
+      "- #5 Issue 5",
+      "- #6 Issue 6",
+    ]);
+  });
+
+  test("holds only Issues that are unassigned or the viewer's own, and leaves out any with someone else's open Closing Request", () => {
+    const s = snapshot(
+      [
+        { n: 1 },
+        { n: 2, assignees: [VIEWER] },
+        { n: 3, assignees: ["fixture-other"] },
+        { n: 4, closingRequests: ["fixture-other"] },
+        { n: 5, closingRequests: [VIEWER] },
+        { n: 6, assignees: [VIEWER], closingRequests: ["fixture-other"] },
+        { n: 7, assignees: ["fixture-other", VIEWER] },
+      ],
+      [[1, "related", 2], [2, "related", 3], [3, "related", 4], [4, "related", 5], [5, "related", 6], [6, "related", 7]],
+    );
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 4** — most waited on first · 3 taken by others",
+      "- #1 Issue 1",
+      "- #2 Issue 2 — yours",
+      "- #5 Issue 5 — yours",
+      "- #7 Issue 7 — yours",
+    ]);
+  });
+
+  test("says so when every Unblocked Issue is taken by others", () => {
+    const s = snapshot([{ n: 1, assignees: ["fixture-other"] }, { n: 2, closingRequests: ["fixture-other"] }], [[1, "related", 2]]);
+    assert.deepEqual(takeNext(overview(s)), ["**Take next: 0** — all 2 Unblocked Issues are taken by others"]);
+  });
+
+  test("a Parent with open children gives way to its Unblocked children, which carry its count", () => {
+    // #1 is the Parent of #2–#4, and #5 and #6 wait on it. #7 Blocks #3; #4 Blocks #8. #20's only child is Task-level.
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }, { n: 6 }, { n: 7 }, { n: 8 }, { n: 20 }, { n: 21, taskLevel: true }],
+      [[1, "parent", 2], [1, "parent", 3], [1, "parent", 4], [1, "blocks", 5], [5, "blocks", 6], [7, "blocks", 3], [4, "blocks", 8], [20, "parent", 21]],
+    );
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 4** — most waited on first",
+      "- #2 Issue 2 — ▶2 via #1",
+      "- #4 Issue 4 — ▶2 via #1",
+      "- #7 Issue 7 — ▶1 wait on it",
+      "- #20 Issue 20",
+    ]);
+  });
+
+  test("a child under several Parents takes the largest count, and a count passes down through a Parent under a Parent", () => {
+    // #1 has one waiting on it, #2 has three; #3 sits under both. #4 is under #2 and the Parent of #5.
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }, { n: 10 }, { n: 11 }, { n: 12 }, { n: 13 }],
+      [[1, "parent", 3], [2, "parent", 3], [2, "parent", 4], [4, "parent", 5], [1, "blocks", 10], [2, "blocks", 11], [2, "blocks", 12], [2, "blocks", 13]],
+    );
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 2** — most waited on first",
+      "- #3 Issue 3 — ▶3 via #2",
+      "- #5 Issue 5 — ▶3 via #4",
+    ]);
+  });
+
+  test("orders by how many wait on it, then earliest Planned date, then oldest, and shows 5", () => {
+    const s = snapshot(
+      [
+        { n: 1 },
+        { n: 2, planned: "2026-12-01T00:00:00Z" },
+        { n: 3, planned: "2026-10-01T00:00:00Z" },
+        { n: 4 },
+        { n: 5 },
+        { n: 6 },
+        { n: 7, planned: "2026-11-01T00:00:00Z" },
+        { n: 8 },
+        { n: 9 },
+      ],
+      [[1, "blocks", 9], [7, "blocks", 8], [2, "related", 3], [3, "related", 4], [4, "related", 5], [5, "related", 6]],
+    );
+    const expected = [
+      "**Take next: 7** — most waited on first",
+      "- #7 Issue 7 — ▶1 wait on it · due 2026-11-01",
+      "- #1 Issue 1 — ▶1 wait on it",
+      "- #3 Issue 3 — due 2026-10-01",
+      "- #2 Issue 2 — due 2026-12-01",
+      "- #4 Issue 4",
+    ];
+    assert.deepEqual(takeNext(overview(s)), expected);
+    assert.deepEqual(takeNext(overview({ ...s, issues: [...s.issues].reverse() })), expected, "the same whatever order the Issues were read in");
+  });
+
+  test("where Blocks Links can't be read, calls nothing Unblocked and says why", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "parent", 2]], { blocks: "GitLab Free doesn't record them" });
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: none** — the Map can't read this Project's Blocks Links (GitLab Free doesn't record them), so it calls no Issue Unblocked",
+    ]);
+  });
+
+  test("where Closing Requests can't be read, leaves nothing out as taken and says so", () => {
+    const s = snapshot([{ n: 1, assignees: ["fixture-other"] }, { n: 2 }], [[1, "related", 2]], { closingRequests: "this login can't read pull requests" });
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 1** — most waited on first · 1 taken by others · Closing Requests unread (this login can't read pull requests), so none leaves an Issue out",
+      "- #2 Issue 2",
+    ]);
+  });
+
+  test("at most 3 children stand in for one Parent, even with nothing waiting on it, and the rest are held in a count", () => {
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }, { n: 6 }, { n: 20 }, { n: 21 }],
+      [[1, "parent", 2], [1, "parent", 3], [1, "parent", 4], [1, "parent", 5], [1, "parent", 6], [20, "related", 21]],
+    );
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 7** — most waited on first",
+      "- #2 Issue 2 — via #1",
+      "- #3 Issue 3 — via #1",
+      "- #4 Issue 4 — via #1",
+      "- … 2 more under #1",
+      "- #20 Issue 20",
+    ]);
+  });
+
+  test("a Parent whose only open children are in other Projects stays in Take next, since none of them can stand in", () => {
+    const s = snapshot([{ n: 1 }], [[1, "parent", { outside: "fixture-org/plans#7" }]]);
+    assert.deepEqual(takeNext(overview(s)), ["**Take next: 1** — most waited on first", "- #1 Issue 1"]);
+  });
+
+  test("says so when nothing on the Map is Unblocked", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "blocks", 2], [2, "blocks", 1]]);
+    assert.deepEqual(takeNext(overview(s)), ["**Take next: 0** — every Issue on the Map is Blocked, or a Parent of Blocked Issues"]);
   });
 });
 
@@ -208,6 +364,13 @@ describe("a first read (ADR 0006)", () => {
     assert.match(text, /^The read stopped: couldn't reach gitlab\.com\. Asking for the Map again resumes it where it stopped\.$/m);
   });
 });
+
+/** The overview's Take next section: its heading and its lines. */
+function takeNext(text: string): string[] {
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => l.startsWith("**Take next"));
+  return start === -1 ? [] : lines.slice(start, lines.indexOf("", start));
+}
 
 /** The overview's Groups section: its heading and its lines. */
 function groupLines(text: string): string[] {
