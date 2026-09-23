@@ -3,7 +3,7 @@
  * Remotes are read the way `gh` and `glab` read them, every candidate
  * without open Issues is dropped, and a real tie is left for the user to pick.
  */
-import type { Project, Trackers } from "../tracker/tracker.ts";
+import type { Project, Tracker, Trackers } from "../tracker/tracker.ts";
 import type { Checkout, Remote } from "./checkout.ts";
 import { remoteAddress, sshHosts, type Address } from "./remote-address.ts";
 
@@ -24,6 +24,8 @@ export interface HomeAnswer {
   text: string;
   /** Non-empty when the user has to pick; the best guess comes first. */
   choices: Choice[];
+  /** The Home Project and the Tracker it is on, when there is one to draw. */
+  home?: { tracker: Tracker; project: Project };
 }
 
 export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {}): Promise<HomeAnswer> {
@@ -46,8 +48,9 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
       continue;
     }
     // A fork's Issues usually live in its parent, so the parent is the better guess.
-    if (resolved.parent) candidates.push({ project: resolved.parent, via: `parent of ${remote.name}` });
-    candidates.push({ project: resolved.project, via: `remote ${remote.name}` });
+    const { tracker } = resolved;
+    if (resolved.parent) candidates.push({ tracker, project: resolved.parent, via: `parent of ${remote.name}` });
+    candidates.push({ tracker, project: resolved.project, via: `remote ${remote.name}` });
   }
   const distinct = unique(candidates);
   if (distinct.length === 0) {
@@ -56,9 +59,10 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
     return { text: ["No Home Project: no remote of this checkout leads to a Project the Map can read.", ...lines].join("\n"), choices: [] };
   }
   const alsoHere = unreadable.map(({ address, why }) => `Also here: ${address.host}/${address.path} — ${why}`);
-  const found = (home: Project): HomeAnswer => ({
-    text: [`Home Project: ${name(home)} — ${issueCount(home)}`, ...alsoHere].join("\n"),
+  const found = ({ tracker, project }: Candidate): HomeAnswer => ({
+    text: [`Home Project: ${name(project)} — ${issueCount(project)}`, ...alsoHere].join("\n"),
     choices: [],
+    home: { tracker, project },
   });
   const ask = (tied: Candidate[], before = ""): HomeAnswer => ({
     text: [before + askText(tied), ...alsoHere].join("\n"),
@@ -73,11 +77,11 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
     if (!picked) {
       const notHere = `${request.pick} isn't one of this checkout's Projects.`;
       if (tied.length > 0) return ask(tied, `${notHere} `);
-      const answer = found(pickable[0]!.project);
+      const answer = found(pickable[0]!);
       return { ...answer, text: `${notHere}\n${answer.text}` };
     }
     const saved = await deps.checkout.set(HOME_KEY, picked.project.url);
-    const answer = found(picked.project);
+    const answer = found(picked);
     if (!saved.saved) answer.text += `\nThe pick couldn't be saved to git config (${saved.reason}), so it holds for this session only.`;
     return answer;
   }
@@ -85,14 +89,14 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
   const saved = await deps.checkout.get(HOME_KEY);
   if (saved !== undefined) {
     const byUrl = distinct.find((c) => sameUrl(c.project.url, saved));
-    if (byUrl) return found(byUrl.project);
+    if (byUrl) return found(byUrl);
     // Compared by the Project the Tracker returns, so a renamed or moved Project still matches.
     const address = remoteAddress(saved, (alias) => alias);
     const resolved = address ? await read(address) : undefined;
     const byId = resolved?.kind === "project" ? distinct.find((c) => c.project.id === resolved.project.id) : undefined;
     if (byId) {
       await deps.checkout.set(HOME_KEY, byId.project.url);
-      return found(byId.project);
+      return found(byId);
     }
     if (address && resolved?.kind === "unreadable" && !resolved.lasting) {
       return { text: [`Home Project: ${address.host}/${address.path} — ${resolved.why}`, ...alsoHere].join("\n"), choices: [] };
@@ -110,12 +114,12 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
       if (candidate) defaults.push(candidate);
     }
     const usable = unique(defaults).filter(hasOpenIssues);
-    if (usable.length === 1) return found(usable[0]!.project);
+    if (usable.length === 1) return found(usable[0]!);
     if (usable.length > 1) return ask(usable);
   }
 
   if (tied.length > 0) return ask(tied);
-  return found((withOpenIssues[0] ?? distinct[0])!.project);
+  return found((withOpenIssues[0] ?? distinct[0])!);
 }
 
 function envDefaults(env: Record<string, string | undefined>): Address[] {
@@ -157,7 +161,7 @@ async function configDefaults(checkout: Checkout, remotes: Remote[], addressOf: 
 }
 
 type Read =
-  | { kind: "project"; project: Project; parent: Project | null }
+  | { kind: "project"; tracker: Tracker; project: Project; parent: Project | null }
   /** `lasting` is false when nothing could be learned, as when a Tracker couldn't be reached. */
   | { kind: "unreadable"; why: string; lasting: boolean };
 
@@ -183,7 +187,7 @@ async function readProject(trackers: Trackers, { host, path }: Address): Promise
   const answer = await identified.tracker.resolveProject(path);
   switch (answer.kind) {
     case "project":
-      return answer;
+      return { ...answer, tracker: identified.tracker };
     case "refused":
       return { kind: "unreadable", why: `${product} refused: ${answer.reason}`, lasting: true };
     case "not-found":
@@ -226,6 +230,7 @@ function sameUrl(a: string, b: string): boolean {
 }
 
 interface Candidate {
+  tracker: Tracker;
   project: Project;
   /** How the checkout leads to the Project, such as `remote origin` or `parent of origin`. */
   via: string;

@@ -11,14 +11,14 @@ const PRODUCT = "GitLab";
 export function gitlab(deps: AdapterDeps): TrackerKind {
   const { cli, http, env } = deps;
 
+  const notYet = { kind: "cant-tell", reason: "this version of the plugin doesn't read GitLab Projects yet" } as const;
   const trackerAt = (host: string, version: string | null): Tracker => ({
     product: PRODUCT,
     host,
     version,
-    resolveProject: async () => ({
-      kind: "cant-tell",
-      reason: "this version of the plugin doesn't read GitLab Projects yet",
-    }),
+    resolveProject: async () => notYet,
+    viewer: async () => notYet,
+    openIssues: async () => notYet,
   });
 
   return {

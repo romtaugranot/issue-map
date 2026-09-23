@@ -1,32 +1,102 @@
-/** `issue-map home [--pick <URL>]`: says which Project the Map opens on for this checkout. */
+/**
+ * `issue-map home [--pick <URL>]`: says which Project the Map opens on for this checkout.
+ * `issue-map map [--pick <URL>]`: draws the Home Project's Map.
+ * `issue-map unlinked [--page <n>] [--pick <URL>]`: lists its Unlinked Issues, 15 a page, newest first.
+ * `issue-map read --host <host> --path <path>`: the first read of a Project, run detached by `map`.
+ */
+import { spawn } from "node:child_process";
+import { mkdirSync, openSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { setTimeout as sleep } from "node:timers/promises";
 import { anonymousHttp, processCli } from "./tracker/boundary.ts";
 import { github } from "./tracker/github.ts";
 import { gitlab } from "./tracker/gitlab.ts";
-import { trackers } from "./tracker/tracker.ts";
+import { trackers, type Trackers } from "./tracker/tracker.ts";
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
 import { resolveHome, type HomeAnswer } from "./home/home.ts";
+import { snapshotStore } from "./snapshot/store.ts";
+import { showMap } from "./map/show.ts";
+import type { Command } from "./map/draw.ts";
 
-const USAGE = "usage: issue-map home [--pick <URL>]";
+const USAGE = "usage: issue-map home [--pick <URL>] | map [--pick <URL>] | unlinked [--page <n>] [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
-  const { positionals, values } = parseArgs({ args: argv, allowPositionals: true, options: { pick: { type: "string" } } });
-  if (positionals[0] !== "home" || positionals.length > 1) {
-    console.error(USAGE);
-    return 2;
+  const { positionals, values } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: { pick: { type: "string" }, page: { type: "string" }, host: { type: "string" }, path: { type: "string" } },
+  });
+  const [verb, ...rest] = positionals;
+  const page = values.page === undefined ? 1 : Number(values.page);
+  if (rest.length > 0 || !Number.isInteger(page) || page < 1) return usage();
+  const deps = { cli: processCli, http: anonymousHttp, env: process.env };
+  const known = trackers([github(deps), gitlab(deps)]);
+
+  switch (verb) {
+    case "read":
+      if (!values.host || !values.path) return usage();
+      return firstRead(known, values.host, values.path);
+    case "home":
+    case "map":
+    case "unlinked":
+      break;
+    default:
+      return usage();
   }
+
   const root = await checkoutRoot(process.cwd());
   if (!root) {
     console.log(`No Home Project: ${process.cwd()} isn't inside a git checkout.`);
     return 0;
   }
-  const deps = { cli: processCli, http: anonymousHttp, env: process.env };
   const answer = await resolveHome(
-    { checkout: gitCheckout(root), trackers: trackers([github(deps), gitlab(deps)]), env: process.env, sshHostname },
+    { checkout: gitCheckout(root), trackers: known, env: process.env, sshHostname },
     { pick: values.pick },
   );
-  console.log(render(answer));
+  if (verb === "home" || !answer.home) {
+    console.log(render(answer));
+    return 0;
+  }
+  const { tracker, project } = answer.home;
+  const command: Command = verb === "map" ? { kind: "overview" } : { kind: "unlinked", page };
+  const store = snapshotStore(stateDir(), { now: Date.now });
+  const startRead = () => detach(["read", "--host", tracker.host, "--path", project.path]);
+  console.log(await showMap({ store, startRead, sleep }, tracker, project, command));
   return 0;
+}
+
+/** Reads a Project in full into its Snapshot, resuming where an earlier read stopped. */
+async function firstRead(known: Trackers, host: string, path: string): Promise<number> {
+  const identified = await known.at(host);
+  if (identified.kind !== "identified") return 1;
+  const { tracker } = identified;
+  const [resolved, viewer] = await Promise.all([tracker.resolveProject(path), tracker.viewer()]);
+  if (resolved.kind !== "project" || viewer.kind !== "viewer") return 1;
+  const store = snapshotStore(stateDir(), { now: Date.now });
+  const outcome = await store.read({ tracker: host, project: resolved.project.id, login: viewer.login }, tracker, resolved.project);
+  return outcome.kind === "failed" ? 1 : 0;
+}
+
+/** Runs this CLI again in a process of its own that outlives this one; what it prints goes to a log beside the Snapshots. */
+function detach(args: string[]): void {
+  const dir = stateDir();
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const log = openSync(join(dir, "read.log"), "a", 0o600);
+  spawn(process.execPath, [fileURLToPath(import.meta.url), ...args], { detached: true, stdio: ["ignore", log, log] }).unref();
+}
+
+/** Where Snapshots are kept: `ISSUE_MAP_STATE_DIR`, or the XDG state directory. */
+function stateDir(): string {
+  const env = process.env;
+  return env.ISSUE_MAP_STATE_DIR ?? join(env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "issue-map");
+}
+
+function usage(): number {
+  console.error(USAGE);
+  return 2;
 }
 
 function render({ text, choices }: HomeAnswer): string {

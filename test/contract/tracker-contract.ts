@@ -1,11 +1,11 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1 and 2 including their "can't tell" answers. Each adapter supplies
+ * needs 1, 2, 3, 4 and 6 including their "can't" answers. Each adapter supplies
  * a Stage that stands a World up behind its own boundary.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { Project, ProjectResolution, Tracker, TrackerKind } from "../../src/tracker/tracker.ts";
+import type { FarEnd, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
   path: string;
@@ -15,7 +15,25 @@ export interface ProjectSpec {
   parent?: ProjectSpec;
   /** Paths the Project had before it was renamed or moved. */
   oldPaths?: string[];
+  issues?: IssueSpec[];
 }
+
+export interface IssueSpec {
+  number: number;
+  title?: string;
+  /** ISO date; defaults to day `number` of 2026. */
+  createdAt?: string;
+  assignees?: string[];
+  /** ISO date. */
+  planned?: string;
+  /** Closed Issues are never listed, but a Link can reach one. */
+  closed?: boolean;
+  /** This login can't read it, though a Link to it is recorded. */
+  hidden?: boolean;
+}
+
+/** `"owner/name#12"`. */
+export type IssueAddress = string;
 
 export interface World {
   /** What answers at each host other than the well-known one. A host not listed can't be reached. */
@@ -27,6 +45,10 @@ export interface World {
   loggedInTo?: string[];
   /** Whether the well-known host can be reached. */
   network?: "up" | "down";
+  /** `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the Parent of b". */
+  links?: [IssueAddress, "blocks" | "parent", IssueAddress][];
+  /** The login's name; `fixture-viewer` by default. */
+  viewer?: string;
 }
 
 export interface Stage {
@@ -41,6 +63,7 @@ export interface Stage {
 export function trackerContract(stage: Stage): void {
   identifyContract(stage);
   resolveContract(stage);
+  readContract(stage);
 }
 
 export function identifyContract(stage: Stage): void {
@@ -183,6 +206,185 @@ export function resolveContract(stage: Stage): void {
         const answer = await (await trackerIn({ projects: [tofu], network: "down" })).resolveProject("opentofu/opentofu");
         assert.equal(answer.kind, "cant-tell");
         assert.match((answer as { reason: string }).reason, new RegExp(wellKnownHost.replaceAll(".", "\\.")));
+      });
+    });
+  });
+}
+
+export function readContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+
+  async function trackerIn(world: World): Promise<Tracker> {
+    const tracker = await stage.arrange(world).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    return tracker;
+  }
+
+  /** Every page of a Project's open Issues, as the Map's first read takes them. */
+  async function readAll(world: World, path: string): Promise<{ issues: OpenIssue[]; pages: number; total: number }> {
+    const tracker = await trackerIn(world);
+    const resolved = await tracker.resolveProject(path);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    const { project } = resolved as Extract<ProjectResolution, { kind: "project" }>;
+    const issues: OpenIssue[] = [];
+    let after: string | null = null;
+    let pages = 0;
+    let total = 0;
+    do {
+      const page = await tracker.openIssues(project, after);
+      assert.equal(page.kind, "page", JSON.stringify(page));
+      const { issues: more, next, total: counted } = page as Extract<typeof page, { kind: "page" }>;
+      issues.push(...more);
+      after = next;
+      total = counted;
+      pages++;
+    } while (after !== null && pages < 100);
+    return { issues, pages, total };
+  }
+
+  async function project(world: World, path: string): Promise<{ tracker: Tracker; project: Project }> {
+    const tracker = await trackerIn(world);
+    const resolved = await tracker.resolveProject(path);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    return { tracker, project: (resolved as Extract<ProjectResolution, { kind: "project" }>).project };
+  }
+
+  const byRef = (issues: OpenIssue[], ref: string) => {
+    const found = issues.find((i) => i.ref === ref);
+    assert.ok(found, `${ref} is listed`);
+    return found;
+  };
+  const linkTo = (issue: OpenIssue, role: string, ref: string): FarEnd => {
+    const found = issue.links.find((l) => l.role === role && l.to.readable && l.to.ref === ref);
+    assert.ok(found, `${issue.ref} has a ${role} Link to ${ref}: ${JSON.stringify(issue.links)}`);
+    return found.to;
+  };
+
+  describe(`${product} Tracker contract`, () => {
+    describe("need 6: say who the viewer is", () => {
+      test("names the login", async () => {
+        assert.deepEqual(await (await trackerIn({ viewer: "fixture-bot" })).viewer(), { kind: "viewer", login: "fixture-bot" });
+      });
+
+      test("refuses without a login, and says how to log in", async () => {
+        const answer = await (await trackerIn({ login: "none" })).viewer();
+        assert.equal(answer.kind, "refused");
+        assert.match((answer as { reason: string }).reason, /log ?in/i);
+      });
+
+      test("refuses when the Tracker rejects the login", async () => {
+        assert.equal((await (await trackerIn({ login: "refused" })).viewer()).kind, "refused");
+      });
+
+      test("can't tell when the Tracker can't be reached", async () => {
+        assert.equal((await (await trackerIn({ network: "down" })).viewer()).kind, "cant-tell");
+      });
+    });
+
+    describe("needs 3 and 4: list open Issues with their Links", () => {
+      const tools = "fixture-org/tools";
+      const plans = "fixture-org/plans";
+
+      test("pages through every open Issue, oldest first, each with what the Map draws", async () => {
+        const issues: IssueSpec[] = Array.from({ length: 230 }, (_, i) => ({ number: i + 1 }));
+        issues[4] = { number: 5, title: "Import state from S3", assignees: ["fixture-bot"], planned: "2026-10-01T00:00:00Z" };
+        issues[9] = { number: 10, closed: true };
+        const read = await readAll({ projects: [{ path: tools, number: 1, open: 229, issues }] }, tools);
+        assert.ok(read.pages > 1, "more than one page");
+        assert.equal(read.total, 229);
+        assert.equal(read.issues.length, 229);
+        assert.deepEqual(read.issues.slice(0, 4).map((i) => i.ref), ["#1", "#2", "#3", "#4"]);
+        assert.equal(read.issues.some((i) => i.ref === "#10"), false, "closed Issues aren't listed");
+        assert.equal(new Set(read.issues.map((i) => i.id)).size, 229, "each has its own identity");
+        const five = byRef(read.issues, "#5");
+        assert.equal(five.title, "Import state from S3");
+        assert.match(five.url, /fixture-org\/tools\/issues\/5$/);
+        assert.equal(five.createdAt.slice(0, 10), "2026-01-05");
+        assert.deepEqual(five.assignees, ["fixture-bot"]);
+        assert.equal(five.planned?.slice(0, 10), "2026-10-01");
+        assert.equal(five.taskLevel, false);
+        assert.deepEqual(byRef(read.issues, "#6").assignees, []);
+        assert.equal(byRef(read.issues, "#6").planned, null);
+      });
+
+      test("reads Blocks and Parent Links with their direction, naming the far end by the identity it's listed with", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 4, issues: [{ number: 1 }, { number: 2 }, { number: 3 }, { number: 4 }] }],
+          links: [[`${tools}#1`, "blocks", `${tools}#2`], [`${tools}#3`, "parent", `${tools}#2`], [`${tools}#3`, "parent", `${tools}#4`]],
+        };
+        const { issues } = await readAll(world, tools);
+        const [one, two, three] = [byRef(issues, "#1"), byRef(issues, "#2"), byRef(issues, "#3")];
+        assert.equal(linkTo(one, "blocked", `${tools}#2`).id, two.id);
+        assert.equal(linkTo(two, "blocker", `${tools}#1`).id, one.id);
+        assert.equal(linkTo(two, "parent", `${tools}#3`).id, three.id);
+        assert.equal(linkTo(three, "child", `${tools}#2`).id, two.id);
+        linkTo(three, "child", `${tools}#4`);
+        assert.deepEqual(byRef(issues, "#4").links.map((l) => l.role), ["parent"]);
+        const end = linkTo(one, "blocked", `${tools}#2`);
+        assert.deepEqual(end.readable && [end.open, end.project, end.title], [true, tools, "Issue 2"]);
+      });
+
+      test("an Issue can have more than one Parent", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }],
+          links: [[`${tools}#1`, "parent", `${tools}#3`], [`${tools}#2`, "parent", `${tools}#3`]],
+        };
+        const three = byRef((await readAll(world, tools)).issues, "#3");
+        assert.deepEqual(three.links.filter((l) => l.role === "parent").map((l) => l.to.readable && l.to.ref).sort(), [`${tools}#1`, `${tools}#2`]);
+      });
+
+      test("a Link to another Project names the far end's Project; its own Links aren't read", async () => {
+        const world: World = {
+          projects: [
+            { path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2 }] },
+            { path: plans, number: 2, open: 2, issues: [{ number: 7, title: "Q3 importer epic" }, { number: 8 }] },
+          ],
+          links: [[`${plans}#7`, "parent", `${tools}#1`], [`${plans}#7`, "parent", `${tools}#2`], [`${plans}#8`, "blocks", `${plans}#7`]],
+        };
+        const { issues } = await readAll(world, tools);
+        assert.deepEqual(issues.map((i) => i.ref), ["#1", "#2"]);
+        const [a, b] = [linkTo(issues[0]!, "parent", `${plans}#7`), linkTo(issues[1]!, "parent", `${plans}#7`)];
+        assert.equal(a.id, b.id, "both Links name the same Issue");
+        assert.deepEqual(a.readable && [a.open, a.project, a.title], [true, plans, "Q3 importer epic"]);
+        assert.equal(issues.flatMap((i) => i.links).some((l) => l.to.readable && l.to.ref === `${plans}#8`), false);
+      });
+
+      test("a Link to a closed Issue says it is closed", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }, { number: 2, closed: true }] }],
+          links: [[`${tools}#2`, "blocks", `${tools}#1`]],
+        };
+        const end = linkTo(byRef((await readAll(world, tools)).issues, "#1"), "blocker", `${tools}#2`);
+        assert.equal(end.readable && end.open, false);
+      });
+
+      test("a Link to an Issue this login can't read is kept, without a name", async () => {
+        const world: World = {
+          projects: [
+            { path: tools, number: 1, open: 1, issues: [{ number: 1 }] },
+            { path: "fixture-org/private", number: 2, open: 1, issues: [{ number: 3, title: "Secret plan", hidden: true }] },
+          ],
+          links: [[`fixture-org/private#3`, "parent", `${tools}#1`]],
+        };
+        const [one] = (await readAll(world, tools)).issues;
+        assert.equal(one!.links.length, 1);
+        assert.equal(one!.links[0]!.role, "parent");
+        assert.equal(one!.links[0]!.to.readable, false);
+        assert.doesNotMatch(JSON.stringify(one), /Secret plan/);
+      });
+
+      test("says when the Project is gone", async () => {
+        const { tracker, project: found } = await project({ projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }] }, tools);
+        const gone = await tracker.openIssues({ ...found, path: "fixture-org/gone" }, null);
+        assert.equal(gone.kind, "not-found");
+      });
+
+      test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
+        const resolved = await project({ projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }] }, tools);
+        for (const [world, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
+          const tracker = await trackerIn({ projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }], ...world });
+          assert.equal((await tracker.openIssues(resolved.project, null)).kind, kind);
+        }
       });
     });
   });
