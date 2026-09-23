@@ -1,7 +1,7 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1 and 2 so far.
+ * This file holds needs 1, 2, 3, 4 and 6 so far.
  */
 
 /** One kind of Tracker (GitHub, GitLab), able to say whether it runs at a host. */
@@ -26,7 +26,35 @@ export interface Tracker {
   readonly version: string | null;
   /** Need 2: turn a Project's path on this Tracker into one stable Project identity. */
   resolveProject(path: string): Promise<ProjectResolution>;
+  /** Need 6: who this login is. */
+  viewer(): Promise<ViewerAnswer>;
+  /**
+   * Needs 3 and 4: one page of a Project's open Issues with their Links, oldest
+   * first. `after` is the previous page's `next`, or `null` for the first page.
+   */
+  openIssues(project: Project, after: string | null): Promise<IssuePage>;
 }
+
+/** What a Tracker says when it can't answer. */
+export type CantAnswer =
+  /** No login, or a login the Tracker doesn't accept for this. */
+  | { kind: "refused"; reason: string }
+  /** Nothing could be learned, for example because the Tracker couldn't be reached. */
+  | { kind: "cant-tell"; reason: string };
+
+export type ViewerAnswer = { kind: "viewer"; login: string } | CantAnswer;
+
+export type IssuePage =
+  | {
+      kind: "page";
+      issues: OpenIssue[];
+      /** How many open Issues the Project holds, as the Tracker counts them now. */
+      total: number;
+      /** Where the next page starts, or `null` after the last. */
+      next: string | null;
+    }
+  | { kind: "not-found"; reason: string }
+  | CantAnswer;
 
 export interface Project {
   /** Stable across renames and moves. */
@@ -47,6 +75,47 @@ export type ProjectResolution =
   | { kind: "refused"; reason: string }
   /** Nothing could be learned, for example because the Tracker couldn't be reached. */
   | { kind: "cant-tell"; reason: string };
+
+/** Needs 3 and 4: one open Issue of a Project, with its Links. */
+export interface OpenIssue {
+  /** Stable, and the same wherever a Link names this Issue. */
+  id: string;
+  /** The reference users type inside the Project, such as `#123`. */
+  ref: string;
+  title: string;
+  url: string;
+  /** ISO date. */
+  createdAt: string;
+  /** Logins. */
+  assignees: string[];
+  /** The Planned date as an ISO date, or `null`. */
+  planned: string | null;
+  /** Whether the Tracker puts it at its smallest level, under an ordinary Issue. */
+  taskLevel: boolean;
+  links: Link[];
+}
+
+/** One Link, read from one of its ends. `role` is what the far end is to this Issue. */
+export interface Link {
+  role: "blocker" | "blocked" | "parent" | "child" | "related";
+  to: FarEnd;
+}
+
+/** The far end of a Link, which may be in another Project, closed, or hidden from this login. */
+export type FarEnd =
+  | {
+      id: string;
+      readable: true;
+      open: boolean;
+      /** The path of the Project it is in. */
+      project: string;
+      /** The reference users type from anywhere, such as `owner/name#123` or `group&12`. */
+      ref: string;
+      title: string;
+      url: string;
+    }
+  /** The Tracker records the Link but won't show this login the Issue; the id is the adapter's own. */
+  | { id: string; readable: false };
 
 /** Asks every kind in turn which one runs at a host. */
 export interface Trackers {

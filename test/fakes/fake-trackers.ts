@@ -42,6 +42,12 @@ function tracker(host: string, fake: FakeHost, reads: string[]): Tracker {
       if (!found) return { kind: "not-found", reason: `no Project ${path} on ${host}` };
       return { kind: "project", project: project(host, found), parent: found.parent ? project(host, found.parent) : null };
     },
+    async viewer() {
+      return { kind: "cant-tell", reason: "the fake doesn't name a viewer" };
+    },
+    async openIssues() {
+      return { kind: "cant-tell", reason: "the fake holds no Issues" };
+    },
   };
 }
 
