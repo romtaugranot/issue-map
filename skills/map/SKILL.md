@@ -1,6 +1,6 @@
 ---
 name: map
-description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, their Unlinked Issues, or which Issue to take next.
+description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, their Unlinked Issues, or which Issue to take next.
 ---
 
 # The Map
@@ -8,6 +8,8 @@ description: The Map of this checkout's Project and its open Issues. Use when th
 The Map is drawn about the checkout's **Home Project**. Run every command in the checkout.
 
 - **The Map**: `issue-map map`.
+- **A Group's outline**: `issue-map group <n>`, where `n` is the Group's place in the overview's Group lines, counting from 1 at the top. It lists what sits at the Group's top, one level at a time. When the user picks a Group off the overview, open it by its place, even when they name it by the Issue on its line.
+- **The level beneath an Issue**: `issue-map group '<ref>'` with the reference as the outline or overview prints it (`#123`, `owner/name#45`, `group&12` — drop a leading `↗`), or the Issue's URL. Quote it: `#` starts a shell comment. When the user says `more` on an outline, run the same command with `--page <n>` for the next page.
 - **The Unlinked Issues**, 15 a page, newest first: `issue-map unlinked`, and `issue-map unlinked --page <n>` when the user says `more` or asks for a page.
 - **Which Project is home**: `issue-map home`.
 

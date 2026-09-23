@@ -221,6 +221,13 @@ describe("Groups (ADR 0008)", () => {
     assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #4 Issue 4 — 4 Issues"]);
   });
 
+  test("the Issue with most of the Project's own Issues under it heads the Group; Outside Issues under it don't count", () => {
+    // #1 has two Outside children; #2 has one of the Project's own, #3, which Blocks one of #1's.
+    const plans = [{ outside: "fixture-org/plans#7" }, { outside: "fixture-org/plans#8" }];
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "parent", plans[0]!], [1, "parent", plans[1]!], [2, "parent", 3], [3, "blocks", plans[0]!]]);
+    assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #2 Issue 2 — 3 Issues, 2↗"]);
+  });
+
   test("a Related Link joins nothing between Issues that have a Parent or Blocks Link", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [3, "parent", 4], [2, "related", 4]]);
     assert.deepEqual(groupLines(overview(s)), [
@@ -292,6 +299,124 @@ describe("Outside Issues (ADR 0005)", () => {
       "- ↗ an Issue this login can't read — 1 Issue, 1↗",
       "- #3 Issue 3 — 1 Issue, 1↗",
     ]);
+  });
+});
+
+describe("a Group's outline (ADR 0008)", () => {
+  const outline = (s: ReturnType<typeof snapshot>, which: number | string, page = 1) =>
+    draw(s, typeof which === "number" ? { kind: "group", group: which, page } : { kind: "under", ref: which, page }).text;
+
+  // #1 is the Parent of #2 and #3, #2 the Parent of #4; #1 Blocks #7, and #6 Blocks #3.
+  const tree = snapshot(
+    [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }, { n: 6 }, { n: 7 }],
+    [[1, "parent", 2], [1, "parent", 3], [2, "parent", 4], [1, "blocks", 7], [6, "blocks", 3]],
+  );
+
+  test("opening a Group lists what sits at its top, most under it first", () => {
+    assert.equal(
+      outline(tree, 1),
+      [
+        "**Group 1 of 1** · #1 Issue 1 — 6 Issues",
+        "",
+        "**At the top: 2** — most under it first",
+        "- #1 Issue 1 — 4 under it",
+        "- #6 Issue 6 — 1 under it",
+        "_Name one to open the level below it · `map` for the Map_",
+      ].join("\n"),
+    );
+  });
+
+  test("naming an Issue opens the level beneath it: its children, and the Issues it Blocks", () => {
+    assert.equal(
+      outline(tree, "#1"),
+      [
+        "**Group 1 of 1** · #1 Issue 1 — 6 Issues",
+        "",
+        "**Under #1: 3** — most under it first",
+        "- #2 Issue 2 — 1 under it",
+        "- #3 Issue 3",
+        "- #7 Issue 7 — Blocked by it",
+        "_Name one to open the level below it · `map` for the Map_",
+      ].join("\n"),
+    );
+    assert.equal(outline(tree, "#2").split("\n")[2], "**Under #2: 1** — most under it first", "a level deeper again");
+    assert.equal(outline(tree, "https://github.com/fixture-org/tools/issues/2"), outline(tree, "#2"), "by URL too");
+  });
+
+  test("an Issue is named by its reference, after the Project's path, or by any URL of it inside the Project", () => {
+    for (const ref of ["fixture-org/tools#2", "https://github.com/fixture-org/tools/-/work_items/2"]) assert.equal(outline(tree, ref), outline(tree, "#2"), ref);
+    const plans = { outside: "fixture-org/plans#7" };
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[plans, "parent", 1], [plans, "parent", 2]]);
+    assert.equal(outline(s, "↗fixture-org/plans#7"), outline(s, "fixture-org/plans#7"), "with the ↗ the outline prints");
+  });
+
+  test("an Issue with Related Links shows how many on its line, and the Related Issue stays in its own Group", () => {
+    // #2 is Related to #4, which is in the Group #3 heads, and to an Outside Issue.
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [3, "parent", 4], [2, "related", 4], [2, "related", { outside: "fixture-org/plans#9" }]]);
+    assert.deepEqual(outline(s, 1).split("\n").slice(2, 4), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — 2 Related"]);
+    assert.equal(outline(s, 2).split("\n")[3], "- #4 Issue 4 — 1 Related");
+  });
+
+  test("the overview draws no Related count between Groups", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [3, "parent", 4], [2, "related", 4]]);
+    assert.doesNotMatch(overview(s), /Related/);
+  });
+
+  test("a Group of Issues joined only by Related lists them all at its top, a page of 10 at a time", () => {
+    const issues = Array.from({ length: 12 }, (_, i): IssueSpec => ({ n: i + 1 }));
+    const links = issues.slice(1).map(({ n }): LinkSpec => [n - 1, "related", n]);
+    const first = outline(snapshot(issues, links), 1).split("\n");
+    assert.deepEqual(first.slice(2, 5), ["**At the top: 12** — most under it first · page 1 of 2", "- #1 Issue 1 — 1 Related", "- #2 Issue 2 — 2 Related"]);
+    assert.equal(first.length, 14);
+    assert.equal(first.at(-1), "_`more` for the next 10 · name one to open the level below it · `map` for the Map_");
+    assert.deepEqual(outline(snapshot(issues, links), 1, 2).split("\n").slice(2), [
+      "**At the top: 12** — most under it first · page 2 of 2",
+      "- #11 Issue 11 — 2 Related",
+      "- #12 Issue 12 — 1 Related",
+      "_Name one to open the level below it · `map` for the Map_",
+    ]);
+  });
+
+  test("a Group headed by an Outside Issue names it as one, and opens on the level beneath it when it's alone at the top", () => {
+    const plans = { outside: "fixture-org/plans#7", title: "Q3 importer epic" };
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[plans, "parent", 1], [plans, "parent", 2], [2, "parent", 3]]);
+    assert.equal(
+      outline(s, 1),
+      [
+        "**Group 1 of 1** · ↗fixture-org/plans#7 Q3 importer epic (an Outside Issue) — 3 Issues, 1↗",
+        "",
+        "**Under ↗fixture-org/plans#7, alone at the top: 2** — most under it first",
+        "- #2 Issue 2 — 1 under it",
+        "- #1 Issue 1",
+        "_Name one to open the level below it · `map` for the Map_",
+      ].join("\n"),
+    );
+    assert.equal(outline(s, "fixture-org/plans#7"), outline(s, 1).replace(", alone at the top", ""));
+  });
+
+  test("an Outside Issue this login can't read heads its Group without a name, still as an Outside Issue", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[{ hidden: "h1" }, "parent", 1], [1, "parent", 2]]);
+    assert.deepEqual(outline(s, 1).split("\n").slice(0, 4), [
+      "**Group 1 of 1** · ↗ an Issue this login can't read (an Outside Issue) — 2 Issues, 1↗",
+      "",
+      "**Under ↗ an Outside Issue this login can't read, alone at the top: 1** — most under it first",
+      "- #1 Issue 1 — 1 under it",
+    ]);
+  });
+
+  test("where Links run in a circle, the oldest Issue in it stands at the top", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "blocks", 2], [2, "blocks", 3], [3, "blocks", 1]]);
+    assert.deepEqual(outline(s, 1).split("\n").slice(2, 5), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — Blocked by it · 2 under it", "_Name one to open the level below it · `map` for the Map_"]);
+  });
+
+  test("says so when the Issue named has nothing beneath it, is Unlinked, isn't there, or the Group doesn't exist", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "parent", 2]]);
+    assert.deepEqual(outline(s, "#2").split("\n").slice(2), ["Nothing sits beneath #2 in this Group.", "_`map` for the Map_"]);
+    assert.equal(outline(s, "#3"), "#3 is Unlinked: it has no Link to another open Issue, so it's in no Group.");
+    assert.equal(outline(s, "fixture-org/tools#3"), "fixture-org/tools#3 is Unlinked: it has no Link to another open Issue, so it's in no Group.");
+    assert.equal(outline(s, "#9"), "No Issue on the Map of fixture-org/tools is #9. `map` for the Map.");
+    assert.equal(outline(s, 2), "There is only 1 Group on the Map of fixture-org/tools. `map` for the Map.");
+    assert.equal(outline(snapshot([{ n: 1 }]), 1), "No Issue here has a Link, so there's no Group to open. `map` for the Map.");
   });
 });
 

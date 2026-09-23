@@ -4,13 +4,18 @@
  */
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import type { OpenIssue } from "../tracker/tracker.ts";
-import { layout, type Group, type Head, type Layout } from "./links.ts";
+import { layout, type Group, type Layout, type Member } from "./links.ts";
+import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
 import { takeNext, type Pick } from "./take-next.ts";
 
 export type Command =
   | { kind: "overview" }
   /** Pages count from 1. */
-  | { kind: "unlinked"; page: number };
+  | { kind: "unlinked"; page: number }
+  /** A Group's outline, by its place on the overview counting from 1. */
+  | { kind: "group"; group: number; page: number }
+  /** The level beneath the Issue a reference or URL names, in its Group. */
+  | { kind: "under"; ref: string; page: number };
 
 export interface Drawing {
   text: string;
@@ -24,6 +29,8 @@ const STAND_INS = 3;
 const GROUP_LINES = 8;
 /** Unlinked Issues a page. */
 const PAGE = 15;
+/** Issues a page of one level of an outline. */
+const OUTLINE_PAGE = 10;
 /** Titles are trimmed to a fixed length, since the client does the wrapping. */
 const TITLE = 60;
 const OUTSIDE = "↗";
@@ -34,6 +41,10 @@ export function draw(snapshot: Snapshot, command: Command): Drawing {
       return { text: overview(snapshot) };
     case "unlinked":
       return { text: unlinkedPage(layout(snapshot).unlinked, command.page).join("\n") };
+    case "group":
+      return { text: outline(snapshot, openGroup(layout(snapshot), command.group), command.page) };
+    case "under":
+      return { text: outline(snapshot, openUnder(snapshot, layout(snapshot), command.ref), command.page) };
   }
 }
 
@@ -143,15 +154,63 @@ function unlinkedPage(unlinked: OpenIssue[], page: number): string[] {
   ];
 }
 
-function groupLine(group: Group): string {
-  const outside = group.outside.length > 0 ? `, ${group.outside.length}${OUTSIDE}` : "";
-  return `- ${name(group.head)} — ${plural(group.issues.length, "Issue")}${outside}`;
+function outline(snapshot: Snapshot, opened: Opened, page: number): string {
+  if (opened.kind === "no-group") {
+    if (opened.groups === 0) return "No Issue here has a Link, so there's no Group to open. `map` for the Map.";
+    return `There ${opened.groups === 1 ? "is" : "are"} only ${plural(opened.groups, "Group")} on the Map of ${snapshot.project.path}. \`map\` for the Map.`;
+  }
+  if (opened.kind === "not-on-map") {
+    if (opened.unlinked) return `${opened.ref} is Unlinked: it has no Link to another open Issue, so it's in no Group.`;
+    return `No Issue on the Map of ${snapshot.project.path} is ${opened.ref}. \`map\` for the Map.`;
+  }
+  const { place, groups, group, above, alone, entries } = opened;
+  const head = `${name(group.head)}${group.head.kind === "outside" ? " (an Outside Issue)" : ""}`;
+  const lines = [`**Group ${count(place)} of ${count(groups)}** · ${head} — ${groupSize(group)}`, ""];
+  if (above && entries.length === 0) {
+    lines.push(`Nothing sits beneath ${label(above)} in this Group.`, "_`map` for the Map_");
+    return lines.join("\n");
+  }
+  const pages = Math.max(1, Math.ceil(entries.length / OUTLINE_PAGE));
+  const at = Math.min(Math.max(1, page), pages);
+  const where = above ? `Under ${label(above)}${alone ? ", alone at the top" : ""}` : "At the top";
+  lines.push(`**${where}: ${count(entries.length)}** — most under it first${pages > 1 ? ` · page ${count(at)} of ${count(pages)}` : ""}`);
+  const shown = entries.slice((at - 1) * OUTLINE_PAGE, at * OUTLINE_PAGE);
+  lines.push(...shown.map(entryLine));
+  const hints = [
+    at < pages ? `\`more\` for the next ${OUTLINE_PAGE}` : "",
+    entries.some((e) => e.under > 0 || e.how === null) ? "name one to open the level below it" : "",
+    "`map` for the Map",
+  ].filter(Boolean);
+  const hint = hints.join(" · ");
+  lines.push(`_${hint[0]!.toUpperCase()}${hint.slice(1)}_`);
+  return lines.join("\n");
 }
 
-function name(head: Head): string {
-  if (head.kind === "issue") return `${head.issue.ref} ${trim(head.issue.title)}`;
-  if (!head.end.readable) return `${OUTSIDE} an Issue this login can't read`;
-  return `${OUTSIDE}${head.end.ref} ${trim(head.end.title)}`;
+function entryLine({ member, how, under, related }: Entry): string {
+  const reasons = [how === "blocked" ? "Blocked by it" : "", under > 0 ? `${count(under)} under it` : "", related > 0 ? `${count(related)} Related` : ""];
+  const said = reasons.filter(Boolean);
+  return `- ${name(member)}${said.length > 0 ? ` — ${said.join(" · ")}` : ""}`;
+}
+
+/** How an outline names the Issue whose level it is: by its reference alone. */
+function label(member: Member): string {
+  if (member.kind === "issue") return member.issue.ref;
+  return member.end.readable ? `${OUTSIDE}${member.end.ref}` : `${OUTSIDE} an Outside Issue this login can't read`;
+}
+
+function groupLine(group: Group): string {
+  return `- ${name(group.head)} — ${groupSize(group)}`;
+}
+
+function groupSize(group: Group): string {
+  const outside = group.outside.length > 0 ? `, ${group.outside.length}${OUTSIDE}` : "";
+  return `${plural(group.issues.length, "Issue")}${outside}`;
+}
+
+function name(member: Member): string {
+  if (member.kind === "issue") return `${member.issue.ref} ${trim(member.issue.title)}`;
+  if (!member.end.readable) return `${OUTSIDE} an Issue this login can't read`;
+  return `${OUTSIDE}${member.end.ref} ${trim(member.end.title)}`;
 }
 
 function trim(title: string): string {

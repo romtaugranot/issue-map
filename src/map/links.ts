@@ -5,10 +5,13 @@
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import type { FarEnd, OpenIssue } from "../tracker/tracker.ts";
 
-/** The Issue a Group's line names: one of the Project's own, or an Outside Issue a Link reaches. */
-export type Head =
+/** An Issue in a Group: one of the Project's own, or an Outside Issue a Link reaches. */
+export type Member =
   | { kind: "issue"; id: string; issue: OpenIssue }
   | { kind: "outside"; id: string; end: FarEnd };
+
+/** How an Issue sits beneath another in a Group: its child, or an Issue it Blocks. */
+export type Beneath = "child" | "blocked";
 
 export interface Group {
   /** The Project's own Issues in it, oldest first. */
@@ -16,7 +19,11 @@ export interface Group {
   /** The Outside Issues its Links reach. */
   outside: FarEnd[];
   /** The Issue its line names: the one at its top with most under it. */
-  head: Head;
+  head: Member;
+  /** Every member by its identity. */
+  members: Map<string, Member>;
+  /** From a member to the members directly beneath it, and how each sits there. */
+  beneath: Map<string, Map<string, Beneath>>;
 }
 
 export interface Layout {
@@ -30,6 +37,8 @@ export interface Layout {
 
 /** From an Issue's identity to the identities its Links of one kind reach. */
 type LinkedTo = Map<string, Set<string>>;
+/** From an Issue's identity to the identities directly beneath it, and how each sits there. */
+type BeneathOf = Map<string, Map<string, Beneath>>;
 
 export function layout(snapshot: Snapshot): Layout {
   const own = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
@@ -37,7 +46,7 @@ export function layout(snapshot: Snapshot): Layout {
   /** Parent and Blocks Links between open Issues, both ways. */
   const parentOrBlocks: LinkedTo = new Map();
   /** Parent and Blocks Links one way: from the Parent, or the Issue that Blocks, to the Issue beneath it. */
-  const beneath: LinkedTo = new Map();
+  const beneath: BeneathOf = new Map();
   const related: LinkedTo = new Map();
 
   for (const issue of snapshot.issues) {
@@ -52,7 +61,10 @@ export function layout(snapshot: Snapshot): Layout {
       }
       linkBoth(parentOrBlocks, issue.id, to.id);
       const [above, below] = role === "parent" || role === "blocker" ? [to.id, issue.id] : [issue.id, to.id];
-      linkOneWay(beneath, above, below);
+      const how: Beneath = role === "parent" || role === "child" ? "child" : "blocked";
+      const beneathAbove = beneath.get(above) ?? beneath.set(above, new Map()).get(above)!;
+      // An Issue both a child and Blocked by the same one is shown as Blocked, which says more.
+      if (beneathAbove.get(below) !== "blocked") beneathAbove.set(below, how);
     }
   }
 
@@ -91,33 +103,45 @@ export function layout(snapshot: Snapshot): Layout {
   };
 }
 
-function group(members: string[], own: Map<string, OpenIssue>, outside: Map<string, FarEnd>, beneath: LinkedTo): Group {
-  const issues = members.flatMap((id) => own.get(id) ?? []).sort(oldestFirst);
-  const reached = members.flatMap((id) => outside.get(id) ?? []);
-  const inGroup = new Set(members);
-  const below = (id: string) => {
-    const found = new Set<string>();
-    const stack = [id];
-    while (stack.length > 0) {
-      for (const next of beneath.get(stack.pop()!) ?? []) {
-        if (next === id || found.has(next) || !inGroup.has(next)) continue;
-        found.add(next);
-        stack.push(next);
-      }
-    }
-    return found.size;
-  };
-  // Most under it first; then the Project's own Issues before Outside Issues, oldest first.
-  const ranked = members
-    .map((id) => ({ id, weight: below(id), issue: own.get(id) }))
-    .sort((a, b) => b.weight - a.weight || rank(a.issue) - rank(b.issue) || (a.issue && b.issue ? oldestFirst(a.issue, b.issue) : a.id.localeCompare(b.id)));
-  const top = ranked[0]!;
-  const head: Head = top.issue ? { kind: "issue", id: top.id, issue: top.issue } : { kind: "outside", id: top.id, end: outside.get(top.id)! };
-  return { issues, outside: reached, head };
+function group(ids: string[], own: Map<string, OpenIssue>, outside: Map<string, FarEnd>, beneathAll: BeneathOf): Group {
+  const issues = ids.flatMap((id) => own.get(id) ?? []).sort(oldestFirst);
+  const reached = ids.flatMap((id) => outside.get(id) ?? []);
+  const members = new Map<string, Member>(
+    ids.map((id) => {
+      const issue = own.get(id);
+      return [id, issue ? { kind: "issue", id, issue } : { kind: "outside", id, end: outside.get(id)! }];
+    }),
+  );
+  const beneath: BeneathOf = new Map();
+  for (const id of ids) {
+    const inGroup = [...(beneathAll.get(id) ?? [])].filter(([below]) => members.has(below));
+    if (inGroup.length > 0) beneath.set(id, new Map(inGroup));
+  }
+  const counted = new Map<string, number>();
+  const weight = (id: string) => counted.get(id) ?? counted.set(id, under({ members, beneath }, id)).get(id)!;
+  const head = [...members.values()].sort((a, b) => weight(b.id) - weight(a.id) || byRank(a, b))[0]!;
+  return { issues, outside: reached, head, members, beneath };
 }
 
-function rank(issue: OpenIssue | undefined): number {
-  return issue ? 0 : 1;
+/** How many of the Project's own Issues sit anywhere beneath a member of its Group. */
+export function under({ members, beneath }: Pick<Group, "members" | "beneath">, id: string): number {
+  const found = new Set<string>();
+  const stack = [id];
+  while (stack.length > 0) {
+    for (const next of beneath.get(stack.pop()!)?.keys() ?? []) {
+      if (next === id || found.has(next)) continue;
+      found.add(next);
+      stack.push(next);
+    }
+  }
+  return [...found].filter((next) => members.get(next)!.kind === "issue").length;
+}
+
+/** The Project's own Issues before Outside Issues, oldest first. */
+export function byRank(a: Member, b: Member): number {
+  if (a.kind === "issue" && b.kind === "issue") return oldestFirst(a.issue, b.issue);
+  if (a.kind !== b.kind) return a.kind === "issue" ? -1 : 1;
+  return a.id.localeCompare(b.id);
 }
 
 /** An end this login can't read counts as open: something is there, and it may still be. */
