@@ -2,6 +2,7 @@
  * `issue-map home [--pick <URL>]`: says which Project the Map opens on for this checkout.
  * `issue-map map [--pick <URL>]`: draws the Home Project's Map.
  * `issue-map unlinked [--page <n>] [--pick <URL>]`: lists its Unlinked Issues, 15 a page, newest first.
+ * `issue-map group <n | ref> [--page <n>] [--pick <URL>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
  * `issue-map read --host <host> --path <path>`: the first read of a Project, run detached by `map`.
  */
 import { spawn } from "node:child_process";
@@ -21,7 +22,8 @@ import { snapshotStore } from "./snapshot/store.ts";
 import { showMap } from "./map/show.ts";
 import type { Command } from "./map/draw.ts";
 
-const USAGE = "usage: issue-map home [--pick <URL>] | map [--pick <URL>] | unlinked [--page <n>] [--pick <URL>]";
+const USAGE =
+  "usage: issue-map home [--pick <URL>] | map [--pick <URL>] | unlinked [--page <n>] [--pick <URL>] | group <n | ref> [--page <n>] [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -31,6 +33,7 @@ async function main(argv: string[]): Promise<number> {
   });
   const [verb, ...rest] = positionals;
   const page = values.page === undefined ? 1 : Number(values.page);
+  const opening = verb === "group" ? toOpen(rest.shift(), page) : undefined;
   if (rest.length > 0 || !Number.isInteger(page) || page < 1) return usage();
   const deps = { cli: processCli, http: anonymousHttp, env: process.env };
   const known = trackers([github(deps), gitlab(deps)]);
@@ -39,6 +42,9 @@ async function main(argv: string[]): Promise<number> {
     case "read":
       if (!values.host || !values.path) return usage();
       return firstRead(known, values.host, values.path);
+    case "group":
+      if (!opening) return usage();
+      break;
     case "home":
     case "map":
     case "unlinked":
@@ -61,11 +67,18 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   const { tracker, project } = answer.home;
-  const command: Command = verb === "map" ? { kind: "overview" } : { kind: "unlinked", page };
+  const command: Command = verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening!;
   const store = snapshotStore(stateDir(), { now: Date.now });
   const startRead = () => detach(["read", "--host", tracker.host, "--path", project.path]);
   console.log(await showMap({ store, startRead, sleep }, tracker, project, command));
   return 0;
+}
+
+/** `group`'s argument: a bare number is a Group's place on the overview, from 1; anything else names an Issue. */
+function toOpen(arg: string | undefined, page: number): Command | undefined {
+  if (!arg) return undefined;
+  if (!/^\d+$/.test(arg)) return { kind: "under", ref: arg, page };
+  return Number(arg) >= 1 ? { kind: "group", group: Number(arg), page } : undefined;
 }
 
 /** Reads a Project in full into its Snapshot, resuming where an earlier read stopped. */

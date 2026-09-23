@@ -21,6 +21,9 @@ function recorded(name: string): Snapshot {
  */
 const OVERVIEW_LINES = 21;
 
+/** One level of a Group's outline, whatever the Group holds: the header, a blank line, the level's heading, 10 lines and a hint. */
+const OUTLINE_LINES = 14;
+
 describe("recorded Snapshots", () => {
   test("opentofu/opentofu: 277 open, 233 of them Unlinked", () => {
     const text = draw(recorded("opentofu__opentofu"), { kind: "overview" }).text;
@@ -66,6 +69,19 @@ describe("recorded Snapshots", () => {
       assert.ok(lines.length <= OVERVIEW_LINES, `${lines.length} lines:\n${overview}`);
       assert.equal(section(overview, "**Take next").length, 6, "Take next's heading and 5 lines");
       assert.equal(section(overview, "**Groups").length, 10, "the Groups' heading, 8 lines and a count");
+    });
+
+    test(`opening the largest Group, 306 Issues under one Outside Issue, holds the outline's line budget of ${OUTLINE_LINES}`, () => {
+      const outline = draw(snapshot, { kind: "group", group: 1, page: 1 }).text;
+      const lines = outline.split("\n");
+      assert.ok(lines.length <= OUTLINE_LINES, `${lines.length} lines:\n${outline}`);
+      assert.match(lines[0]!, /^\*\*Group 1 of 5,812\*\* · ↗gitlab-org&8918 .* \(an Outside Issue\) — 306 Issues, 1↗$/);
+      assert.match(lines[2]!, /^\*\*Under ↗gitlab-org&8918, alone at the top: 306\*\* — most under it first · page 1 of 31$/);
+      assert.equal(lines.filter((l) => l.startsWith("- ")).length, 10);
+      for (const page of [2, 31]) {
+        const later = draw(snapshot, { kind: "under", ref: "gitlab-org&8918", page }).text.split("\n");
+        assert.ok(later.length <= OUTLINE_LINES, `page ${page}: ${later.length} lines`);
+      }
     });
 
     test("an Unlinked page stays 15 Issues", () => {
