@@ -10,6 +10,7 @@ const tracker: Tracker = {
   host: "github.com",
   version: null,
   resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
+  issue: async () => ({ kind: "cant-tell", reason: "unused" }),
   viewer: async () => ({ kind: "viewer", login: key.login }),
   async openIssues(_, after) {
     if (after !== null) {

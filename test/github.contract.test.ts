@@ -51,6 +51,7 @@ function ghApi(world: World, args: string[]): CliResult {
     return exited(1, JSON.stringify({ data: { repository: null }, errors: [{ type: "NOT_FOUND", path: ["repository"], message }] }), `gh: ${message}\n`);
   }
   if (query.includes("issues(states: OPEN, first:")) return issuesPage(world, spec, host, field("after"));
+  if (query.includes("issue(number:")) return oneIssue(world, spec, host, Number(field("number")));
   return exited(0, JSON.stringify({ data: { repository: { ...repository(spec, host), parent: spec.parent ? repository(spec.parent, host) : null } } }));
 }
 
@@ -64,8 +65,43 @@ function issuesPage(world: World, spec: ProjectSpec, host: string, after: string
   const PAGE = 100;
   const open = (spec.issues ?? []).filter((i) => !i.closed);
   const start = after ? Number(after) : 0;
-  const errors: { type: string; path: (string | number)[]; message: string }[] = [];
-  const address = (path: string, n: number) => `${path}#${n}`;
+  const errors: GraphqlError[] = [];
+  const nodes = open.slice(start, start + PAGE).map((issue, index) => issueNode(world, spec, host, issue, ["repository", "issues", "nodes", index], errors));
+  const next = start + PAGE < open.length ? String(start + PAGE) : null;
+  return answer({ repository: { issues: { totalCount: open.length, pageInfo: { hasNextPage: next !== null, endCursor: next ?? "end" }, nodes } } }, errors);
+}
+
+/** One Issue, open or closed, with what the card reads besides: its state, and the Issues and pull requests that name it. */
+function oneIssue(world: World, spec: ProjectSpec, host: string, number: number): CliResult {
+  const issue = spec.issues?.find((i) => i.number === number);
+  if (!issue || issue.hidden) {
+    const message = `Could not resolve to an issue or pull request with the number of ${number}.`;
+    return answer({ repository: { issue: null } }, [{ type: "NOT_FOUND", path: ["repository", "issue"], message }]);
+  }
+  const errors: GraphqlError[] = [];
+  const self = `${spec.path}#${number}`;
+  const at = ["repository", "issue"];
+  const mentions = (world.mentions ?? []).filter(([, b]) => b === self).map(([a]) => {
+    const [path, n] = a.split("#") as [string, string];
+    return { source: { __typename: "Issue", id: nodeId(path, Number(n)) } };
+  });
+  // A pull request that closes an Issue names it too, and is no Mention.
+  const pulls = (world.closingRequests ?? []).filter((r) => r.closes === self).map((r) => ({ source: { __typename: "PullRequest", id: `PR_${r.number}` } }));
+  const stateReason = issue.closed ? { completed: "COMPLETED", "not planned": "NOT_PLANNED", duplicate: "DUPLICATE" }[issue.closedAs ?? "completed"] : null;
+  const node = {
+    ...issueNode(world, spec, host, issue, at, errors),
+    state: issue.closed ? "CLOSED" : "OPEN",
+    stateReason,
+    repository: { nameWithOwner: spec.path },
+    timelineItems: { nodes: [...mentions, ...pulls] },
+  };
+  return answer({ repository: { issue: node } }, errors);
+}
+
+type GraphqlError = { type: string; path: (string | number)[]; message: string };
+
+/** One Issue node as github.com gives it, with an error for each field this login can't see at `at`. */
+function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSpec, at: (string | number)[], errors: GraphqlError[]) {
   const subIssueParent = (child: string) => (world.links ?? []).find(([, kind, b]) => kind === "parent" && b === child)?.[0];
   const find = (addr: string): { path: string; issue: IssueSpec } => {
     const [path, n] = addr.split("#") as [string, string];
@@ -73,18 +109,18 @@ function issuesPage(world: World, spec: ProjectSpec, host: string, after: string
     if (!issue) throw new Error(`the World has no ${addr}`);
     return { path, issue };
   };
-  const end = (addr: string, at: (string | number)[]) => {
-    const { path, issue } = find(addr);
+  const end = (addr: string, path: (string | number)[]) => {
+    const { path: project, issue } = find(addr);
     if (issue.hidden) {
-      errors.push({ type: "FORBIDDEN", path: at, message: "Resource not accessible by integration" });
+      errors.push({ type: "FORBIDDEN", path, message: "Resource not accessible by integration" });
       return null;
     }
-    return { id: nodeId(path, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${path}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", repository: { nameWithOwner: path } };
+    return { id: nodeId(project, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${project}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", repository: { nameWithOwner: project } };
   };
   // Asked for with `includeClosedPrs: false`, which leaves out closed pull requests but not merged ones.
-  const closingPulls = (self: string, at: (string | number)[]) => {
+  const closingPulls = (self: string, path: (string | number)[]) => {
     if (world.readsClosingRequests === false) {
-      errors.push({ type: "FORBIDDEN", path: at, message: "Resource not accessible by personal access token" });
+      errors.push({ type: "FORBIDDEN", path, message: "Resource not accessible by personal access token" });
       return null;
     }
     const pulls = (world.closingRequests ?? []).filter((r) => r.closes === self && r.state !== "closed");
@@ -99,37 +135,34 @@ function issuesPage(world: World, spec: ProjectSpec, host: string, after: string
       })),
     };
   };
-  const nodes = open.slice(start, start + PAGE).map((issue, index) => {
-    const self = address(spec.path, issue.number);
-    const at = (...rest: (string | number)[]) => ["repository", "issues", "nodes", index, ...rest];
-    const links = world.links ?? [];
-    const parents = links.filter(([, kind, b]) => kind === "parent" && b === self).map(([a]) => a);
-    const list = (name: string, addrs: string[]) => ({ nodes: addrs.map((a, j) => end(a, at(name, "nodes", j))) });
-    const children = links.filter(([a, kind]) => kind === "parent" && a === self).map(([, , b]) => b);
-    // A sub-issue has one parent; any further Parent is recorded by a task list.
-    const [parent, ...trackedIn] = parents;
-    return {
-      id: nodeId(spec.path, issue.number),
-      number: issue.number,
-      title: title(issue),
-      url: `https://${host}/${spec.path}/issues/${issue.number}`,
-      createdAt: issue.createdAt ?? new Date(Date.UTC(2026, 0, issue.number)).toISOString(),
-      assignees: { nodes: (issue.assignees ?? []).map((login) => ({ login })) },
-      milestone: issue.planned ? { title: "next", dueOn: issue.planned } : null,
-      parent: parent ? end(parent, at("parent")) : null,
-      trackedInIssues: list("trackedInIssues", trackedIn),
-      subIssues: list("subIssues", children.filter((c) => subIssueParent(c) === self)),
-      trackedIssues: list("trackedIssues", children.filter((c) => subIssueParent(c) !== self)),
-      blockedBy: list("blockedBy", links.filter(([, kind, b]) => kind === "blocks" && b === self).map(([a]) => a)),
-      blocking: list("blocking", links.filter(([a, kind]) => kind === "blocks" && a === self).map(([, , b]) => b)),
-      closedByPullRequestsReferences: closingPulls(self, at("closedByPullRequestsReferences")),
-    };
-  });
-  const next = start + PAGE < open.length ? String(start + PAGE) : null;
-  const body = {
-    data: { repository: { issues: { totalCount: open.length, pageInfo: { hasNextPage: next !== null, endCursor: next ?? "end" }, nodes } } },
-    ...(errors.length > 0 ? { errors } : {}),
+  const self = `${spec.path}#${issue.number}`;
+  const links = world.links ?? [];
+  const parents = links.filter(([, kind, b]) => kind === "parent" && b === self).map(([a]) => a);
+  const list = (name: string, addrs: string[]) => ({ nodes: addrs.map((a, j) => end(a, [...at, name, "nodes", j])) });
+  const children = links.filter(([a, kind]) => kind === "parent" && a === self).map(([, , b]) => b);
+  // A sub-issue has one parent; any further Parent is recorded by a task list.
+  const [parent, ...trackedIn] = parents;
+  return {
+    id: nodeId(spec.path, issue.number),
+    number: issue.number,
+    title: title(issue),
+    url: `https://${host}/${spec.path}/issues/${issue.number}`,
+    createdAt: issue.createdAt ?? new Date(Date.UTC(2026, 0, issue.number)).toISOString(),
+    assignees: { nodes: (issue.assignees ?? []).map((login) => ({ login })) },
+    milestone: issue.planned ? { title: "next", dueOn: issue.planned } : null,
+    parent: parent ? end(parent, [...at, "parent"]) : null,
+    trackedInIssues: list("trackedInIssues", trackedIn),
+    subIssues: list("subIssues", children.filter((c) => subIssueParent(c) === self)),
+    trackedIssues: list("trackedIssues", children.filter((c) => subIssueParent(c) !== self)),
+    blockedBy: list("blockedBy", links.filter(([, kind, b]) => kind === "blocks" && b === self).map(([a]) => a)),
+    blocking: list("blocking", links.filter(([a, kind]) => kind === "blocks" && a === self).map(([, , b]) => b)),
+    closedByPullRequestsReferences: closingPulls(self, [...at, "closedByPullRequestsReferences"]),
   };
+}
+
+/** `gh api graphql`'s answer: it exits 1 when the body holds any error, and prints the first. */
+function answer(data: object, errors: GraphqlError[]): CliResult {
+  const body = { data, ...(errors.length > 0 ? { errors } : {}) };
   return exited(errors.length > 0 ? 1 : 0, JSON.stringify(body), errors.length > 0 ? `gh: ${errors[0]!.message}\n` : "");
 }
 
