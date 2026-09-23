@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Runs the plugin's TypeScript directly: Node strips the types itself (22.18 and later).
+exec node "$(dirname "$(realpath "$0")")/../src/cli.ts" "$@"

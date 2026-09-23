@@ -1,0 +1,18 @@
+{
+  "name": "issue-map",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Claude Code plugin that draws a Project's open Issues as a Map joined by their Links.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
+  }
+}
