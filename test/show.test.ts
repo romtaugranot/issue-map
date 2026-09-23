@@ -3,14 +3,14 @@
  * Snapshot is complete, then the Map. The store is real; the Tracker is a
  * fake whose read can be held part-way.
  */
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { showMap } from "../src/map/show.ts";
+import { showCard, showMap } from "../src/map/show.ts";
 import { snapshotStore } from "../src/snapshot/store.ts";
-import type { OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
+import type { IssueAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 150 } };
 
@@ -30,6 +30,7 @@ function heldTracker() {
     host: "github.com",
     version: null,
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
+    issue: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => ({ kind: "viewer", login: "fixture-viewer" }),
     async openIssues(_, after) {
       if (after === null) return { kind: "page", issues: all.slice(0, 100), total: 150, next: "100", unread: {} };
@@ -74,4 +75,55 @@ test("a login the Tracker refuses draws no Map, and says which Tracker refused a
   const tracker: Tracker = { ...heldTracker().tracker, viewer: async () => ({ kind: "refused", reason: "not logged in to github.com" }) };
   const text = await showMap({ store, startRead: () => assert.fail("no read without a login"), sleep: async () => {} }, tracker, project, { kind: "overview" });
   assert.equal(text, "No Map of github.com/fixture-org/tools: GitHub refused: not logged in to github.com");
+});
+
+describe("opening an Issue card", () => {
+  const read: IssueRead = {
+    id: "I_2",
+    project: project.path,
+    ref: `${project.path}#2`,
+    title: "Issue 2",
+    url: `${project.url}/issues/2`,
+    open: true,
+    closedAs: null,
+    links: [{ role: "parent", name: "Parent issue", to: { id: "I_1", readable: true, open: true, project: project.path, ref: `${project.path}#1`, title: "Issue 1", url: `${project.url}/issues/1` } }],
+    closingRequests: [],
+    mentionedBy: [],
+    unread: {},
+  };
+  /** A Tracker holding only #2, that notes what each read asked for. */
+  const liveTracker = (asked: string[], answer?: IssueAnswer): Tracker => ({
+    ...heldTracker().tracker,
+    async issue(locator) {
+      asked.push(locator);
+      if (answer) return answer;
+      return locator === read.ref || locator === read.url ? { kind: "issue", issue: read } : { kind: "not-found", reason: `no Issue ${locator} on github.com that this login can read` };
+    },
+  });
+
+  test("reads the Issue live every time, whether it's named by its reference, after the Project's path, by URL, or as the Map marks it", async () => {
+    const asked: string[] = [];
+    const tracker = liveTracker(asked);
+    for (const typed of ["#2", "fixture-org/tools#2", `${project.url}/issues/2`, " #2 "]) {
+      const card = await showCard(tracker, project, typed);
+      assert.match(card.text, /^\*\*#2 Issue 2\*\*$/m, typed);
+      assert.deepEqual(card.choices, [{ label: "#1", description: "Parent issue · Issue 1" }]);
+    }
+    assert.deepEqual(asked, [read.ref, read.ref, read.url, read.ref]);
+  });
+
+  test("an Outside Issue is read by its reference as the Map marks it", async () => {
+    const asked: string[] = [];
+    await showCard(liveTracker(asked), project, "↗fixture-org/plans#7");
+    assert.deepEqual(asked, ["fixture-org/plans#7"]);
+  });
+
+  test("says why a card can't open, and offers nothing to follow", async () => {
+    assert.deepEqual(await showCard(liveTracker([]), project, "#99"), {
+      text: "No card for #99: no Issue fixture-org/tools#99 on github.com that this login can read.",
+      choices: [],
+    });
+    const refused = liveTracker([], { kind: "refused", reason: "not logged in to github.com" });
+    assert.equal((await showCard(refused, project, "#2")).text, "No card for #2: GitHub refused: not logged in to github.com.");
+  });
 });

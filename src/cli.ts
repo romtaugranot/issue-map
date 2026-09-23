@@ -3,6 +3,7 @@
  * `issue-map map [--pick <URL>]`: draws the Home Project's Map.
  * `issue-map unlinked [--page <n>] [--pick <URL>]`: lists its Unlinked Issues, 15 a page, newest first.
  * `issue-map group <n | ref> [--page <n>] [--pick <URL>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
+ * `issue-map issue <ref> [--page <n>] [--pick <URL>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map read --host <host> --path <path>`: the first read of a Project, run detached by `map`.
  */
 import { spawn } from "node:child_process";
@@ -19,11 +20,12 @@ import { trackers, type Trackers } from "./tracker/tracker.ts";
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
 import { resolveHome, type HomeAnswer } from "./home/home.ts";
 import { snapshotStore } from "./snapshot/store.ts";
-import { showMap } from "./map/show.ts";
+import { showCard, showMap } from "./map/show.ts";
+import type { Card } from "./map/card.ts";
 import type { Command } from "./map/draw.ts";
 
 const USAGE =
-  "usage: issue-map home [--pick <URL>] | map [--pick <URL>] | unlinked [--page <n>] [--pick <URL>] | group <n | ref> [--page <n>] [--pick <URL>]";
+  "usage: issue-map home [--pick <URL>] | map [--pick <URL>] | unlinked [--page <n>] [--pick <URL>] | group <n | ref> [--page <n>] [--pick <URL>] | issue <ref> [--page <n>] [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -34,6 +36,7 @@ async function main(argv: string[]): Promise<number> {
   const [verb, ...rest] = positionals;
   const page = values.page === undefined ? 1 : Number(values.page);
   const opening = verb === "group" ? toOpen(rest.shift(), page) : undefined;
+  const cardRef = verb === "issue" ? rest.shift() : undefined;
   if (rest.length > 0 || !Number.isInteger(page) || page < 1) return usage();
   const deps = { cli: processCli, http: anonymousHttp, env: process.env };
   const known = trackers([github(deps), gitlab(deps)]);
@@ -44,6 +47,9 @@ async function main(argv: string[]): Promise<number> {
       return firstRead(known, values.host, values.path);
     case "group":
       if (!opening) return usage();
+      break;
+    case "issue":
+      if (!cardRef?.trim()) return usage();
       break;
     case "home":
     case "map":
@@ -67,6 +73,10 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   const { tracker, project } = answer.home;
+  if (cardRef !== undefined) {
+    console.log(renderCard(await showCard(tracker, project, cardRef, page)));
+    return 0;
+  }
   const command: Command = verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening!;
   const store = snapshotStore(stateDir(), { now: Date.now });
   const startRead = () => detach(["read", "--host", tracker.host, "--path", project.path]);
@@ -116,6 +126,12 @@ function render({ text, choices }: HomeAnswer): string {
   if (choices.length === 0) return text;
   const lines = choices.map((c) => `- ${c.label} — ${c.description}\n  ${c.url}`);
   return [text, "", "Choices, best guess first:", ...lines].join("\n");
+}
+
+/** The card, then the Links to follow from it, for the picker; `label` is what `issue` takes to open each. */
+function renderCard({ text, choices }: Card): string {
+  if (choices.length === 0) return text;
+  return [text, "", "Links to follow, in the card's order:", ...choices.map((c) => `- ${c.label} — ${c.description}`)].join("\n");
 }
 
 /** The real host behind an SSH alias, read from the user's SSH config without connecting. */

@@ -1,7 +1,7 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
 import { parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { CantAnswer, ClosingRequest, FarEnd, Identification, IssuePage, Link, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
+import type { CantAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
 
@@ -18,6 +18,23 @@ fragment project on Repository {
 
 const VIEWER_QUERY = `query { viewer { login } }`;
 
+/** What the Map reads of every Issue, with its Links and open Closing Requests. */
+const ISSUE_FIELDS = `fragment issue on Issue {
+  id number title url createdAt
+  assignees(first: 10) { nodes { login } }
+  milestone { dueOn }
+  parent { ...end }
+  trackedInIssues(first: 100) { nodes { ...end } }
+  subIssues(first: 100) { nodes { ...end } }
+  trackedIssues(first: 100) { nodes { ...end } }
+  blockedBy(first: 100) { nodes { ...end } }
+  blocking(first: 100) { nodes { ...end } }
+  closedByPullRequestsReferences(first: 10, includeClosedPrs: false) {
+    nodes { number url isDraft state author { login } repository { nameWithOwner } }
+  }
+}
+fragment end on Issue { id number title url state repository { nameWithOwner } }`;
+
 /**
  * Needs 3, 4 and 7 in one request a page. GitHub allows 100 sub-issues a
  * parent, 50 blockers each way and 10 assignees, so only task-list Links
@@ -28,24 +45,30 @@ const ISSUES_QUERY = `query($owner: String!, $name: String!, $after: String) {
     issues(states: OPEN, first: 100, after: $after, orderBy: {field: CREATED_AT, direction: ASC}) {
       totalCount
       pageInfo { hasNextPage endCursor }
-      nodes {
-        id number title url createdAt
-        assignees(first: 10) { nodes { login } }
-        milestone { dueOn }
-        parent { ...end }
-        trackedInIssues(first: 100) { nodes { ...end } }
-        subIssues(first: 100) { nodes { ...end } }
-        trackedIssues(first: 100) { nodes { ...end } }
-        blockedBy(first: 100) { nodes { ...end } }
-        blocking(first: 100) { nodes { ...end } }
-        closedByPullRequestsReferences(first: 10, includeClosedPrs: false) {
-          nodes { number url isDraft state author { login } repository { nameWithOwner } }
-        }
+      nodes { ...issue }
+    }
+  }
+}
+${ISSUE_FIELDS}`;
+
+/**
+ * One Issue for its card, open or closed, with the Issues that name it. The
+ * Tracker notes a Mention on the Issue named, not the one naming it; only
+ * the first 100 are read, pull requests that name it among them.
+ */
+const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      ...issue
+      state stateReason
+      repository { nameWithOwner }
+      timelineItems(itemTypes: [CROSS_REFERENCED_EVENT], first: 100) {
+        nodes { ... on CrossReferencedEvent { source { __typename ... on Issue { id } } } }
       }
     }
   }
 }
-fragment end on Issue { id number title url state repository { nameWithOwner } }`;
+${ISSUE_FIELDS}`;
 
 interface IssueNode {
   id: string;
@@ -63,6 +86,13 @@ interface IssueNode {
   blocking: { nodes: (EndNode | null)[] };
   /** `null` for a login that can't read pull requests. */
   closedByPullRequestsReferences: { nodes: (PullNode | null)[] } | null;
+}
+
+interface OneIssueNode extends IssueNode {
+  state: "OPEN" | "CLOSED";
+  stateReason: "COMPLETED" | "NOT_PLANNED" | "DUPLICATE" | "REOPENED" | null;
+  repository: { nameWithOwner: string };
+  timelineItems: { nodes: ({ source?: { __typename: string; id?: string } | null } | null)[] };
 }
 
 interface PullNode {
@@ -109,6 +139,7 @@ export function github(deps: AdapterDeps): TrackerKind {
     resolveProject: async (path) => (loginIsFor ? resolveProject(cli, host, path) : noLogin(host)),
     viewer: async () => (loginIsFor ? viewer(cli, host) : noLogin(host)),
     openIssues: async (project, after) => (loginIsFor ? openIssues(cli, host, project, after) : noLogin(host)),
+    issue: async (locator) => (loginIsFor ? issue(cli, host, locator) : noLogin(host)),
   });
 
   return {
@@ -203,25 +234,30 @@ async function openIssues(cli: Cli, host: string, { path }: Project, after: stri
   return failure(answer, body, host, path);
 }
 
-function openIssue(node: IssueNode, hiddenParent: boolean): OpenIssue {
-  const links: Link[] = [];
+/** Each Link under GitHub's own name for its kind, as the Issue's page shows it. */
+function linksOf(node: IssueNode, hiddenParent: boolean): NamedLink[] {
+  const links: NamedLink[] = [];
   const seen = new Set<string>();
   let hidden = 0;
-  const add = (role: Link["role"], end: EndNode | null) => {
+  const add = (role: NamedLink["role"], name: string, end: EndNode | null) => {
     const to: FarEnd = end
       ? { id: end.id, readable: true, open: end.state === "OPEN", project: end.repository.nameWithOwner, ref: `${end.repository.nameWithOwner}#${end.number}`, title: end.title, url: end.url }
       : { id: `${node.id}/hidden/${hidden++}`, readable: false };
     // A sub-issue's parent can also track it in a task list: one Link, not two.
     if (seen.has(`${role} ${to.id}`)) return;
     seen.add(`${role} ${to.id}`);
-    links.push({ role, to });
+    links.push({ role, name, to });
   };
-  if (node.parent || hiddenParent) add("parent", node.parent);
-  for (const end of node.trackedInIssues.nodes) add("parent", end);
-  for (const end of node.subIssues.nodes) add("child", end);
-  for (const end of node.trackedIssues.nodes) add("child", end);
-  for (const end of node.blockedBy.nodes) add("blocker", end);
-  for (const end of node.blocking.nodes) add("blocked", end);
+  if (node.parent || hiddenParent) add("parent", "Parent issue", node.parent);
+  for (const end of node.trackedInIssues.nodes) add("parent", "Tracked by", end);
+  for (const end of node.subIssues.nodes) add("child", "Sub-issues", end);
+  for (const end of node.trackedIssues.nodes) add("child", "Tracks", end);
+  for (const end of node.blockedBy.nodes) add("blocker", "Blocked by", end);
+  for (const end of node.blocking.nodes) add("blocked", "Blocking", end);
+  return links;
+}
+
+function openIssue(node: IssueNode, hiddenParent: boolean): OpenIssue {
   return {
     id: node.id,
     ref: `#${node.number}`,
@@ -232,12 +268,60 @@ function openIssue(node: IssueNode, hiddenParent: boolean): OpenIssue {
     planned: node.milestone?.dueOn ?? null,
     // GitHub has no level below an ordinary Issue.
     taskLevel: false,
-    links,
-    closingRequests: (node.closedByPullRequestsReferences?.nodes ?? []).flatMap((pull): ClosingRequest[] =>
-      pull?.state === "OPEN"
-        ? [{ ref: `${pull.repository.nameWithOwner}#${pull.number}`, url: pull.url, draft: pull.isDraft, author: pull.author?.login ?? "ghost" }]
-        : [],
-    ),
+    links: linksOf(node, hiddenParent).map(({ role, to }) => ({ role, to })),
+    closingRequests: closingRequests(node),
+  };
+}
+
+function closingRequests(node: IssueNode): ClosingRequest[] {
+  return (node.closedByPullRequestsReferences?.nodes ?? []).flatMap((pull): ClosingRequest[] =>
+    pull?.state === "OPEN"
+      ? [{ ref: `${pull.repository.nameWithOwner}#${pull.number}`, url: pull.url, draft: pull.isDraft, author: pull.author?.login ?? "ghost" }]
+      : [],
+  );
+}
+
+const CLOSED_AS = { COMPLETED: "completed", NOT_PLANNED: "not planned", DUPLICATE: "duplicate" } as const;
+
+/** One Issue by its reference, `owner/name#123`, or its URL on this host. */
+async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnswer> {
+  const escaped = host.replaceAll(".", "\\.");
+  const found =
+    /^([\w.-]+)\/([\w.-]+)#(\d+)$/.exec(locator) ?? new RegExp(`^https://${escaped}/([\\w.-]+)/([\\w.-]+)/issues/(\\d+)/?(?:[?#].*)?$`).exec(locator);
+  if (!found) return { kind: "not-found", reason: `${locator} isn't a GitHub Issue's reference or URL on ${host}` };
+  const [, owner = "", name = "", number = ""] = found;
+  const answer = await graphql(cli, host, ISSUE_QUERY, { owner, name, number });
+  if (answer.kind === "missing") return ghMissing(host);
+  const body = parse(answer.stdout);
+  const node = (body?.data as { repository?: { issue?: OneIssueNode | null } | null } | undefined)?.repository?.issue;
+  // Fields this login can't see come back as `null`s with an error at each; the rest of the Issue still stands.
+  const errors = (body?.errors ?? []) as { type?: string; path?: (string | number)[] }[];
+  const onlyHidden = errors.every((e) => e.type === "FORBIDDEN" && e.path?.[1] === "issue" && e.path.length > 2);
+  if (!node || !(answer.code === 0 || onlyHidden)) {
+    const failed = failure(answer, body, host, `${owner}/${name}`);
+    return failed.kind === "not-found" ? { kind: "not-found", reason: `no Issue ${owner}/${name}#${number} on ${host} that this login can read` } : failed;
+  }
+  const unread: Unread = {};
+  if (errors.some((e) => e.path?.[2] === "closedByPullRequestsReferences" && e.path.length === 3)) {
+    unread.closingRequests = "this login can't read pull requests";
+  }
+  const hiddenParent = errors.some((e) => e.path?.[2] === "parent");
+  const mentionedBy = node.timelineItems.nodes.flatMap((item) => (item?.source?.__typename === "Issue" && item.source.id ? [item.source.id] : []));
+  return {
+    kind: "issue",
+    issue: {
+      id: node.id,
+      project: node.repository.nameWithOwner,
+      ref: `${node.repository.nameWithOwner}#${node.number}`,
+      title: node.title,
+      url: node.url,
+      open: node.state === "OPEN",
+      closedAs: node.state === "CLOSED" && node.stateReason && node.stateReason !== "REOPENED" ? CLOSED_AS[node.stateReason] : null,
+      links: linksOf(node, hiddenParent),
+      closingRequests: closingRequests(node),
+      mentionedBy,
+      unread,
+    },
   };
 }
 

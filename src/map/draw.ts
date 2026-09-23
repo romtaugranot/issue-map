@@ -7,6 +7,7 @@ import type { OpenIssue } from "../tracker/tracker.ts";
 import { layout, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
 import { takeNext, type Pick } from "./take-next.ts";
+import { count, OUTSIDE, plural, trim } from "./text.ts";
 
 export type Command =
   | { kind: "overview" }
@@ -31,9 +32,6 @@ const GROUP_LINES = 8;
 const PAGE = 15;
 /** Issues a page of one level of an outline. */
 const OUTLINE_PAGE = 10;
-/** Titles are trimmed to a fixed length, since the client does the wrapping. */
-const TITLE = 60;
-const OUTSIDE = "↗";
 
 export function draw(snapshot: Snapshot, command: Command): Drawing {
   switch (command.kind) {
@@ -211,16 +209,4 @@ function name(member: Member): string {
   if (member.kind === "issue") return `${member.issue.ref} ${trim(member.issue.title)}`;
   if (!member.end.readable) return `${OUTSIDE} an Issue this login can't read`;
   return `${OUTSIDE}${member.end.ref} ${trim(member.end.title)}`;
-}
-
-function trim(title: string): string {
-  return title.length <= TITLE ? title : `${title.slice(0, TITLE - 1)}…`;
-}
-
-function count(n: number): string {
-  return n.toLocaleString("en-US");
-}
-
-function plural(n: number, noun: string): string {
-  return `${count(n)} ${noun}${n === 1 ? "" : "s"}`;
 }

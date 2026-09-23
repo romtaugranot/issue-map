@@ -34,6 +34,13 @@ export interface Tracker {
    * or `null` for the first page.
    */
   openIssues(project: Project, after: string | null): Promise<IssuePage>;
+  /**
+   * Needs 3, 4 and 7 for one Issue, open or closed, read live for its card
+   * (ADR 0006), with the Mentions that Link Suggestions start from (need 8).
+   * `locator` is its reference from anywhere, such as `owner/name#123`, or its
+   * URL on this Tracker; an Issue in any Project here can be read.
+   */
+  issue(locator: string): Promise<IssueAnswer>;
 }
 
 /** What a Tracker says when it can't answer. */
@@ -119,6 +126,38 @@ export interface ClosingRequest {
   draft: boolean;
   /** The login that opened it. */
   author: string;
+}
+
+export type IssueAnswer =
+  | { kind: "issue"; issue: IssueRead }
+  /** No such Issue, or none this login can read. */
+  | { kind: "not-found"; reason: string }
+  | CantAnswer;
+
+/** One Issue as its card shows it, read live. */
+export interface IssueRead {
+  id: string;
+  /** The Project it is in. */
+  project: string;
+  /** The reference users type from anywhere, such as `owner/name#123`. */
+  ref: string;
+  title: string;
+  url: string;
+  open: boolean;
+  /** How it closed, as the Tracker says, such as `completed`, `not planned` or `duplicate`; `null` while open, or when the Tracker doesn't say. */
+  closedAs: string | null;
+  links: NamedLink[];
+  /** Its open Closing Requests, drafts included; empty when they couldn't be read. */
+  closingRequests: ClosingRequest[];
+  /** The identities of the Issues whose text names it, as the Tracker notes them. */
+  mentionedBy: string[];
+  /** What the read couldn't give. */
+  unread: Unread;
+}
+
+/** A Link with the Tracker's own name for its kind, as seen from this Issue, such as `Blocked by`. */
+export interface NamedLink extends Link {
+  name: string;
 }
 
 /** One Link, read from one of its ends. `role` is what the far end is to this Issue. */

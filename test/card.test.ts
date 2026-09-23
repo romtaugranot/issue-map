@@ -1,0 +1,195 @@
+/**
+ * Seam A: the Issue card, `(Issue read live, the Map's Project) → (text,
+ * choices)`, with no network and no clock.
+ */
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { drawCard } from "../src/map/card.ts";
+import type { FarEnd, IssueRead, NamedLink } from "../src/tracker/tracker.ts";
+
+const PROJECT = "fixture-org/tools";
+
+function read(n: number, more: Partial<IssueRead> = {}): IssueRead {
+  return {
+    id: `${PROJECT}#${n}`,
+    project: PROJECT,
+    ref: `${PROJECT}#${n}`,
+    title: `Issue ${n}`,
+    url: `https://github.com/${PROJECT}/issues/${n}`,
+    open: true,
+    closedAs: null,
+    links: [],
+    closingRequests: [],
+    mentionedBy: [],
+    unread: {},
+    ...more,
+  };
+}
+
+/** A Link to `#n` in the Project, or to `owner/name#n` elsewhere. */
+function link(role: NamedLink["role"], name: string, at: number | string, more: { open?: boolean; title?: string } = {}): NamedLink {
+  const [project, n] = typeof at === "number" ? [PROJECT, at] : (at.split("#") as [string, string]);
+  const to: FarEnd = { id: `${project}#${n}`, readable: true, open: more.open ?? true, project, ref: `${project}#${n}`, title: more.title ?? `Issue ${n}`, url: `https://github.com/${project}/issues/${n}` };
+  return { role, name, to };
+}
+
+const card = (issue: IssueRead) => drawCard(issue, PROJECT);
+
+describe("an Issue card", () => {
+  test("shows the Issue's name and URL, whether it is Blocked, and its Links by kind under the Tracker's own names", () => {
+    const issue = read(12, {
+      title: "Import state from S3",
+      links: [
+        link("child", "Sub-issues", 14),
+        link("parent", "Parent issue", 3, { title: "Plan the importer" }),
+        link("blocker", "Blocked by", 5),
+        link("child", "Sub-issues", 13),
+      ],
+    });
+    assert.equal(
+      card(issue).text,
+      [
+        "**#12 Import state from S3**",
+        "https://github.com/fixture-org/tools/issues/12",
+        "**Blocked** — 1 open Issue Blocks it",
+        "",
+        "**Parent issue**",
+        "- #3 Plan the importer",
+        "**Blocked by**",
+        "- #5 Issue 5",
+        "**Sub-issues: 2**",
+        "- #14 Issue 14",
+        "- #13 Issue 13",
+      ].join("\n"),
+    );
+  });
+
+  test("offers every Link it shows as a choice, in the card's order, named by the reference that opens its card", () => {
+    const issue = read(12, {
+      links: [
+        link("child", "Sub-issues", 14, { open: false }),
+        link("parent", "Parent issue", "fixture-org/plans#7", { title: "Q3 importer epic" }),
+        link("related", "Relates to", 20),
+        link("blocked", "Blocking", 30),
+      ],
+    });
+    const { text, choices } = card(issue);
+    assert.deepEqual(choices, [
+      { label: "fixture-org/plans#7", description: "Parent issue · ↗ Q3 importer epic" },
+      { label: "#30", description: "Blocking · Issue 30" },
+      { label: "#14", description: "Sub-issues · closed · Issue 14" },
+      { label: "#20", description: "Relates to · Issue 20" },
+    ]);
+    assert.match(text, /^- ↗fixture-org\/plans#7 Q3 importer epic$/m);
+    assert.match(text, /^- #14 Issue 14 — closed$/m);
+  });
+
+  test("shows a Link to an Issue this login can't read without a name, and offers no way to open it", () => {
+    const hidden: NamedLink = { role: "parent", name: "Parent issue", to: { id: "hidden-1", readable: false } };
+    const { text, choices } = card(read(12, { links: [hidden] }));
+    assert.match(text, /^\*\*Parent issue\*\*\n- ↗ an Issue this login can't read$/m);
+    assert.deepEqual(choices, []);
+  });
+
+  test("shows its open Closing Requests with their authors and URLs, and never offers one as a choice", () => {
+    const issue = read(12, {
+      closingRequests: [
+        { ref: `${PROJECT}#40`, url: `https://github.com/${PROJECT}/pull/40`, draft: false, author: "fixture-bot" },
+        { ref: `${PROJECT}#41`, url: `https://github.com/${PROJECT}/pull/41`, draft: true, author: "fixture-viewer" },
+      ],
+    });
+    const { text, choices } = card(issue);
+    assert.deepEqual(text.split("\n").slice(3), [
+      "",
+      "**Closing Requests: 2 open** — not Issues, so never followed",
+      "- fixture-org/tools#40 by fixture-bot https://github.com/fixture-org/tools/pull/40",
+      "- fixture-org/tools#41 by fixture-viewer, draft https://github.com/fixture-org/tools/pull/41",
+    ]);
+    assert.deepEqual(choices, []);
+  });
+
+  test("says when Closing Requests couldn't be read, rather than showing none", () => {
+    const { text } = card(read(12, { unread: { closingRequests: "this login can't read pull requests" } }));
+    assert.match(text, /^\*\*Closing Requests: unread\*\* — this login can't read pull requests$/m);
+  });
+
+  test("counts Mentions and points at Link Suggestions, never listing them as Links", () => {
+    const issue = read(12, { links: [link("parent", "Parent issue", 3)], mentionedBy: [`${PROJECT}#3`, `${PROJECT}#8`, `fixture-org/plans#2`, `${PROJECT}#8`] });
+    const { text, choices } = card(issue);
+    assert.equal(text.split("\n").at(-1), "Mentioned by 2 other Issues — Mentions aren't Links. Ask for Link Suggestions to see whether any should be.");
+    assert.deepEqual(choices.map((c) => c.label), ["#3"], "an Issue it's already Linked to isn't counted, and no Mention is a choice");
+    assert.doesNotMatch(text, /#8|plans#2/);
+  });
+
+  test("shows 10 Links of a kind, open ones first, and `more` pages through the rest of every kind that has more", () => {
+    const children = Array.from({ length: 25 }, (_, i) => link("child", "Sub-issues", 100 + i, { open: i >= 5 }));
+    const blockers = Array.from({ length: 12 }, (_, i) => link("blocker", "Blocked by", 200 + i));
+    const issue = read(12, { links: [link("parent", "Parent issue", 3), ...children, ...blockers] });
+    const first = card(issue);
+    const lines = first.text.split("\n");
+    const ids = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+    assert.deepEqual(lines.slice(6, 18), ["**Blocked by: 12**", ...ids(200, 210).map((n) => `- #${n} Issue ${n}`), "- … 2 more — `more` for the next 10"]);
+    assert.deepEqual(lines.slice(18), ["**Sub-issues: 25**", ...ids(105, 115).map((n) => `- #${n} Issue ${n}`), "- … 15 more — `more` for the next 10"]);
+    assert.equal(first.choices.length, 21, "every Link the card shows, and no more");
+
+    const second = drawCard(issue, PROJECT, 2).text.split("\n");
+    assert.deepEqual(second.slice(3), [
+      "",
+      "**Blocked by: 12** · 11–12",
+      "- #210 Issue 210",
+      "- #211 Issue 211",
+      "**Sub-issues: 25** · 11–20",
+      ...ids(115, 125).map((n) => `- #${n} Issue ${n}`),
+      "- … 5 more — `more` for the next 10",
+    ]);
+    const third = drawCard(issue, PROJECT, 3);
+    assert.deepEqual(third.text.split("\n").slice(4), ["**Sub-issues: 25** · 21–25", ...ids(100, 105).map((n) => `- #${n} Issue ${n} — closed`)]);
+    assert.deepEqual(drawCard(issue, PROJECT, 4).text, third.text, "a page past the end shows the last page");
+  });
+
+  test("says it can't tell whether the Issue is Blocked when Blocks Links couldn't be read", () => {
+    const { text } = card(read(12, { unread: { blocks: "this Tracker can't record Blocks" } }));
+    assert.equal(text.split("\n")[2], "Blocked: can't tell — this Tracker can't record Blocks");
+  });
+
+  test("a Blocks Link from a closed Issue, or to an Issue it Blocks, leaves it not Blocked", () => {
+    const { text } = card(read(12, { links: [link("blocker", "Blocked by", 5, { open: false }), link("blocked", "Blocking", 6)] }));
+    assert.equal(text.split("\n")[2], "Not Blocked");
+  });
+});
+
+describe("a reduced card", () => {
+  const busy = {
+    links: [link("parent", "Parent issue", 3), link("blocker", "Blocked by", 5)],
+    closingRequests: [{ ref: `${PROJECT}#40`, url: `https://github.com/${PROJECT}/pull/40`, draft: false, author: "fixture-bot" }],
+    mentionedBy: [`${PROJECT}#8`],
+  };
+
+  test("an Outside Issue's card shows its name, URL and state, and no Links, since the Map hasn't read its Project", () => {
+    const outside = { ...read(7, busy), project: "fixture-org/plans", ref: "fixture-org/plans#7", title: "Q3 importer epic", url: "https://github.com/fixture-org/plans/issues/7" };
+    assert.deepEqual(card(outside), {
+      text: [
+        "**↗fixture-org/plans#7 Q3 importer epic**",
+        "https://github.com/fixture-org/plans/issues/7",
+        "Open · an Outside Issue, in fixture-org/plans. The Map hasn't read that Project, so this card shows none of its Links.",
+      ].join("\n"),
+      choices: [],
+    });
+  });
+
+  test("a closed Issue's card shows its name, URL and how it closed, and no Links, since closed Issues aren't on the Map", () => {
+    assert.deepEqual(card(read(10, { ...busy, open: false, closedAs: "not planned" })), {
+      text: [
+        "**#10 Issue 10**",
+        "https://github.com/fixture-org/tools/issues/10",
+        "Closed as not planned. A closed Issue isn't on the Map, so this card shows none of its Links.",
+      ].join("\n"),
+      choices: [],
+    });
+  });
+
+  test("a closed Outside Issue's card says both", () => {
+    const outside = { ...read(7), project: "fixture-org/plans", ref: "fixture-org/plans#7", open: false, closedAs: "completed" };
+    assert.equal(card(outside).text.split("\n")[2], "Closed as completed · an Outside Issue, in fixture-org/plans. The Map hasn't read that Project, so this card shows none of its Links.");
+  });
+});

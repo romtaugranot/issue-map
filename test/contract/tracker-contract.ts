@@ -1,11 +1,12 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1, 2, 3, 4, 6 and 7 including their "can't" answers. Each adapter supplies
+ * needs 1, 2, 3, 4, 6 and 7 including their "can't" answers, for a whole
+ * Project and for one Issue read for its card. Each adapter supplies
  * a Stage that stands a World up behind its own boundary.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { FarEnd, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
+import type { FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
   path: string;
@@ -28,6 +29,8 @@ export interface IssueSpec {
   planned?: string;
   /** Closed Issues are never listed, but a Link can reach one. */
   closed?: boolean;
+  /** How it closed; `completed` by default. */
+  closedAs?: "completed" | "not planned" | "duplicate";
   /** This login can't read it, though a Link to it is recorded. */
   hidden?: boolean;
 }
@@ -53,6 +56,8 @@ export interface World {
   closingRequests?: { closes: IssueAddress; number: number; author: string; draft?: boolean; state?: "open" | "closed" | "merged" }[];
   /** `false` for a login that may read Issues but not pull or merge requests. */
   readsClosingRequests?: boolean;
+  /** `[a, b]` reads "a names b in its text". */
+  mentions?: [IssueAddress, IssueAddress][];
 }
 
 export interface Stage {
@@ -68,6 +73,7 @@ export function trackerContract(stage: Stage): void {
   identifyContract(stage);
   resolveContract(stage);
   readContract(stage);
+  cardContract(stage);
 }
 
 export function identifyContract(stage: Stage): void {
@@ -422,6 +428,98 @@ export function readContract(stage: Stage): void {
         for (const [world, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
           const tracker = await trackerIn({ projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }], ...world });
           assert.equal((await tracker.openIssues(resolved.project, null)).kind, kind);
+        }
+      });
+    });
+  });
+}
+
+export function cardContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+  const tools = "fixture-org/tools";
+  const plans = "fixture-org/plans";
+
+  async function trackerIn(world: World): Promise<Tracker> {
+    const tracker = await stage.arrange(world).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    return tracker;
+  }
+
+  async function issue(world: World, locator: string): Promise<IssueRead> {
+    const answer = await (await trackerIn(world)).issue(locator);
+    assert.equal(answer.kind, "issue", JSON.stringify(answer));
+    return (answer as Extract<IssueAnswer, { kind: "issue" }>).issue;
+  }
+
+  /** The identity each open Issue of a Project is listed with. */
+  async function listedIds(world: World, path: string): Promise<Map<string, string>> {
+    const tracker = await trackerIn(world);
+    const resolved = await tracker.resolveProject(path);
+    assert.equal(resolved.kind, "project");
+    const page = await tracker.openIssues((resolved as Extract<ProjectResolution, { kind: "project" }>).project, null);
+    assert.equal(page.kind, "page");
+    return new Map((page as Extract<typeof page, { kind: "page" }>).issues.map((i) => [`${path}${i.ref}`, i.id]));
+  }
+
+  describe(`${product} Tracker contract`, () => {
+    describe("needs 3, 4 and 7 for one Issue, read live for its card", () => {
+      const world: World = {
+        projects: [
+          { path: tools, number: 1, open: 4, issues: [{ number: 1 }, { number: 2, title: "Import state from S3" }, { number: 3 }, { number: 4 }, { number: 5, closed: true, closedAs: "not planned" }] },
+          { path: plans, number: 2, open: 1, issues: [{ number: 7, title: "Q3 importer epic" }] },
+        ],
+        links: [[`${tools}#1`, "blocks", `${tools}#2`], [`${tools}#2`, "blocks", `${tools}#3`], [`${plans}#7`, "parent", `${tools}#2`], [`${tools}#2`, "parent", `${tools}#4`]],
+        closingRequests: [{ closes: `${tools}#2`, number: 40, author: "fixture-bot", draft: true }, { closes: `${tools}#2`, number: 41, author: "fixture-bot", state: "merged" }],
+        mentions: [[`${tools}#3`, `${tools}#2`], [`${tools}#4`, `${tools}#2`], [`${tools}#2`, `${tools}#1`]],
+      };
+
+      test("reads an Issue by its reference: its name, URL, state, Links with the Tracker's name for each kind, Closing Requests and Mentions", async () => {
+        const two = await issue(world, `${tools}#2`);
+        const ids = await listedIds(world, tools);
+        assert.deepEqual([two.id, two.project, two.ref, two.title, two.open, two.closedAs], [ids.get(`${tools}#2`), tools, `${tools}#2`, "Import state from S3", true, null]);
+        assert.match(two.url, /fixture-org\/tools\/issues\/2$/);
+        const links = two.links.map((l) => [l.role, l.to.readable && l.to.ref]).sort();
+        assert.deepEqual(links, [["blocked", `${tools}#3`], ["blocker", `${tools}#1`], ["child", `${tools}#4`], ["parent", `${plans}#7`]]);
+        const names = new Map(two.links.map((l) => [l.role, l.name]));
+        assert.equal(new Set(names.values()).size, 4, `a name for each kind: ${JSON.stringify([...names])}`);
+        assert.ok([...names.values()].every((name) => name.length > 0));
+        assert.deepEqual(two.closingRequests.map((r) => [r.ref, r.draft, r.author]), [[`${tools}#40`, true, "fixture-bot"]]);
+        assert.deepEqual([...two.mentionedBy].sort(), [ids.get(`${tools}#3`), ids.get(`${tools}#4`)].sort(), "Issues naming it, not the ones it names");
+        assert.deepEqual(two.unread, {});
+      });
+
+      test("reads the same Issue by its URL", async () => {
+        const byRef = await issue(world, `${tools}#2`);
+        const byUrl = await issue(world, byRef.url);
+        assert.equal(byUrl.id, byRef.id);
+      });
+
+      test("reads a closed Issue and says how it closed", async () => {
+        const five = await issue(world, `${tools}#5`);
+        assert.deepEqual([five.open, five.closedAs], [false, "not planned"]);
+      });
+
+      test("reads an Issue in another Project on the same Tracker", async () => {
+        const seven = await issue(world, `${plans}#7`);
+        assert.deepEqual([seven.project, seven.title, seven.open], [plans, "Q3 importer epic", true]);
+      });
+
+      test("a login that can't read Closing Requests still reads the Issue, and says why none are given", async () => {
+        const two = await issue({ ...world, readsClosingRequests: false }, `${tools}#2`);
+        assert.deepEqual(two.closingRequests, []);
+        assert.match(two.unread.closingRequests ?? "", /pull|merge/i);
+      });
+
+      test("says there's no such Issue when it doesn't exist, this login can't read it, or the locator names none", async () => {
+        const hidden: World = { ...world, projects: [...world.projects!, { path: "fixture-org/private", number: 3, open: 1, issues: [{ number: 9, hidden: true }] }] };
+        for (const locator of [`${tools}#99`, "fixture-org/private#9", "nobody/nothing#1", "#2", "not a reference"]) {
+          assert.equal((await (await trackerIn(hidden)).issue(locator)).kind, "not-found", locator);
+        }
+      });
+
+      test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
+        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
+          assert.equal((await (await trackerIn({ ...world, ...trouble })).issue(`${tools}#2`)).kind, kind);
         }
       });
     });

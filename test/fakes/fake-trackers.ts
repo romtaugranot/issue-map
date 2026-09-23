@@ -48,6 +48,9 @@ function tracker(host: string, fake: FakeHost, reads: string[]): Tracker {
     async openIssues() {
       return { kind: "cant-tell", reason: "the fake holds no Issues" };
     },
+    async issue() {
+      return { kind: "cant-tell", reason: "the fake holds no Issues" };
+    },
   };
 }
 
