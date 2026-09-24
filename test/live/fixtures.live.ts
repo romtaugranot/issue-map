@@ -14,9 +14,9 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { anonymousHttp, processCli } from "../../src/tracker/boundary.ts";
+import { anonymousHttp, atLeast, processCli } from "../../src/tracker/boundary.ts";
 import { github } from "../../src/tracker/github.ts";
-import { gitlab } from "../../src/tracker/gitlab.ts";
+import { gitlab, SINCE } from "../../src/tracker/gitlab.ts";
 import { trackers, type IssueRead, type Link, type OpenIssue, type Project, type Tracker } from "../../src/tracker/tracker.ts";
 import { bandOf } from "../../src/map/band.ts";
 import { githubSeeding, gitlabSeeding } from "../../scripts/fixtures/seed.ts";
@@ -51,6 +51,8 @@ function liveReads(fixture: Fixture, host: string): void {
     describe(spec.path, () => {
       let project: Project;
       const open: OpenIssue[] = [];
+      /** Before 17.1 GitLab doesn't list merge requests with the Issues they close, and the Map says so rather than read them. */
+      const closingUnread = () => tracker.product === "GitLab" && tracker.version !== null && !atLeast(tracker.version, SINCE.closingMergeRequests);
 
       test("it resolves, and every open Issue it declares is read, and no other", async () => {
         const resolved = await tracker.resolveProject(spec.path);
@@ -60,7 +62,8 @@ function liveReads(fixture: Fixture, host: string): void {
           const page = await tracker.openIssues(project, after);
           assert.equal(page.kind, "page", JSON.stringify(page));
           const read = page as Extract<typeof page, { kind: "page" }>;
-          assert.equal(read.unread.closingRequests, undefined, "Closing Requests are read");
+          if (closingUnread()) assert.match(read.unread.closingRequests ?? "", /doesn't list merge requests/, "why Closing Requests aren't read");
+          else assert.equal(read.unread.closingRequests, undefined, "Closing Requests are read");
           open.push(...read.issues);
           after = read.next;
         }
@@ -73,7 +76,7 @@ function liveReads(fixture: Fixture, host: string): void {
           const spec = byTitle.get(issue.title)!;
           assert.deepEqual(linksRead(issue.links), linksDeclared(fixture, spec), `${issue.title}'s Links`);
           assert.equal(issue.taskLevel, spec.level === "task", `${issue.title}'s level`);
-          assert.equal(issue.closingRequests.length > 0, !!spec.closingRequest, `${issue.title}'s Closing Requests`);
+          assert.equal(issue.closingRequests.length > 0, !!spec.closingRequest && !closingUnread(), `${issue.title}'s Closing Requests`);
         }
       });
 
