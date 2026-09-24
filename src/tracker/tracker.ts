@@ -1,8 +1,8 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1 to 7 and 9 so far, and reading only what changed
- * for needs 3, 4 and 7.
+ * This file holds needs 1 to 7, 9 and 11 so far, and reading only what
+ * changed for needs 3, 4 and 7.
  */
 
 /** One kind of Tracker (GitHub, GitLab), able to say whether it runs at a host. */
@@ -62,7 +62,23 @@ export interface Tracker {
    * schema or a field saying so, never from a kind's name or an error's shape.
    */
   capabilities(project: Project): Promise<CapabilitiesAnswer>;
+  /**
+   * Need 11: assign the Issue `locator` names, as `issue` takes it, to the
+   * viewer, the login `viewer` named, keeping whoever else it's assigned
+   * to. The Tracker's refusal of the write is told apart from its refusal
+   * of the login.
+   */
+  assign(locator: string, viewer: string): Promise<AssignAnswer>;
 }
+
+export type AssignAnswer =
+  /** Written: whom the Issue is assigned to now, as the Tracker says after the write. */
+  | { kind: "assigned"; assignees: string[] }
+  /** The Tracker refused this write, or ignored it, though it still accepts the login. */
+  | { kind: "not-allowed"; reason: string }
+  /** No such Issue, or none this login can read. */
+  | { kind: "not-found"; reason: string }
+  | CantAnswer;
 
 export type LinkKind = "blocks" | "parent" | "related";
 
@@ -223,6 +239,8 @@ export interface IssueRead {
   title: string;
   url: string;
   open: boolean;
+  /** Logins. */
+  assignees: string[];
   /** How it closed, as the Tracker says, such as `completed`, `not planned` or `duplicate`; `null` while open, or when the Tracker doesn't say. */
   closedAs: string | null;
   links: NamedLink[];

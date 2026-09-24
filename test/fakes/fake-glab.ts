@@ -19,7 +19,9 @@ const EPIC_WORK_ITEMS = "17.7";
  * The GitLab adapter against a World, with what the contract's Stage counts.
  * `env` stands in for the environment the World's token is set in.
  */
-export function arrange(world: World, env: Record<string, string> = envFor(world)) {
+export function arrange(given: World, env: Record<string, string> = envFor(given)) {
+  // A write changes the World, so each Tracker gets its own.
+  const world = structuredClone(given);
   let requests = 0;
   const loginsSentTo: string[] = [];
   const tokenSentTo: string[] = [];
@@ -249,6 +251,7 @@ function graphql(gl: Gitlab, query: string, field: (name: string) => string | un
   for (const [pattern, since, message] of SINCE) {
     if (pattern.test(query) && !gl.at(since)) return answer(null, [{ message }]);
   }
+  if (/^\s*mutation\b/.test(query)) return mutation(gl, query, field);
   // Measured on gitlab.com: a page of 100 work items with their widgets is about 90 of the 200 an
   // anonymous query may cost, and anything more with a page of its own, such as merge requests, takes
   // it past 250; so does a page of 100 asked for by iid.
@@ -287,6 +290,26 @@ function graphql(gl: Gitlab, query: string, field: (name: string) => string | un
   return answer(data, errors);
 }
 
+/**
+ * `issueSetAssignees`, appending the named login. A token that may only
+ * read is refused any mutation; an Issue that doesn't exist, or that this
+ * login may not write, is refused in the same words.
+ */
+function mutation(gl: Gitlab, query: string, field: (name: string) => string | undefined): CliResult {
+  if (gl.world.token === "reads") {
+    const body = { error: "insufficient_scope", error_description: "The request requires higher privileges than provided by the access token.", scope: "api" };
+    return exited(1, JSON.stringify(body), "glab: 403 Forbidden (HTTP 403)\n");
+  }
+  if (!query.includes("issueSetAssignees(")) return answer(null, [{ message: "unknown mutation" }]);
+  const issue = gl.project(field("path") ?? "")?.issues?.find((i) => i.number === Number(field("iid")));
+  if (!issue || issue.hidden || gl.world.role === "reader") {
+    const message = "The resource that you are attempting to access does not exist or you don't have permission to perform this action";
+    return answer({ issueSetAssignees: null }, [{ message, path: ["issueSetAssignees"] }]);
+  }
+  issue.assignees = [...new Set([...(issue.assignees ?? []), field("viewer")!])];
+  return answer({ issueSetAssignees: { issue: { assignees: { nodes: issue.assignees.map((username) => ({ username })) } }, errors: [] } }, []);
+}
+
 function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: string) => string | undefined) {
   const spec = gl.project(path);
   if (!spec) return null;
@@ -314,6 +337,11 @@ function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: st
     answer.workItems = page(all);
   } else if (query.includes("iids:")) {
     answer.workItems = { nodes: byIids(gl, spec, query) };
+  }
+  const iid = /\bissue\(iid: "(\d+)"\)/.exec(query)?.[1];
+  if (iid !== undefined) {
+    const one = issues.find((i) => i.number === Number(iid));
+    answer.issue = one ? { id: `gid://gitlab/Issue/${gidNumber(spec, one)}` } : null;
   }
   if (query.includes("mergeRequests(updatedAfter:")) {
     const since = Date.parse(field("since")!);

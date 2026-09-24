@@ -8,6 +8,7 @@
  * `issue-map unlinked [--page <n>]`: lists its Unlinked Issues, 15 a page, newest first.
  * `issue-map group <n | ref> [--page <n>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
+ * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
  * `issue-map go [<target>] [--dir <path>]... [--pick-there <URL>]`: moves to a Project's or an Issue's URL, an `owner/repo[#n]` or a local path; on its own, offers nearby Projects, the added directories `--dir` names among them.
  * `issue-map back`: back one step along this session's trail.
  * `issue-map home`: returns to the Home Project's overview, and on it offers to re-pick it.
@@ -33,11 +34,12 @@ import { resolveHome, type HomeAnswer, type LastHome } from "./home/home.ts";
 import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { showCard, showMap } from "./map/show.ts";
+import { assignToViewer } from "./map/assign.ts";
 import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home — each takes [--pick <URL>]";
+  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home — each takes [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -56,7 +58,7 @@ async function main(argv: string[]): Promise<number> {
   const [verb, ...rest] = positionals;
   const page = values.page === undefined ? 1 : Number(values.page);
   const opening = verb === "group" ? toOpen(rest.shift(), page) : undefined;
-  const cardRef = verb === "issue" ? rest.shift() : undefined;
+  const cardRef = verb === "issue" || verb === "assign" ? rest.shift() : undefined;
   const target = verb === "go" ? rest.shift() : undefined;
   if (rest.length > 0 || !Number.isInteger(page) || page < 1) return usage();
   const deps = { cli: processCli, http: anonymousHttp, env: process.env };
@@ -73,6 +75,7 @@ async function main(argv: string[]): Promise<number> {
       if (!opening) return usage();
       break;
     case "issue":
+    case "assign":
       if (!cardRef?.trim()) return usage();
       break;
     case "go":
@@ -105,7 +108,9 @@ async function main(argv: string[]): Promise<number> {
         ? { kind: "back" }
         : verb === "home"
           ? { kind: "home", picked: values.pick !== undefined }
-          : { kind: "view", view: verb === "issue" ? { kind: "card", ref: cardRef!, page } : verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening! };
+          : verb === "assign"
+            ? { kind: "assign", ref: cardRef! }
+            : { kind: "view", view: verb === "issue" ? { kind: "card", ref: cardRef!, page } : verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening! };
   const store = openStore();
   const answer = await move(
     {
@@ -126,6 +131,7 @@ async function main(argv: string[]): Promise<number> {
         return showMap({ store, startRead, sleep, startRefresher }, tracker, project, command, at.away === undefined ? {} : { home: at.away });
       },
       showCard,
+      assign: (tracker, project, ref) => assignToViewer({ store }, tracker, project, ref),
     },
     request,
   );

@@ -4,7 +4,7 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { drawCard } from "../src/map/card.ts";
+import { drawCard, type CardContext } from "../src/map/card.ts";
 import type { FarEnd, IssueRead, NamedLink } from "../src/tracker/tracker.ts";
 
 const PROJECT = "fixture-org/tools";
@@ -17,6 +17,7 @@ function read(n: number, more: Partial<IssueRead> = {}): IssueRead {
     title: `Issue ${n}`,
     url: `https://github.com/${PROJECT}/issues/${n}`,
     open: true,
+    assignees: [],
     closedAs: null,
     links: [],
     closingRequests: [],
@@ -52,7 +53,7 @@ describe("an Issue card", () => {
       [
         "**#12 Import state from S3**",
         "https://github.com/fixture-org/tools/issues/12",
-        "**Blocked** — 1 open Issue Blocks it",
+        "**Blocked** — 1 open Issue Blocks it · unassigned",
         "",
         "**Parent issue**",
         "- #3 Plan the importer",
@@ -150,7 +151,7 @@ describe("an Issue card", () => {
 
   test("says it can't tell whether the Issue is Blocked when Blocks Links couldn't be read", () => {
     const { text } = card(read(12, { unread: { blocks: "this Tracker can't record Blocks" } }));
-    assert.equal(text.split("\n")[2], "Blocked: can't tell — this Tracker can't record Blocks");
+    assert.equal(text.split("\n")[2], "Blocked: can't tell — this Tracker can't record Blocks · unassigned");
   });
 
   test("a Link to an Issue that closed as a duplicate or as not planned says so, and one that closed as completed only that it closed", () => {
@@ -168,7 +169,52 @@ describe("an Issue card", () => {
 
   test("a Blocks Link from a closed Issue, or to an Issue it Blocks, leaves it not Blocked", () => {
     const { text } = card(read(12, { links: [link("blocker", "Blocked by", 5, { open: false }), link("blocked", "Blocking", 6)] }));
-    assert.equal(text.split("\n")[2], "Not Blocked");
+    assert.equal(text.split("\n")[2], "Not Blocked · unassigned");
+  });
+
+  test("says whom the Issue is assigned to, the viewer as you", () => {
+    const line = (assignees: string[], viewer?: string) => drawCard(read(12, { assignees }), PROJECT, 1, viewer === undefined ? {} : { viewer }).text.split("\n")[2];
+    assert.equal(line(["fixture-viewer"], "fixture-viewer"), "Not Blocked · assigned to you");
+    assert.equal(line(["fixture-dev", "fixture-viewer"], "fixture-viewer"), "Not Blocked · assigned to you and fixture-dev");
+    assert.equal(line(["fixture-dev", "fixture-bot"], "fixture-viewer"), "Not Blocked · assigned to fixture-dev and fixture-bot");
+    assert.equal(line(["fixture-viewer"]), "Not Blocked · assigned to fixture-viewer", "with no viewer known, nobody is you");
+  });
+});
+
+describe("assigning an Issue to yourself from its card", () => {
+  const promised: CardContext = { viewer: "fixture-viewer", writes: { product: "GitHub", band: { kind: "promised" }, write: { kind: "can" } } };
+  const offer = (issue: IssueRead, context: CardContext = promised) => drawCard(issue, PROJECT, 1, context).assign;
+
+  test("an unassigned Issue's card offers to assign it to the viewer, naming the write", () => {
+    assert.deepEqual(offer(read(12)), { label: "Assign #12 to me", description: "writes to GitHub: assigns #12 to fixture-viewer", ref: "#12" });
+  });
+
+  test("where the Tracker can't say whether this login may write, it's offered anyway, saying it stops at the first refusal", () => {
+    const unsure: CardContext = { ...promised, writes: { ...promised.writes!, write: { kind: "cant-tell", reason: "this login's token doesn't list what it may write" } } };
+    assert.deepEqual(offer(read(12), unsure), {
+      label: "Assign #12 to me",
+      description: "writes to GitHub: assigns #12 to fixture-viewer. GitHub doesn't say whether this login may (this login's token doesn't list what it may write), so it stops at the first refusal",
+      ref: "#12",
+    });
+  });
+
+  test("isn't offered on a Best effort or a Refused Project, which the Map never writes to", () => {
+    const at = (band: NonNullable<CardContext["writes"]>["band"]) => offer(read(12), { ...promised, writes: { ...promised.writes!, band } });
+    assert.equal(at({ kind: "best-effort", untested: "GHES 3.17.4 is older than 3.18" }), undefined);
+    assert.equal(at({ kind: "refused", reason: "Refused — the Map can read no Link kind here." }), undefined);
+  });
+
+  test("isn't offered where this login can't write, where the Tracker wasn't asked, or with no viewer known", () => {
+    assert.equal(offer(read(12), { ...promised, writes: { ...promised.writes!, write: { kind: "cant", reason: "this login can only read fixture-org/tools" } } }), undefined);
+    assert.equal(offer(read(12), { viewer: "fixture-viewer" }), undefined);
+    assert.equal(offer(read(12), { writes: promised.writes! }), undefined);
+  });
+
+  test("isn't offered for an Issue someone is assigned to, a closed Issue, or an Outside Issue", () => {
+    assert.equal(offer(read(12, { assignees: ["fixture-dev"] })), undefined);
+    assert.equal(offer(read(12, { assignees: ["fixture-viewer"] })), undefined);
+    assert.equal(offer(read(12, { open: false, closedAs: "completed" })), undefined);
+    assert.equal(offer({ ...read(7), project: "fixture-org/plans", ref: "fixture-org/plans#7" }), undefined);
   });
 });
 

@@ -47,6 +47,7 @@ function fakeTracker(time: ReturnType<typeof clock>, script: { viewer?: ViewerAn
     untested: null,
     capabilities: async () => ({ kind: "capabilities", ...READS_EVERYTHING }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
+  assign: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => (script.viewer ? (script.viewer[time.round] ?? { kind: "viewer", login: "someone-else" }) : me),
     resolveProject: async () => script.project ?? { kind: "project", project, parent: null },
     async changes() {

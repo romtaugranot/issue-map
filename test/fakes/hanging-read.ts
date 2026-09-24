@@ -15,6 +15,7 @@ const tracker: Tracker = {
   resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
   changes: async () => ({ kind: "cant-tell", reason: "unused" }),
   issue: async () => ({ kind: "cant-tell", reason: "unused" }),
+  assign: async () => ({ kind: "cant-tell", reason: "unused" }),
   viewer: async () => ({ kind: "viewer", login: key.login }),
   async openIssues(_, after) {
     if (after !== null) {

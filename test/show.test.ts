@@ -35,6 +35,7 @@ function heldTracker() {
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
     changes: async () => ({ kind: "cant-tell", reason: "unused" }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
+  assign: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => ({ kind: "viewer", login: "fixture-viewer" }),
     async openIssues(_, after) {
       if (after === null) return { kind: "page", issues: all.slice(0, 100), total: 150, next: "100", unread: {} };
@@ -217,6 +218,7 @@ describe("opening an Issue card", () => {
     title: "Issue 2",
     url: `${project.url}/issues/2`,
     open: true,
+    assignees: [],
     closedAs: null,
     links: [{ role: "parent", name: "Parent issue", to: { id: "I_1", readable: true, open: true, project: project.path, ref: `${project.path}#1`, title: "Issue 1", url: `${project.url}/issues/1` } }],
     closingRequests: [],

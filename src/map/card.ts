@@ -1,8 +1,10 @@
 /**
  * The Issue card: what the Map shows about one Issue, read live. Pure. Its
- * Links are offered as the choices to move along.
+ * Links are offered as the choices to move along, and an unassigned Issue
+ * is offered to the viewer, where the Map writes (ADR 0003).
  */
-import type { IssueRead, NamedLink } from "../tracker/tracker.ts";
+import type { IssueRead, NamedLink, WriteAnswer } from "../tracker/tracker.ts";
+import { wontWrite, type Band } from "./band.ts";
 import { isOpen } from "./links.ts";
 import { count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
 import type { Drawing } from "./draw.ts";
@@ -18,10 +20,24 @@ export interface Card extends Drawing {
   choices: Choice[];
   /** A move to the Map of the Project an Outside Issue is in; `target` is what `go` takes to make it. */
   move?: Move;
+  /** An offer to assign the Issue to the viewer; `ref` is what `assign` takes to make it. */
+  assign?: Assign;
 }
 
 export interface Move extends Choice {
   target: string;
+}
+
+export interface Assign extends Choice {
+  ref: string;
+}
+
+/** What the card knows besides the Issue. */
+export interface CardContext {
+  /** The viewer's login, where it's known. */
+  viewer?: string;
+  /** Where it was asked: the Tracker's product, the Project's band, and whether this login can write there. */
+  writes?: { product: string; band: Band; write: WriteAnswer };
 }
 
 /** Where a Link's kind comes on the card: up the tree and what holds it back first, then what it holds. */
@@ -34,7 +50,7 @@ const PER_KIND = 10;
  * Issue in any other is an Outside Issue. Page 2 on shows the next 10 Links
  * of each kind that has more, and nothing else.
  */
-export function drawCard(issue: IssueRead, project: string, page = 1): Card {
+export function drawCard(issue: IssueRead, project: string, page = 1, context: CardContext = {}): Card {
   const head = [`**${short(issue.ref, project)} ${trim(issue.title)}**`, issue.url];
   const outside = issue.project !== project;
   if (outside || !issue.open) {
@@ -47,8 +63,9 @@ export function drawCard(issue: IssueRead, project: string, page = 1): Card {
     // Its own Project's Map reads its Links, so the move lands on its card there.
     return { text, choices: [], move: { label: `Open ${issue.project}'s Map`, description: "on this Issue's card there, which shows its Links", target: issue.url } };
   }
-  const lines = [...head, blocked(issue)];
+  const lines = [...head, `${blocked(issue)} · ${assigned(issue, context.viewer)}`];
   const choices: Choice[] = [];
+  const assign = offer(issue, project, context);
   const kinds = byName(issue.links);
   const pages = Math.max(1, ...kinds.map(([, links]) => Math.ceil(links.length / PER_KIND)));
   const at = Math.min(Math.max(1, page), pages);
@@ -77,13 +94,34 @@ export function drawCard(issue: IssueRead, project: string, page = 1): Card {
     const left = links.length - from - shown.length;
     if (left > 0) lines.push(`- … ${count(left)} more — \`more\` for the next ${PER_KIND}`);
   }
-  if (at > 1) return { text: lines.join("\n"), choices };
+  const offered = assign ? { assign } : {};
+  if (at > 1) return { text: lines.join("\n"), choices, ...offered };
   lines.push(...closingRequests(issue));
   const mentions = mentionedOnly(issue);
   if (mentions > 0) {
     lines.push("", `Mentioned by ${plural(mentions, "other Issue")} — Mentions aren't Links. Ask for Link Suggestions to see whether any should be.`);
   }
-  return { text: lines.join("\n"), choices };
+  return { text: lines.join("\n"), choices, ...offered };
+}
+
+/** Whom it's assigned to, the viewer first, as you. */
+function assigned({ assignees }: IssueRead, viewer: string | undefined): string {
+  if (assignees.length === 0) return "unassigned";
+  const names = viewer !== undefined && assignees.includes(viewer) ? ["you", ...assignees.filter((a) => a !== viewer)] : assignees;
+  return `assigned to ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`}`;
+}
+
+/**
+ * The offer to assign an unassigned Issue to the viewer: only on a Promised
+ * Project, where the Map writes, and where this login can write or the
+ * Tracker can't say, when the write stops at the first refusal.
+ */
+function offer(issue: IssueRead, project: string, { viewer, writes }: CardContext): Assign | undefined {
+  if (viewer === undefined || !writes || wontWrite(writes.band, writes.write) !== null || issue.assignees.length > 0) return undefined;
+  const ref = short(issue.ref, project);
+  const write = `writes to ${writes.product}: assigns ${ref} to ${viewer}`;
+  const unsure = writes.write.kind === "cant-tell" ? `. ${writes.product} doesn't say whether this login may (${writes.write.reason}), so it stops at the first refusal` : "";
+  return { label: `Assign ${ref} to me`, description: `${write}${unsure}`, ref };
 }
 
 function closingRequests({ closingRequests, unread }: IssueRead): string[] {
