@@ -4,6 +4,7 @@
  */
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
+import { bandName, bandOf, notes, refusal } from "./band.ts";
 import { layout, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
@@ -47,6 +48,8 @@ export function draw(snapshot: Snapshot, command: Command, stale?: Stale): Drawi
 }
 
 function drawn(snapshot: Snapshot, command: Command): string {
+  const band = bandOf(snapshot.support);
+  if (band.kind === "refused") return refusal(`${snapshot.tracker}/${snapshot.project.path}`, band);
   switch (command.kind) {
     case "overview":
       return overview(snapshot);
@@ -93,7 +96,11 @@ function timeLeft(ms: number): string {
 function overview(snapshot: Snapshot): string {
   const laidOut = layout(snapshot);
   const { onMap, unlinked, groups } = laidOut;
-  const header = `**${snapshot.project.path}** · ${count(snapshot.issues.length)} open · ${count(onMap.length)} on the Map · ${count(unlinked.length)} Unlinked`;
+  const said = notes(snapshot.support);
+  const header = [
+    `**${snapshot.project.path}** · ${count(snapshot.issues.length)} open · ${count(onMap.length)} on the Map · ${count(unlinked.length)} Unlinked · ${bandName(bandOf(snapshot.support))}`,
+    ...(said.length > 0 ? [`⚠ ${said.join(" · ")}`] : []),
+  ].join("\n");
   const unlinkedLine = `**Unlinked: ${count(unlinked.length)}** — no Link to another open Issue. Ask to list them.`;
   const next = takeNext(snapshot, laidOut);
   if (onMap.length === 0) {
@@ -119,6 +126,7 @@ function overview(snapshot: Snapshot): string {
   lines.push("", unlinkedLine);
   return lines.join("\n");
 }
+
 
 function takeNextSection(snapshot: Snapshot, next: TakeNext): string[] {
   if (next.kind === "blocks-unread") {

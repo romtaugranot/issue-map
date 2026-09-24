@@ -1,14 +1,14 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1, 2, 3, 4, 5, 6 and 7 including their "can't" answers, for a whole
- * Project, for only what changed in it, and for one Issue read for its card.
+ * needs 1 to 7 and 9 including their "can't" answers, for a whole Project,
+ * for only what changed in it, and for one Issue read for its card.
  * Each adapter supplies a Stage that stands a World up behind its own
  * boundary. Where kinds of Tracker differ in what they record, a Stage says
  * so, and a test of what its kind can't record is skipped with the reason.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { ChangesAnswer, FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
+import type { CapabilitiesAnswer, ChangesAnswer, FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
   path: string;
@@ -90,6 +90,15 @@ export interface World {
   recordsBlocks?: boolean;
   /** The host a token in the environment was issued for, set the way the CLI documents. */
   envTokenFor?: string;
+  /** The login's role in every Project: one that may write Links, the default, or one that may only read them. */
+  role?: "writer" | "reader";
+  /**
+   * What the login's token may do: write, the default; only read; or not
+   * say, as a GitHub fine-grained token doesn't. `cant-ask`: asking fails,
+   * as with a `gh` too old to answer in JSON, or a CI job's token GitLab
+   * answers nothing about.
+   */
+  token?: "writes" | "reads" | "unknown" | "cant-ask";
 }
 
 export interface Stage {
@@ -98,6 +107,8 @@ export interface Stage {
   wellKnownHost: string;
   /** A version of this kind's self-hosted Tracker that the Map promises everything on. */
   currentVersion: string;
+  /** A version of this kind's self-hosted Tracker that the Map reads but isn't tested on. */
+  untestedVersion: string;
   /** What this kind records where kinds differ: `true`, or why it doesn't. */
   records: {
     related: true | string;
@@ -145,6 +156,7 @@ export function trackerContract(stage: Stage): void {
   readContract(stage);
   changesContract(stage);
   cardContract(stage);
+  capabilitiesContract(stage);
 }
 
 export function identifyContract(stage: Stage): void {
@@ -845,6 +857,99 @@ export function cardContract(stage: Stage): void {
           assert.equal((await (await trackerIn({ ...world, ...trouble })).issue(`${tools}#2`)).kind, kind);
         }
       });
+    });
+  });
+}
+
+export function capabilitiesContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+  const tools = "fixture-org/tools";
+  const project: ProjectSpec = { path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2 }] };
+
+  async function trackerIn(world: World): Promise<Tracker> {
+    const tracker = await stage.arrange(world).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    return tracker;
+  }
+
+  async function asked(world: World): Promise<CapabilitiesAnswer> {
+    const ready = await trackerIn({ projects: [project], ...world });
+    const resolved = await (await trackerIn({ projects: [project] })).resolveProject(tools);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    return ready.capabilities((resolved as Extract<ProjectResolution, { kind: "project" }>).project);
+  }
+
+  async function capabilities(world: World = {}): Promise<Extract<CapabilitiesAnswer, { kind: "capabilities" }>> {
+    const answer = await asked(world);
+    assert.equal(answer.kind, "capabilities", JSON.stringify(answer));
+    return answer as Extract<CapabilitiesAnswer, { kind: "capabilities" }>;
+  }
+
+  describe(`${product} Tracker contract`, () => {
+    describe("need 5: say per Link kind whether the Project records it and the Map can read it", () => {
+      test("on its well-known host the Map is tested, it reads every kind the Tracker records, and says why of any it can't record", async () => {
+        assert.equal((await trackerIn({})).untested, null);
+        const { links } = await capabilities();
+        assert.deepEqual([links.blocks, links.parent], [{ kind: "readable" }, { kind: "readable" }]);
+        if (stage.records.related === true) assert.deepEqual(links.related, { kind: "readable" });
+        else assert.deepEqual(links.related, { kind: "cant-record", reason: stage.records.related });
+      });
+
+      test("tells a Project whose tier can't record Blocks Links from one that records them and has none", skipUnless(stage.records.projectsWithoutBlocks), async () => {
+        assert.deepEqual((await capabilities()).links.blocks, { kind: "readable" });
+        const { blocks } = (await capabilities({ recordsBlocks: false })).links;
+        assert.equal(blocks.kind, "cant-record");
+        assert.match(blocks.kind === "cant-record" ? blocks.reason : "", /Blocks/);
+      });
+
+      test("a self-hosted Tracker on a version the Map is tested on says so; on an older one it still reads, says why it isn't", async () => {
+        const at = async (version: string) => {
+          const answer = await stage.arrange({ servers: { "git.example.com": { runs: "this-kind", version } }, loggedInTo: ["git.example.com"] }).kind.probe("git.example.com");
+          assert.equal(answer.kind, "identified");
+          return (answer as Extract<typeof answer, { kind: "identified" }>).tracker.untested;
+        };
+        assert.equal(await at(stage.currentVersion), null);
+        assert.match((await at(stage.untestedVersion)) ?? "", new RegExp(stage.untestedVersion.replaceAll(".", "\\.")));
+      });
+    });
+
+    describe("need 9: say whether this login can write a Link or assign", () => {
+      test("a login whose role and token both may write can", async () => {
+        assert.deepEqual((await capabilities()).write, { kind: "can" });
+      });
+
+      test("a login whose role may only read can't, and says why", async () => {
+        const { write } = await capabilities({ role: "reader" });
+        assert.equal(write.kind, "cant");
+        assert.match(write.kind === "cant" ? write.reason : "", /fixture-org\/tools/);
+      });
+
+      test("a login whose token may only read can't, and says why", async () => {
+        const { write } = await capabilities({ token: "reads" });
+        assert.equal(write.kind, "cant");
+        assert.match(write.kind === "cant" ? write.reason : "", /token/);
+      });
+
+      test("a token that doesn't say what it may write can't be told, and says why", async () => {
+        const { write } = await capabilities({ token: "unknown" });
+        assert.equal(write.kind, "cant-tell");
+        assert.match(write.kind === "cant-tell" ? write.reason : "", /token/);
+      });
+    });
+
+    test("a login it can't ask what its token may write can't be told, and the Project still reads", async () => {
+      const { links, write } = await capabilities({ token: "cant-ask" });
+      assert.deepEqual(links.blocks, { kind: "readable" });
+      assert.equal(write.kind, "cant-tell");
+      assert.match(write.kind === "cant-tell" ? write.reason : "", /token/);
+    });
+
+    test("needs 5 and 9 refuse when the Tracker rejects the login, can't tell when it can't be reached, and say when the Project is gone", async () => {
+      for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
+        assert.equal((await asked(trouble)).kind, kind, JSON.stringify(trouble));
+      }
+      const resolved = (await (await trackerIn({ projects: [project] })).resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
+      assert.equal((await (await trackerIn({ projects: [project] })).capabilities({ ...resolved.project, path: "fixture-org/gone" })).kind, "not-found");
     });
   });
 }

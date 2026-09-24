@@ -27,7 +27,7 @@ const OUTLINE_LINES = 14;
 describe("recorded Snapshots", () => {
   test("opentofu/opentofu: 277 open, 233 of them Unlinked", () => {
     const text = draw(recorded("opentofu__opentofu"), { kind: "overview" }).text;
-    assert.match(text.split("\n")[0]!, /^\*\*opentofu\/opentofu\*\* · 277 open · 44 on the Map · 233 Unlinked$/);
+    assert.match(text.split("\n")[0]!, /^\*\*opentofu\/opentofu\*\* · 277 open · 44 on the Map · 233 Unlinked · Promised$/);
   });
 
   // The worked example of #12: the RFC Tracker has four waiting on it and gives way to its unassigned children.
@@ -46,7 +46,7 @@ describe("recorded Snapshots", () => {
 
   test("microsoft/playwright: no Links, so no Map", () => {
     const lines = draw(recorded("microsoft__playwright"), { kind: "overview" }).text.split("\n");
-    assert.equal(lines[0], "**microsoft/playwright** · 176 open · 0 on the Map · 176 Unlinked");
+    assert.equal(lines[0], "**microsoft/playwright** · 176 open · 0 on the Map · 176 Unlinked · Promised");
     assert.equal(lines[2], "No Issue here has a Link, so there's no Map to draw.");
     assert.equal(lines[4], "**Unlinked: 176** — no Link to another open Issue. Ask to list them.");
   });
@@ -54,7 +54,7 @@ describe("recorded Snapshots", () => {
   // #22's README gives 473 on the Map in 63 Groups, but its own renderer draws 263 in 70 from this recording.
   test("rust-lang/rust: 263 on the Map in 70 Groups, the largest holding 29", () => {
     const text = draw(recorded("rust-lang__rust"), { kind: "overview" }).text;
-    assert.equal(text.split("\n")[0], "**rust-lang/rust** · 11,219 open · 263 on the Map · 10,956 Unlinked");
+    assert.equal(text.split("\n")[0], "**rust-lang/rust** · 11,219 open · 263 on the Map · 10,956 Unlinked · Promised");
     const groups = section(text, "**Groups");
     assert.equal(groups[0], "**Groups: 70** — largest first");
     assert.match(groups[1]!, / — 29 Issues(, \d+↗)?$/);
@@ -66,7 +66,7 @@ describe("recorded Snapshots", () => {
     const lines = overview.split("\n");
 
     test("22,797 on the Map in 5,812 Groups, the largest holding 306 (ADR 0008)", () => {
-      assert.equal(lines[0], "**gitlab-org/gitlab** · 48,243 open · 22,797 on the Map · 25,446 Unlinked");
+      assert.equal(lines[0], "**gitlab-org/gitlab** · 48,243 open · 22,797 on the Map · 25,446 Unlinked · Promised");
       const groups = section(overview, "**Groups");
       assert.equal(groups[0], "**Groups: 5,812** — largest first");
       assert.match(groups[1]!, / — 306 Issues(, \d+↗)?$/);

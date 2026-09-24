@@ -1,5 +1,11 @@
 /** An in-memory stand-in for the Tracker seam, for testing what sits above it. */
-import type { Identification, Project, ProjectResolution, Tracker, Trackers } from "../../src/tracker/tracker.ts";
+import type { Capabilities, Identification, Project, ProjectResolution, Tracker, Trackers } from "../../src/tracker/tracker.ts";
+
+/** A Project whose every Link kind is recorded and read, on a Tracker the Map is tested on, with a login that can write. */
+export const READS_EVERYTHING: Capabilities = {
+  links: { blocks: { kind: "readable" }, parent: { kind: "readable" }, related: { kind: "readable" } },
+  write: { kind: "can" },
+};
 
 export interface FakeProject {
   path: string;
@@ -34,6 +40,10 @@ function tracker(host: string, fake: FakeHost, reads: string[]): Tracker {
     product: fake.product,
     host,
     version: null,
+    untested: null,
+    async capabilities() {
+      return { kind: "capabilities", ...READS_EVERYTHING };
+    },
     async resolveProject(path): Promise<ProjectResolution> {
       reads.push(`${host}/${path}`);
       if (fake.refuse) return { kind: "refused", reason: fake.refuse };

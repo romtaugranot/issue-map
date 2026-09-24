@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { showCard, showMap } from "../src/map/show.ts";
 import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
 import type { ChangesAnswer, IssueAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
+import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 150 } };
 
@@ -29,6 +30,8 @@ function heldTracker() {
     product: "GitHub",
     host: "github.com",
     version: null,
+    untested: null,
+    capabilities: async () => ({ kind: "capabilities", ...READS_EVERYTHING }),
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
     changes: async () => ({ kind: "cant-tell", reason: "unused" }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
@@ -68,7 +71,7 @@ test("a first read shows progress and no Map until the Snapshot is complete, the
   release();
   await reading;
   const map = await showMap(deps, tracker, project, { kind: "overview" });
-  assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked$/m);
+  assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked · Promised$/m);
   assert.equal(started, 1);
 });
 
@@ -77,6 +80,25 @@ test("a login the Tracker refuses draws no Map, and says which Tracker refused a
   const tracker: Tracker = { ...heldTracker().tracker, viewer: async () => ({ kind: "refused", reason: "not logged in to github.com" }) };
   const text = await showMap({ store, startRead: () => assert.fail("no read without a login"), sleep: async () => {}, startRefresher: async () => assert.fail("nothing kept warm without a login") }, tracker, project, { kind: "overview" });
   assert.equal(text, "No Map of github.com/fixture-org/tools: GitHub refused: not logged in to github.com");
+});
+
+test("a Project where the Map can read no Link kind is Refused before any read starts, with every kind named and why (ADR 0003)", async () => {
+  const store = snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-show-")), { now: Date.now });
+  const cantRecord = (reason: string) => ({ kind: "cant-record", reason }) as const;
+  const tracker: Tracker = {
+    ...heldTracker().tracker,
+    untested: "GHES 3.16.0 is older than 3.18, the oldest release GitHub still supports",
+    capabilities: async () => ({
+      kind: "capabilities",
+      links: { blocks: cantRecord("GHES 3.16.0 can't record Blocks Links"), parent: cantRecord("GHES 3.16.0 can't record Parent Links"), related: cantRecord("GitHub records no Related Links") },
+      write: { kind: "can" },
+    }),
+  };
+  const text = await showMap({ store, startRead: () => assert.fail("nothing to read"), sleep: async () => {}, startRefresher: async () => {} }, tracker, project, { kind: "overview" });
+  assert.equal(
+    text,
+    "No Map of github.com/fixture-org/tools: Refused — the Map can read no Link kind here. Blocks: GHES 3.16.0 can't record Blocks Links. Parent: GHES 3.16.0 can't record Parent Links. Related: GitHub records no Related Links.",
+  );
 });
 
 describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
@@ -98,7 +120,7 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     const { store, tracker, later } = await readStore();
     later(60_000);
     const map = await showMap(deps(store), { ...tracker, changes: async () => assert.fail("no refresh") }, project, { kind: "overview" });
-    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked$/m);
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked · Promised$/m);
     assert.doesNotMatch(map, /⚠/);
   });
 
@@ -107,7 +129,7 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     later(3 * 60_000);
     const closed: ChangesAnswer = { kind: "changes", open: [], ends: [{ id: "I_2", readable: true, open: false, project: project.path, ref: `${project.path}#2`, title: "Issue 2", url: `${project.url}/issues/2` }], requests: [], caughtUp: true, unread: {} };
     const map = await showMap(deps(store), { ...tracker, changes: async () => closed }, project, { kind: "overview" });
-    assert.match(map, /^\*\*fixture-org\/tools\*\* · 149 open · 0 on the Map · 149 Unlinked$/m);
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 149 open · 0 on the Map · 149 Unlinked · Promised$/m);
     assert.doesNotMatch(map, /⚠/);
   });
 
@@ -132,7 +154,7 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     let started = 0;
     const behind: Tracker = { ...tracker, changes: async () => ({ kind: "changes", open: [], ends: [], requests: [], caughtUp: false, unread: {} }) };
     const map = await showMap({ ...deps(store), startRead: () => void started++ }, behind, project, { kind: "overview" });
-    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked$/m);
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked · Promised$/m);
     assert.doesNotMatch(map, /⚠/);
     assert.equal(started, 1);
   });

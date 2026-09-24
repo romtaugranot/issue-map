@@ -1,6 +1,7 @@
 /** Small hand-written Snapshots, for the edges the recorded ones don't cover. */
 import { SNAPSHOT_FORMAT, type Snapshot } from "../../src/snapshot/snapshot.ts";
-import type { FarEnd, Link, OpenIssue, Unread } from "../../src/tracker/tracker.ts";
+import type { FarEnd, Link, OpenIssue, Support, Unread } from "../../src/tracker/tracker.ts";
+import { READS_EVERYTHING } from "./fake-trackers.ts";
 
 export const PROJECT = "fixture-org/tools";
 /** The login that read every built Snapshot, so the viewer of every drawing. */
@@ -35,7 +36,8 @@ export type End = number | Elsewhere;
 /** `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the Parent of b". */
 export type LinkSpec = [End, "blocks" | "parent" | "related", End];
 
-export function snapshot(issues: IssueSpec[], links: LinkSpec[] = [], unread: Unread = {}): Snapshot {
+/** `support` is what the last full read found of the Tracker and Project; by default, tested there with everything read. */
+export function snapshot(issues: IssueSpec[], links: LinkSpec[] = [], unread: Unread = {}, support: Partial<Support> = {}): Snapshot {
   const built = new Map<number, OpenIssue>(issues.map((spec) => [spec.n, issue(spec)]));
   const record = (at: End, role: Link["role"], far: End) => {
     if (typeof at !== "number") return; // The Map never reads an Issue outside its Project.
@@ -58,6 +60,7 @@ export function snapshot(issues: IssueSpec[], links: LinkSpec[] = [], unread: Un
     caughtUp: true,
     issues: [...built.values()],
     unread,
+    support: { untested: null, links: READS_EVERYTHING.links, ...support },
   };
 }
 

@@ -13,7 +13,7 @@ import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { ChangesAnswer, FarEnd, Link, OpenIssue, Project, Tracker, Unread } from "../tracker/tracker.ts";
+import type { ChangesAnswer, FarEnd, Link, OpenIssue, Project, Support, Tracker, Unread } from "../tracker/tracker.ts";
 import { SNAPSHOT_FORMAT, type Snapshot } from "./snapshot.ts";
 
 export interface SnapshotKey {
@@ -123,6 +123,8 @@ interface Progress {
   spentMs: number;
   /** What the saved pages couldn't hold. */
   unread: Unread;
+  /** What the Tracker said, before the first page, of its version and of the Project's Link kinds. */
+  support?: Support;
   stopped?: string;
   /** The attempt reading now; once it isn't this one's, what it read was deleted under it. */
   attempt?: string;
@@ -198,6 +200,22 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
         // A read with nothing saved yet starts now, whenever an earlier attempt did.
         if (progress.pages === 0) progress.startedAt = clock.now();
         await save(at.progress, progress);
+        if (!progress.support) {
+          const said = await tracker.capabilities(project);
+          if (said.kind === "refused" || said.kind === "not-found") {
+            const total = progress.total;
+            return await locked(at.lock, () => forget(at, total, said.reason));
+          }
+          if (said.kind !== "capabilities") {
+            progress.stopped = said.reason;
+            await save(at.progress, progress);
+            return { kind: "failed", reason: said.reason };
+          }
+          // Whether the login can write isn't drawn, so the Snapshot doesn't keep it (ADR 0006).
+          progress.support = { untested: tracker.untested, links: said.links };
+          await save(at.progress, progress);
+        }
+        const { support } = progress;
         for (;;) {
           const started = clock.now();
           const page = await tracker.openIssues(project, progress.after);
@@ -244,7 +262,8 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           changesSince: new Date(progress.startedAt - MARGIN_MS).toISOString(),
           caughtUp: true,
           issues: unique(issues),
-          unread: progress.unread,
+          unread: withBlocks(progress.unread, support),
+          support,
         };
         // A refresh of the Snapshot this replaces may be running; its changes are read again from `changesSince`.
         const replaced = await locked(at.lock, async () => {
@@ -317,6 +336,11 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       return renewed(paths(key).refresherLock);
     },
   };
+}
+
+/** What was left unread, and Blocks Links too where the Map can't read them: then no Issue is Unblocked. */
+function withBlocks(unread: Unread, { links: { blocks } }: Support): Unread {
+  return blocks.kind === "readable" || unread.blocks !== undefined ? unread : { ...unread, blocks: blocks.reason };
 }
 
 /** The Outside Issues the Snapshot's Links reach that this login could read when it last looked. */

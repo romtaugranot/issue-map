@@ -10,7 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { snapshotStore, type SnapshotKey, type SnapshotState } from "../src/snapshot/store.ts";
-import type { ChangesAnswer, FarEnd, IssuePage, Link, OpenIssue, Project, Tracker, Unread } from "../src/tracker/tracker.ts";
+import type { CapabilitiesAnswer, ChangesAnswer, FarEnd, IssuePage, Link, OpenIssue, Project, Tracker, Unread } from "../src/tracker/tracker.ts";
+import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 250 } };
 const key: SnapshotKey = { tracker: "github.com", project: project.id, login: "fixture-viewer" };
@@ -31,6 +32,8 @@ interface FakeTracker {
   asked: (string | null)[];
   /** What every refresh asked for. */
   refreshes: { since: string; outside: string[] }[];
+  /** How many times it was asked what the Project records. */
+  capabilitiesAsked(): number;
 }
 
 /**
@@ -52,9 +55,14 @@ function fakeTracker(
     shape?: (issue: OpenIssue) => OpenIssue;
     /** The login the CLI holds; by default, the Snapshot's. */
     login?: string;
+    /** What it says of the Project's Link kinds and writes; by default, that it reads every kind and the login can write. */
+    capabilities?: CapabilitiesAnswer;
+    /** Why the Map isn't tested on its version; by default, it is. */
+    untested?: string;
   } = {},
 ): FakeTracker {
   const asked: (string | null)[] = [];
+  let capabilitiesAsked = 0;
   const refreshes: { since: string; outside: string[] }[] = [];
   let fail = options.fail;
   const all = Array.from({ length: count }, (_, i) => (options.shape ?? ((i) => i))(issue(i + 1)));
@@ -62,6 +70,11 @@ function fakeTracker(
     product: "GitHub",
     host: "github.com",
     version: null,
+    untested: options.untested ?? null,
+    async capabilities() {
+      capabilitiesAsked++;
+      return options.capabilities ?? { kind: "capabilities", ...READS_EVERYTHING };
+    },
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => ({ kind: "viewer", login: options.login ?? key.login }),
@@ -84,7 +97,7 @@ function fakeTracker(
       return { kind: "page", issues: all.slice(start, start + 100), total: count, next, unread: options.unread?.[String(after)] ?? {} };
     },
   };
-  return { tracker, asked, refreshes };
+  return { tracker, asked, refreshes, capabilitiesAsked: () => capabilitiesAsked };
 }
 
 const scratch = () => mkdtempSync(join(tmpdir(), "issue-map-store-"));
@@ -131,7 +144,7 @@ describe("the Snapshot store (ADR 0006)", () => {
     // The read took 3 s, and it's as old as its first page.
     assert.equal(ageMs, 48_000);
     assert.deepEqual(snapshot, {
-      format: 5,
+      format: 6,
       tracker: "github.com",
       project: { id: project.id, path: project.path, url: project.url },
       login: "fixture-viewer",
@@ -142,7 +155,39 @@ describe("the Snapshot store (ADR 0006)", () => {
       caughtUp: true,
       issues: Array.from({ length: 250 }, (_, i) => issue(i + 1)),
       unread: {},
+      support: { untested: null, links: READS_EVERYTHING.links },
     });
+  });
+
+  test("a full read keeps what the Tracker said of its version and of the Project's Link kinds, a Blocks kind it can't read counting as unread, but not whether the login can write, which isn't drawn", async () => {
+    const store = snapshotStore(scratch(), clock());
+    const blocks = { kind: "cant-read", reason: "GitLab doesn't say whether fixture-org/tools can record Blocks Links" } as const;
+    const said = { links: { ...READS_EVERYTHING.links, blocks }, write: { kind: "cant-tell", reason: "this login's token doesn't say" } } as const;
+    const untested = "GitLab 15.4.0 is older than 16.0, the oldest the Map is tested on";
+    const { tracker } = fakeTracker(150, { capabilities: { kind: "capabilities", ...said }, untested });
+    await store.read(key, tracker, project);
+    const state = await store.state(key);
+    assert.deepEqual(state.kind === "ready" && [state.snapshot.support, state.snapshot.unread], [{ untested, links: said.links }, { blocks: blocks.reason }]);
+  });
+
+  test("a Tracker that can't say what the Project records stops a first read before its first page; one that refuses the login keeps nothing", async () => {
+    const store = snapshotStore(scratch(), clock());
+    const unsure = fakeTracker(150, { capabilities: { kind: "cant-tell", reason: "couldn't reach github.com" } });
+    assert.deepEqual(await store.read(key, unsure.tracker, project), { kind: "failed", reason: "couldn't reach github.com" });
+    assert.deepEqual(unsure.asked, []);
+    const stopped = await store.state(key);
+    assert.deepEqual(stopped.kind === "reading" && stopped.stopped, "couldn't reach github.com");
+    const refused = fakeTracker(150, { capabilities: { kind: "refused", reason: "github.com refused this login" } });
+    assert.deepEqual(await store.read(key, refused.tracker, project), { kind: "refused", reason: "github.com refused this login" });
+  });
+
+  test("a resumed read doesn't ask again what the Project records", async () => {
+    const store = snapshotStore(scratch(), clock());
+    const failing = fakeTracker(250, { fail: { at: "100", answer: { kind: "cant-tell", reason: "couldn't reach github.com" } } });
+    await store.read(key, failing.tracker, project);
+    const again = fakeTracker(250);
+    await store.read(key, again.tracker, project);
+    assert.deepEqual([failing.capabilitiesAsked(), again.capabilitiesAsked()], [1, 0]);
   });
 
   test("a Snapshot keeps what the Tracker couldn't give on any page, and why", async () => {

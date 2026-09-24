@@ -22,6 +22,10 @@ _Avoid_: forge, provider, platform, instance, deployment
 One collection of Issues on a Tracker: the container every Issue belongs to exactly one of. On GitHub it is a repository, on GitLab a project. Not a planning board or an initiative that gathers Issues from several Projects, such as a GitHub Projects board.
 _Avoid_: repo (when meaning the Issues' container)
 
+**Band**:
+How far the Map stands behind a Project, from what its Tracker shows there (ADR 0003): **Promised**, tested and able to write Link Suggestions; **Best effort**, read-only and marked untested, on a version the Map isn't tested on, or one it can't learn, where it can still read a Link kind; **Refused**, where no Link kind can be read, with why. The Map states the band.
+_Avoid_: support level, tier (GitLab's tiers are its paid plans)
+
 **Closing Request**:
 A pull or merge request that closes an Issue when it is merged, as the Tracker records it. It is not an Issue, and the Map never follows it.
 _Avoid_: linked PR, development link, fix

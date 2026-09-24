@@ -2,10 +2,10 @@
  * The Snapshot (ADR 0006): one Project's open Issues and their Links, as one
  * login last read them from one Tracker. It holds only what the Map draws.
  */
-import type { OpenIssue, Unread } from "../tracker/tracker.ts";
+import type { OpenIssue, Support, Unread } from "../tracker/tracker.ts";
 
 /** The shape Snapshots are saved in; one saved in any other is read again. */
-export const SNAPSHOT_FORMAT = 5;
+export const SNAPSHOT_FORMAT = 6;
 
 export interface Snapshot {
   format: typeof SNAPSHOT_FORMAT;
@@ -28,6 +28,8 @@ export interface Snapshot {
   caughtUp: boolean;
   /** Every open Issue of the Project, oldest first. */
   issues: OpenIssue[];
-  /** What the read couldn't give for this Project. */
+  /** What the read couldn't give for this Project, Blocks Links the Map can't read among it. */
   unread: Unread;
+  /** What the Project's band is decided from, as the last full read found it. */
+  support: Support;
 }

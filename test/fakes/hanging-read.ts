@@ -1,6 +1,7 @@
 /** A first read that saves one page, says so on stdout, then hangs: stands in for a reader killed mid-read. */
 import { snapshotStore } from "../../src/snapshot/store.ts";
 import type { Tracker } from "../../src/tracker/tracker.ts";
+import { READS_EVERYTHING } from "./fake-trackers.ts";
 
 const [dir] = process.argv.slice(2);
 const project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 150 } };
@@ -9,6 +10,8 @@ const tracker: Tracker = {
   product: "GitHub",
   host: "github.com",
   version: null,
+  untested: null,
+  capabilities: async () => ({ kind: "capabilities", ...READS_EVERYTHING }),
   resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
   changes: async () => ({ kind: "cant-tell", reason: "unused" }),
   issue: async () => ({ kind: "cant-tell", reason: "unused" }),

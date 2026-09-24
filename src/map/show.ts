@@ -4,11 +4,13 @@
  * shows progress and the read carries on outside the conversation. A
  * Snapshot more than two minutes old is refreshed first, and drawn with its
  * age and why when it can't be; one due a full read again is drawn while
- * that read runs in the background. An Issue card reads its Issue live instead,
+ * that read runs in the background. A Project where the Map can read no Link
+ * kind is refused before a first read starts. An Issue card reads its Issue live instead,
  * so it opens even during a first read (ADR 0006).
  */
 import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/store.ts";
 import type { CantAnswer, Project, Tracker } from "../tracker/tracker.ts";
+import { bandOf, refusal } from "./band.ts";
 import { drawCard, type Card } from "./card.ts";
 import { draw, drawProgress, type Command } from "./draw.ts";
 import { OUTSIDE } from "./text.ts";
@@ -45,6 +47,12 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     // Minutes on a large Project, so it never holds up the draw: this Snapshot is drawn meanwhile.
     if (readAgain) deps.startRead();
     return draw(snapshot, command, stale === undefined ? undefined : { ageMs, reason: stale }).text;
+  }
+  if (drawable.kind === "none") {
+    // Minutes of reading would draw nothing on a Project that's Refused, so it's asked first; a Tracker that can't say is left to the read.
+    const said = await tracker.capabilities(project);
+    const band = said.kind === "capabilities" ? bandOf({ untested: tracker.untested, links: said.links }) : null;
+    if (band?.kind === "refused") return refusal(`${project.host}/${project.path}`, band);
   }
   let state: SnapshotState = drawable;
   if (!(state.kind === "reading" && state.running)) deps.startRead();
