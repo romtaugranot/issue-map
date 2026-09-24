@@ -1,0 +1,75 @@
+# The live tier (ADR 0004), nightly: the fixture Projects (docs/fixtures.md)
+# read through the real adapters on github.com and gitlab.com, which run
+# GitHub's and GitLab's code first, so a Tracker's behaviour drifting fails
+# here before a release ships against it. github.com is also the running
+# stand-in for GHES and GHEC. A nightly failure opens an Issue, or adds to
+# the one open.
+name: Live
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GLAB_VERSION: "1.119.0"
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install glab
+        run: |
+          curl -fsSL -o glab.deb "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${GLAB_VERSION}/glab_${GLAB_VERSION}_linux_amd64.deb"
+          sudo dpkg -i glab.deb
+      # Read as the fixtures' GitHub App, never a personal login, installed on NAMESPACES.github.main in test/live/fixtures.ts.
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ vars.FIXTURES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FIXTURES_APP_PRIVATE_KEY }}
+          owner: issue-map-fixtures
+      - name: Read the fixture Projects
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GITLAB_TOKEN: ${{ secrets.FIXTURES_GITLAB_TOKEN }}
+          GITLAB_HOST: gitlab.com
+          # `gitlab-oss` joins once GitLab for Open Source licenses its group (docs/fixtures.md).
+          ISSUE_MAP_LIVE: ${{ vars.ISSUE_MAP_LIVE || 'github,gitlab-free' }}
+        run: npm run test:live
+
+  drift:
+    needs: live
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open an Issue, or add to the one open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly live reads of the fixture Projects failed"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again on $(date -u +%F): $RUN"
+          else
+            gh issue create --title "$title" --body "A Tracker read the fixture Projects differently from what test/live/fixtures.ts declares, or couldn't be read: $RUN. Fix it in a patch release (ADR 0004)."
+          fi

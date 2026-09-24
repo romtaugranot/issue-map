@@ -1,0 +1,44 @@
+# New GHES and GitHub schemas arrive through a pull request (ADR 0004): weekly,
+# scripts/ci/schemas.ts records the GraphQL schema GitHub publishes for
+# github.com, GHEC and every promised GHES release, and a change opens one.
+# The contract tier's schema checks then run against it. Pull requests opened
+# with the workflow's own token don't start other workflows: close and
+# reopen it to run the contract tier.
+name: GHES schemas
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  schemas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: record
+        run: |
+          {
+            echo "changed<<EOF"
+            node scripts/ci/schemas.ts
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: peter-evans/create-pull-request@v8
+        with:
+          branch: ci/ghes-schemas
+          commit-message: Record GitHub's published GraphQL schemas
+          title: Record GitHub's published GraphQL schemas
+          body: |
+            GitHub published schemas the Map's schema checks don't hold yet (ADR 0004):
+
+            ${{ steps.record.outputs.changed }}
+
+            The contract tier checks every query the GitHub adapter sends against them.

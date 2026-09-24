@@ -26,7 +26,7 @@ const CANT_RECORD_BLOCKS = "this Project's GitLab tier can't record Blocks Links
 const READS_FROM = "13.4";
 
 /** The oldest GitLab the Map is tested on (ADR 0003). */
-const TESTED_FROM = "16.0";
+export const TESTED_FROM = "16.0";
 
 /** GitLab's access levels for the roles that may write a Link: Guest from 17.0, Reporter before. */
 const GUEST = 10;
