@@ -80,6 +80,16 @@ describe("GitLab by version: a self-hosted GitLab from 16.0 is asked only for wh
     });
   }
 
+  for (const version of ["16.0.0", "17.7.0", LATEST]) {
+    test(`${version}: a closed Issue's card says it closed as a duplicate, as GitLab says`, async () => {
+      const { tracker } = await read(world(version));
+      const card = await tracker.issue(`${tools}#5`);
+      assert.equal(card.kind, "issue", JSON.stringify(card));
+      const { open, closedAs } = (card as Extract<IssueAnswer, { kind: "issue" }>).issue;
+      assert.deepEqual([open, closedAs], [false, "duplicate"]);
+    });
+  }
+
   test("16.0: a task has no Links but its Parent, since GitLab can't link one before 16.7", async () => {
     const { page } = await read(world("16.0.0"));
     assert.deepEqual(roles(page.issues, "#3"), ["parent"]);

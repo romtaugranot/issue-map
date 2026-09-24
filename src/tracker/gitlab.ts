@@ -55,7 +55,7 @@ const REST_AT_ONCE = 4;
  * The first version whose GraphQL gives each thing the Map reads, from each
  * release's GraphQL reference. Where a version doesn't, REST gives it.
  */
-const SINCE = {
+export const SINCE = {
   /** Issues as work items, and a task's Parent; before it, Issues are read from REST. */
   workItems: TESTED_FROM,
   workItemsByReference: "16.7",
@@ -990,6 +990,13 @@ async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nod
     }
   }
   if (!ctx.has.duplicatedTo) {
+    // How a closed Issue closed: before it, GraphQL doesn't say it closed as a duplicate, but REST does.
+    const closed = nodes.filter((node) => node.state === "CLOSED" && node.workItemType.name !== "Task");
+    for (const node of closed) {
+      const answer = await rest(ctx, `projects/${encodeURIComponent(project.path)}/issues/${node.iid}`, project.path);
+      if ("kind" in answer) return answer;
+      node.duplicatedToWorkItemUrl = (answer.json as RestIssue)._links?.closed_as_duplicate_of ?? null;
+    }
     for (const node of nodes) {
       // An ordinary Issue's Links come from REST, which tells a Related Link `/duplicate` made from any other; a task's can't.
       if (node.workItemType.name !== "Task") node.widgets = node.widgets.filter((widget) => !("linkedItems" in widget));
