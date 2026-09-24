@@ -206,7 +206,7 @@ describe("seeding GitHub through gh", () => {
 describe("seeding GitLab through glab", () => {
   const graphqlAnswer = (data: object) => () => ({ data });
 
-  test("a task is made as a task, and an epic as the group's own work item", async () => {
+  test("a task is made as a task, and an epic as an Issue of the group's own", async () => {
     const { cli, calls } = scripted([
       [/^POST projects\/g%2Fmap\/issues$/, () => ({ id: 77, iid: 4, title: "[t1a] Add the lint job", state: "opened" })],
       [/^GET graphql$/, (args) =>

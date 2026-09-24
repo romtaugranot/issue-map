@@ -5,6 +5,7 @@
  * groups, never a personal account, and name no person, private Project or
  * machine. `docs/fixtures.md` says how they're set up.
  */
+import { fileURLToPath } from "node:url";
 import type { LinkKind } from "../../src/tracker/tracker.ts";
 
 /** Where the fixtures live: renaming one is an edit here and nowhere else. */
@@ -196,3 +197,9 @@ const GITLAB_OSS: Fixture = {
 };
 
 export const FIXTURES: Record<FixtureName, Fixture> = { github: GITHUB, "gitlab-free": GITLAB_FREE, "gitlab-oss": GITLAB_OSS };
+
+/** `node test/live/fixtures.ts names`: the namespaces as shell assignments, for the setup wizard and the workflows, so they're named here alone. */
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === "names") {
+  const { github, gitlab } = NAMESPACES;
+  console.log(`GH_MAIN=${github.main}\nGH_OTHER=${github.other}\nGL_FREE=${gitlab.free}\nGL_OSS=${gitlab.oss}`);
+}

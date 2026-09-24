@@ -38,7 +38,7 @@ import { lastHomeOf, readJson, stateDir, writeJson } from "./state.ts";
 import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { statusRow } from "./map/status.ts";
-import { statusLine } from "./status/line.ts";
+import { homeRowHere } from "./status/line.ts";
 import { installStatusLine, userSettings } from "./status/install.ts";
 import { showCard, showMap } from "./map/show.ts";
 import { assignToViewer } from "./map/assign.ts";
@@ -86,7 +86,7 @@ async function main(argv: string[]): Promise<number> {
       if (values.setup) {
         console.log(await installStatusLine(userSettings(), fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url))));
       } else {
-        const row = await statusLine({ checkoutRoot, lastHome: (root) => lastHomeOf(root).get(), store: openStore() }, process.cwd());
+        const row = await homeRowHere(process.cwd());
         console.log(row || "No status line row: this isn't inside a git checkout.");
       }
       return 0;

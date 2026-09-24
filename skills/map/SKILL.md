@@ -95,7 +95,7 @@ A move that can't open says why and leaves the user where they were; reprint tha
 
 ## The status line
 
-When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and reprint what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing.
+When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and reprint what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing, unless the plugin has moved since, as an update moves it: then it points the status line at where the plugin is now. When the row goes blank after an update, run it again.
 
 The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
 

@@ -17,7 +17,7 @@ import type { Snapshot } from "../src/snapshot/snapshot.ts";
 import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
 import { checkoutRoot } from "../src/home/checkout.ts";
 import { lastHomeOf } from "../src/state.ts";
-import { statusLine } from "../src/status/line.ts";
+import { homeRow } from "../src/status/line.ts";
 import type { Project, Tracker } from "../src/tracker/tracker.ts";
 
 const ENTRY = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
@@ -88,7 +88,7 @@ describe("the status line on the largest recorded Project, gitlab-org/gitlab", (
   test(`is worked out within ${BUDGET_MS} ms, never reading the Snapshot`, async () => {
     const store = snapshotStore(warm.state, { now: Date.now });
     const started = performance.now();
-    const row = await statusLine({ checkoutRoot, lastHome: (root) => lastHomeOf(root, warm.state).get(), store }, warm.checkout);
+    const row = await homeRow({ checkoutRoot, lastHome: (root) => lastHomeOf(root, warm.state).get(), store }, warm.checkout);
     const ms = performance.now() - started;
     // Kept when the Snapshot was saved, so fresh; the recording dates no closed blocker, so when it was read changes nothing else.
     assert.equal(row, warm.row);

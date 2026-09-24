@@ -5,7 +5,9 @@
  * Tracker, a Snapshot or anything else that could hold up the prompt, and
  * it imports nothing that takes long to load.
  */
-import type { Glance } from "../snapshot/store.ts";
+import { checkoutRoot } from "../home/checkout.ts";
+import { FRESH_MS, snapshotStore, type Glance } from "../snapshot/store.ts";
+import { lastHomeOf, stateDir } from "../state.ts";
 import type { Project } from "../tracker/tracker.ts";
 import { age, count, ROW } from "../map/text.ts";
 
@@ -17,11 +19,13 @@ export interface StatusDeps {
   store: { glance(tracker: string, project: string): Promise<Glance> };
 }
 
-/** How long a Snapshot is fresh, as the Map counts it: past this, the row says how old it is. */
-const FRESH_MS = 2 * 60_000;
+/** The Home Project's row for the checkout `dir` is in, from what this OS user keeps; empty outside a checkout. */
+export function homeRowHere(dir: string): Promise<string> {
+  return homeRow({ checkoutRoot, lastHome: (root) => lastHomeOf(root).get(), store: snapshotStore(stateDir(), { now: Date.now }) }, dir);
+}
 
-/** The Map's row for the checkout `dir` is in; empty outside a checkout. */
-export async function statusLine(deps: StatusDeps, dir: string): Promise<string> {
+/** The Home Project's row for the checkout `dir` is in; empty outside a checkout. Past the Map's freshness window, it says how old it is. */
+export async function homeRow(deps: StatusDeps, dir: string): Promise<string> {
   const root = await deps.checkoutRoot(dir);
   if (!root) return "";
   const home = await deps.lastHome(root);

@@ -180,8 +180,7 @@ finish() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────
-# STAGES — author this section. One stage() per step the human takes.
-# Replace the example below. Set TOTAL_STAGES to match the stages you write.
+# STAGES — one stage() per step the human takes; TOTAL_STAGES counts them.
 # ──────────────────────────────────────────────────────────────────────────
 #
 # Sets up the fixture Projects (docs/fixtures.md): the organisations, groups,
@@ -197,10 +196,7 @@ ENV_FILE="${ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/issue-map/fixtures.env}"
 mkdir -p "$(dirname "$ENV_FILE")"
 
 # The namespaces test/live/fixtures.ts declares; renaming one is an edit there.
-GH_MAIN="issue-map-fixtures"
-GH_OTHER="issue-map-fixtures-b"
-GL_FREE="issue-map-fixtures"
-GL_OSS="issue-map-fixtures-oss"
+eval "$(node test/live/fixtures.ts names)"
 
 banner "issue-map fixture Projects"
 
@@ -278,8 +274,12 @@ if confirm "Seed the GitLab Free Fixture now (node scripts/fixtures/seed.ts gitl
   node scripts/fixtures/seed.ts gitlab-free || SKIPPED+=("seeding gitlab-free (re-run: node scripts/fixtures/seed.ts gitlab-free)")
 fi
 if confirm "Has GitLab for Open Source licensed ${GL_OSS}, so the licensed Fixture can be seeded?"; then
-  node scripts/fixtures/seed.ts gitlab-oss || SKIPPED+=("seeding gitlab-oss (re-run: node scripts/fixtures/seed.ts gitlab-oss)")
-  set_var ISSUE_MAP_LIVE "github,gitlab-free,gitlab-oss"
+  # The nightly reads take it in only once it's seeded, or every night fails on it.
+  if node scripts/fixtures/seed.ts gitlab-oss; then
+    set_var ISSUE_MAP_LIVE "github,gitlab-free,gitlab-oss"
+  else
+    SKIPPED+=("seeding gitlab-oss (re-run: node scripts/fixtures/seed.ts gitlab-oss, then set the ISSUE_MAP_LIVE variable to github,gitlab-free,gitlab-oss)")
+  fi
 else
   SKIPPED+=("seeding gitlab-oss, once GitLab for Open Source licenses ${GL_OSS}: node scripts/fixtures/seed.ts gitlab-oss")
 fi

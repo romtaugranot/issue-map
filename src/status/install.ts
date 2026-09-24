@@ -37,7 +37,14 @@ export async function installStatusLine(path: string, entry: string): Promise<st
 
   const theirs = settings.statusLine as { type?: unknown; command?: unknown } | undefined;
   const command = theirs?.type === "command" && typeof theirs.command === "string" && theirs.command.trim() ? theirs.command : null;
-  if (command?.includes(OURS)) return `The status line is already installed in ${path}; nothing changed.`;
+  if (command?.includes(OURS)) {
+    // A plugin update moves the entry, which would leave the status line blank: the entry, its first word, is pointed at where it is now.
+    const moved = /^'(?:[^']|'\\'')*'/.exec(command)?.[0];
+    if (moved === undefined || moved === quoted(entry)) return `The status line is already installed in ${path}; nothing changed.`;
+    settings.statusLine = { ...theirs, command: `${quoted(entry)}${command.slice(moved.length)}` };
+    await save(path, settings);
+    return `The status line in ${path} now runs from ${entry}.`;
+  }
   settings.statusLine = command
     ? { ...theirs, command: `${quoted(entry)} --wrap ${quoted(command)}` }
     : { type: "command", command: quoted(entry), refreshInterval: REFRESH_S };
