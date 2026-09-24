@@ -1,6 +1,6 @@
 ---
 name: map
-description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves; or to move to another Project, `go`, `back` or `home`.
+description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; or to move to another Project, `go`, `back` or `home`.
 ---
 
 # The Map
@@ -12,6 +12,7 @@ The Map opens on the checkout's **Home Project**, and every command acts on the 
 - **The level beneath an Issue**: `issue-map group '<ref>'` with the reference as the outline or overview prints it (`#123`, `owner/name#45`, `group&12` — drop a leading `↗`), or the Issue's URL. Quote it: `#` starts a shell comment. When the user says `more` on an outline, run the same command with `--page <n>` for the next page.
 - **An Issue's card**: `issue-map issue '<ref>'`, with the reference as the Map prints it (`#123`, `owner/name#45`, a leading `↗` is fine), or a `#123` the user types. An Issue the user names another way — its URL, or `owner/name#45` typed — is a target to move to (see **Moving to another Project**). Use it when the user opens, shows or asks about one Issue; use `group '<ref>'` only for what sits beneath it. A card is read live from the Tracker, so it opens even while the Map is being read for the first time. When the user says `more` on a card, run the same command with `--page <n>` for the next page of its Links.
 - **Assigning an Issue to yourself**: `issue-map assign '<ref>'` — see **Assigning an Issue to yourself**.
+- **Starting work on an Issue**: `issue-map start '<ref>'` — see **Starting work on an Issue**.
 - **The Unlinked Issues**, 15 a page, newest first: `issue-map unlinked`, and `issue-map unlinked --page <n>` when the user says `more` or asks for a page.
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
 
@@ -33,9 +34,9 @@ The Map is drawn from a Snapshot, refreshed first when it's more than two minute
 
 A card shows the Issue's name and URL, whether it is Blocked and whom it's assigned to, its Links by kind under the Tracker's own names, its open Closing Requests, and how many other Issues mention it. Reprint the card itself exactly; the **Links to follow** block under it is for you, not the user. The card prints the Issue's URL, so never offer to open it in a browser.
 
-When the card has Links to follow, ask with `AskUserQuestion` which one to follow — first, when the card offers **Assign … to me** under **Choices**, that choice (see **Assigning an Issue to yourself**), then up to two Links — otherwise up to three of them in the block's order, labelled with the Link's reference and with its description as the option's description, then a fourth option — **More Links** while any are left, otherwise **The Map**. **More Links** asks again with the next three. "Other" takes any target the user types, which `issue-map go '<target>'` moves to. Open the picked Issue's card with `issue-map issue '<label>'`, reprint it, and ask again from there; **The Map** runs `issue-map map`.
+When the card has Links to follow, ask with `AskUserQuestion` which one to follow — first the card's **Choices** in the order printed, **Assign … to me** (see **Assigning an Issue to yourself**) and **Start work on …** (see **Starting work on an Issue**), then Links in the block's order up to three options in all, labelled with the Link's reference and with its description as the option's description, then a fourth option — **More Links** while any are left, otherwise **The Map**. **More Links** asks again with the next three. "Other" takes any target the user types, which `issue-map go '<target>'` moves to. Open the picked Issue's card with `issue-map issue '<label>'`, reprint it, and ask again from there; **The Map** runs `issue-map map`.
 
-An Outside Issue's card has no Links to follow, since the Map hasn't read its Project, but under **Choices** it offers to open that Project's Map. Ask with that choice, labelled as printed, and **The Map**; the choice runs the command under it, which lands on the Issue's card in its own Project's Map, with its Links. A card with nothing to follow and no choices asks nothing. Never offer a Closing Request or a Mention as a choice: a Closing Request isn't an Issue, and a Mention isn't a Link — the card only counts Mentions, which Link Suggestions are for.
+An Outside Issue's card has no Links to follow, since the Map hasn't read its Project, but under **Choices** it offers to open that Project's Map, and, while it's open, to start work on it. Ask with those choices, labelled as printed, and **The Map**; opening its Project's Map runs the command under it, which lands on the Issue's card in its own Project's Map, with its Links. A card with no Links to follow but with **Choices** asks with those and **The Map**; a card with neither asks nothing. Never offer a Closing Request or a Mention as a choice: a Closing Request isn't an Issue, and a Mention isn't a Link — the card only counts Mentions, which Link Suggestions are for.
 
 When `AskUserQuestion` isn't available, as under `claude -p`, reprint the card and stop.
 
@@ -48,6 +49,14 @@ Picking **Assign #n to me** in the card's picker is the user's one confirmation:
 It reads the Issue again before writing, so one someone took since isn't written to, and it writes once: when the Tracker refuses, it says why and changes nothing — reprint that, don't retry, and don't suggest another way to assign. A card with no **Assign** choice says whom the Issue is assigned to; when the user asks to take one assigned to someone else, say so from the card rather than assign it. Once assigned, the Issue is the user's own: the Map and Take next show it at once, marked `yours`. Nothing else starts: no branch, no comment.
 
 When `AskUserQuestion` isn't available, as under `claude -p`, the user's own words asking for this very Issue to be assigned to them are the confirmation; otherwise reprint the card and don't assign.
+
+## Starting work on an Issue
+
+An open Issue's card offers **Start work on #n** under **Choices**, an Outside Issue's too. It only reads, so picking it in the card's picker, or the user asking in words to start work on or pick up an Issue, is enough: run the command under it, `issue-map start '<ref>'`, with no further confirmation.
+
+Its output is the Issue's body and comments, already cut to a fixed budget, for you to brief the user from — don't reprint it. Brief them in at most about 12 lines: what the Issue asks for; where the discussion stands now, the latest comments counting most; what's been decided, tried or ruled out; what's still open or in the way; and who is involved. Quote only a line or two where the exact words matter. When the output says comments or parts of long ones were left out, or that earlier comments weren't read, say the brief isn't from the whole thread. Reprint the card's name line and URL above the brief.
+
+Then stop and let the user say what's next. Nothing else starts: no branch, no editor, no checkout, no assignment and no code — don't offer them either. Where the user is doesn't change, so `back`, `map` and the card's Links carry on from the card. When the Issue can't be read, the output says why; reprint that.
 
 ## Moving to another Project
 

@@ -1,5 +1,5 @@
 /** An in-memory stand-in for the Tracker seam, for testing what sits above it. */
-import type { AssignAnswer, Capabilities, Identification, IssueAnswer, IssueRead, Project, ProjectResolution, Tracker, Trackers } from "../../src/tracker/tracker.ts";
+import type { AssignAnswer, Capabilities, Identification, IssueAnswer, IssueRead, Project, ProjectResolution, Thread, ThreadAnswer, Tracker, Trackers } from "../../src/tracker/tracker.ts";
 
 /** A Project whose every Link kind is recorded and read, on a Tracker the Map is tested on, with a login that can write. */
 export const READS_EVERYTHING: Capabilities = {
@@ -23,6 +23,8 @@ export interface FakeHost {
   unreachable?: string;
   /** The Issues a card can be read from, by reference or URL; assigning one changes it. */
   issues?: IssueRead[];
+  /** The threads Start work reads, by reference or URL. */
+  threads?: Thread[];
   /** The login it names as the viewer; by default it can't tell. */
   viewer?: string;
 }
@@ -73,6 +75,12 @@ function tracker(host: string, fake: FakeHost, reads: string[]): Tracker {
       if (!fake.issues) return { kind: "cant-tell", reason: "the fake holds no Issues" };
       const found = fake.issues.find((issue) => issue.ref === locator || issue.url === locator);
       return found ? { kind: "issue", issue: found } : { kind: "not-found", reason: `no Issue ${locator} on ${host} that this login can read` };
+    },
+    async thread(locator): Promise<ThreadAnswer> {
+      reads.push(locator);
+      if (fake.refuse) return { kind: "refused", reason: fake.refuse };
+      const found = fake.threads?.find((thread) => thread.ref === locator || thread.url === locator);
+      return found ? { kind: "thread", thread: found } : { kind: "not-found", reason: `no Issue ${locator} on ${host} that this login can read` };
     },
     async assign(locator, viewer): Promise<AssignAnswer> {
       const found = fake.issues?.find((issue) => issue.ref === locator);

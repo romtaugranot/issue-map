@@ -1,14 +1,15 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1 to 7, 9 and 11 including their "can't" answers, for a whole Project,
- * for only what changed in it, and for one Issue read for its card.
+ * needs 1 to 9 and 11 including their "can't" answers, for a whole Project,
+ * for only what changed in it, for one Issue read for its card, and for one
+ * Issue's thread read to start work on it.
  * Each adapter supplies a Stage that stands a World up behind its own
  * boundary. Where kinds of Tracker differ in what they record, a Stage says
  * so, and a test of what its kind can't record is skipped with the reason.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { CapabilitiesAnswer, ChangesAnswer, FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
+import type { CapabilitiesAnswer, ChangesAnswer, FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Thread, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
   path: string;
@@ -49,6 +50,10 @@ export interface IssueSpec {
   taskLevel?: boolean;
   /** Closed as a duplicate of this Issue, as the Tracker marks it. */
   duplicateOf?: IssueAddress;
+  /** Its description; none by default. */
+  body?: string;
+  /** Its comments, oldest first; `at` is an ISO date. */
+  comments?: { author: string; body: string; at: string }[];
 }
 
 /** `"owner/name#12"`. */
@@ -157,6 +162,7 @@ export function trackerContract(stage: Stage): void {
   changesContract(stage);
   cardContract(stage);
   capabilitiesContract(stage);
+  threadContract(stage);
   assignContract(stage);
 }
 
@@ -1020,6 +1026,103 @@ export function assignContract(stage: Stage): void {
       test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
         for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
           assert.equal((await (await trackerIn(trouble)).assign(`${tools}#1`, "fixture-viewer")).kind, kind, JSON.stringify(trouble));
+        }
+      });
+    });
+  });
+}
+
+export function threadContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+  const tools = "fixture-org/tools";
+  const long = Array.from({ length: 130 }, (_, i) => ({ author: i % 2 === 0 ? "fixture-bot" : "fixture-dev", body: `Comment ${i + 1}`, at: new Date(Date.UTC(2026, 1, 1, 0, i)).toISOString() }));
+  const world: World = {
+    projects: [
+      {
+        path: tools,
+        number: 1,
+        open: 3,
+        issues: [
+          {
+            number: 1,
+            title: "Import state from S3",
+            body: "State lives in S3.\n\n```\nError: access denied\n```",
+            comments: [
+              { author: "fixture-dev", body: "I can take this.", at: "2026-02-01T10:00:00Z" },
+              { author: "fixture-bot", body: "Reproduced on main.", at: "2026-02-02T10:00:00Z" },
+            ],
+          },
+          { number: 2, comments: long },
+          { number: 3 },
+          { number: 4, closed: true, body: "Done already." },
+          { number: 9, hidden: true },
+        ],
+      },
+    ],
+    mentions: [[`${tools}#3`, `${tools}#1`]],
+    closingRequests: [{ closes: `${tools}#1`, number: 40, author: "fixture-bot" }],
+  };
+
+  async function trackerIn(given: World): Promise<Tracker> {
+    const tracker = await stage.arrange(given).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    return tracker;
+  }
+
+  async function thread(given: World, locator: string): Promise<Thread> {
+    const answer = await (await trackerIn(given)).thread(locator);
+    assert.equal(answer.kind, "thread", JSON.stringify(answer));
+    return (answer as Extract<typeof answer, { kind: "thread" }>).thread;
+  }
+
+  describe(`${product} Tracker contract`, () => {
+    describe("need 8: read an Issue's body and comments", () => {
+      test("reads an Issue's body and its comments, oldest first, with who wrote each and when; a Mention or a Closing Request isn't a comment", async () => {
+        const one = await thread(world, `${tools}#1`);
+        assert.deepEqual([one.ref, one.title, one.open, one.body, one.earlier], [`${tools}#1`, "Import state from S3", true, "State lives in S3.\n\n```\nError: access denied\n```", false]);
+        assert.match(one.url, issueUrl(tools, 1));
+        assert.deepEqual(one.comments, [
+          { author: "fixture-dev", at: "2026-02-01T10:00:00Z", body: "I can take this." },
+          { author: "fixture-bot", at: "2026-02-02T10:00:00Z", body: "Reproduced on main." },
+        ]);
+      });
+
+      test("reads the same thread by the Issue's URL", async () => {
+        const one = await thread(world, `${tools}#1`);
+        assert.deepEqual(await thread(world, one.url), one);
+      });
+
+      test("on a long thread, reads the latest 100 comments and says there are earlier ones it didn't read", async () => {
+        const two = await thread(world, `${tools}#2`);
+        assert.equal(two.comments.length, 100);
+        assert.deepEqual([two.comments[0]!.body, two.comments.at(-1)!.body, two.earlier], ["Comment 31", "Comment 130", true]);
+      });
+
+      test("an Issue with no body and no comments reads as empty", async () => {
+        const three = await thread(world, `${tools}#3`);
+        assert.deepEqual([three.body, three.comments, three.earlier], ["", [], false]);
+      });
+
+      test("reads a closed Issue's thread", async () => {
+        const four = await thread(world, `${tools}#4`);
+        assert.deepEqual([four.open, four.body], [false, "Done already."]);
+      });
+
+      test("reads a namespace's own Issue, such as a GitLab group's epic", skipUnless(stage.records.namespaceIssues), async () => {
+        const grouped: World = { ...world, projects: [...world.projects!, { path: "fixture-org", number: 3, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic", body: "Every importer this quarter.", comments: [{ author: "fixture-dev", body: "S3 first.", at: "2026-03-01T09:00:00Z" }] }] }] };
+        const epic = await thread(grouped, "fixture-org#12");
+        assert.deepEqual([epic.title, epic.body, epic.comments.map((c) => c.body)], ["Q3 importer epic", "Every importer this quarter.", ["S3 first."]]);
+      });
+
+      test("says there's no such Issue when it doesn't exist, this login can't read it, or the locator names none", async () => {
+        for (const locator of [`${tools}#99`, `${tools}#9`, "nobody/nothing#1", "not a reference"]) {
+          assert.equal((await (await trackerIn(world)).thread(locator)).kind, "not-found", locator);
+        }
+      });
+
+      test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
+        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
+          assert.equal((await (await trackerIn({ ...world, ...trouble })).thread(`${tools}#1`)).kind, kind, JSON.stringify(trouble));
         }
       });
     });

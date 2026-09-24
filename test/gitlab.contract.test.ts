@@ -5,7 +5,7 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { ChangesAnswer, IssueAnswer, IssuePage, OpenIssue, ProjectResolution } from "../src/tracker/tracker.ts";
+import type { ChangesAnswer, IssueAnswer, IssuePage, OpenIssue, ProjectResolution, ThreadAnswer } from "../src/tracker/tracker.ts";
 import { trackerContract, type ProjectSpec, type World } from "./contract/tracker-contract.ts";
 import { arrange, LATEST } from "./fakes/fake-glab.ts";
 
@@ -194,6 +194,49 @@ describe("GitLab before 16.0: Best effort, read from REST", () => {
     const { links } = said as Extract<typeof said, { kind: "capabilities" }>;
     assert.deepEqual(Object.values(links), Array(3).fill({ kind: "cant-read", reason: "GitLab 13.3.0 is older than 13.4, the oldest the Map reads" }));
   });
+});
+
+describe("GitLab by version: an Issue's body and comments (need 8)", () => {
+  const host = "git.example.com";
+  const tools = "fixture-org/tools";
+  const comments = [
+    { author: "fixture-dev", body: "I can take this.", at: "2026-02-01T10:00:00Z" },
+    { author: "fixture-bot", body: "Reproduced on main.", at: "2026-02-02T10:00:00Z" },
+  ];
+  const world = (version: string): World => ({
+    servers: { [host]: { runs: "this-kind", version } },
+    loggedInTo: [host],
+    projects: [
+      { path: tools, number: 1, open: 2, issues: [{ number: 1, title: "Import state from S3", body: "State lives in S3.", comments }, { number: 2, comments: Array.from({ length: 120 }, (_, i) => ({ author: "fixture-dev", body: `Comment ${i + 1}`, at: new Date(Date.UTC(2026, 1, 1, 0, i)).toISOString() })) }] },
+      { path: "fixture-org", number: 2, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic", body: "Every importer this quarter.", comments: [comments[0]!] }] },
+    ],
+    mentions: [[`${tools}#2`, `${tools}#1`]],
+  });
+
+  async function thread(version: string, locator: string) {
+    const probed = await arrange(world(version)).kind.probe(host);
+    assert.equal(probed.kind, "identified");
+    const answer = await (probed as Extract<typeof probed, { kind: "identified" }>).tracker.thread(locator);
+    assert.equal(answer.kind, "thread", JSON.stringify(answer));
+    return (answer as Extract<ThreadAnswer, { kind: "thread" }>).thread;
+  }
+
+  for (const version of ["13.4.0", "15.11.3", "16.0.0", LATEST]) {
+    test(`${version}: the body and comments, oldest first, without the notes GitLab makes by itself`, async () => {
+      const one = await thread(version, `${tools}#1`);
+      assert.deepEqual([one.ref, one.title, one.open, one.body, one.earlier], [`${tools}#1`, "Import state from S3", true, "State lives in S3.", false]);
+      assert.deepEqual(one.comments.map((c) => [c.author, c.at, c.body]), comments.map((c) => [c.author, c.at, c.body]));
+      const two = await thread(version, `${tools}#2`);
+      assert.deepEqual([two.comments.length, two.comments[0]!.body, two.earlier], [100, "Comment 21", true]);
+    });
+  }
+
+  for (const version of ["17.2.0", LATEST]) {
+    test(`${version}: an epic's body and comments, as a legacy epic before 17.7 and a work item after`, async () => {
+      const epic = await thread(version, "fixture-org&12");
+      assert.deepEqual([epic.title, epic.body, epic.comments.map((c) => c.body)], ["Q3 importer epic", "Every importer this quarter.", ["I can take this."]]);
+    });
+  }
 });
 
 describe("GitLab by version: whether this login can write, and whether a Project records Blocks", () => {
