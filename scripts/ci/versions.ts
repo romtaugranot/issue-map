@@ -5,7 +5,7 @@
  * release GitHub publishes a schema for from the oldest it still supports.
  * A release that lands after a plugin release is in the next run's matrix.
  *
- * `node scripts/ci/versions.ts gitlab`: the GitLab matrix as JSON, from Docker Hub's tags.
+ * `node scripts/ci/versions.ts gitlab [<only>]`: the GitLab matrix as JSON, from Docker Hub's tags; `only` narrows it, as `only` below does.
  * `node scripts/ci/versions.ts ghes`: the promised GHES releases as JSON, from the schemas docs.github.com publishes.
  */
 import { fileURLToPath } from "node:url";
@@ -44,6 +44,22 @@ export function gitlabMatrix(tags: Record<Edition, string[]>, floor: string): Ma
     const [x, y] = [order(a.version), order(b.version)];
     return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.edition.localeCompare(b.edition);
   });
+}
+
+/**
+ * The jobs `wanted` names, a comma-separated list of minors such as
+ * `16.0-ee, 19.4`: one edition, or both where none is given. Nothing
+ * wanted is every job. A name no job has is refused, so a narrowed run
+ * never passes by running nothing.
+ */
+export function only(matrix: MatrixEntry[], wanted: string): MatrixEntry[] {
+  const names = wanted.split(",").map((name) => name.trim()).filter(Boolean);
+  if (names.length === 0) return matrix;
+  const minor = (entry: MatrixEntry) => entry.version.split(".").slice(0, 2).join(".");
+  const matches = (name: string, entry: MatrixEntry) => name === minor(entry) || name === `${minor(entry)}-${entry.edition}`;
+  const unknown = names.filter((name) => !matrix.some((entry) => matches(name, entry)));
+  if (unknown.length > 0) throw new Error(`no promised GitLab job is ${unknown.join(", ")}`);
+  return matrix.filter((entry) => names.some((name) => matches(name, entry)));
 }
 
 /**
@@ -95,14 +111,14 @@ async function dockerTags(edition: Edition, floor: string): Promise<string[]> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [what] = process.argv.slice(2);
+  const [what, wanted = ""] = process.argv.slice(2);
   if (what === "gitlab") {
     const [ce, ee] = await Promise.all([dockerTags("ce", TESTED_FROM), dockerTags("ee", TESTED_FROM)]);
-    console.log(JSON.stringify(gitlabMatrix({ ce, ee }, TESTED_FROM)));
+    console.log(JSON.stringify(only(gitlabMatrix({ ce, ee }, TESTED_FROM), wanted)));
   } else if (what === "ghes") {
     console.log(JSON.stringify(await ghesReleases(OLDEST_SUPPORTED_GHES, publishedOnDocs)));
   } else {
-    console.error("usage: node scripts/ci/versions.ts gitlab | ghes");
+    console.error("usage: node scripts/ci/versions.ts gitlab [<only>] | ghes");
     process.exitCode = 2;
   }
 }

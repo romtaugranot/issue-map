@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ghesReleases, gitlabMatrix } from "../scripts/ci/versions.ts";
+import { ghesReleases, gitlabMatrix, only } from "../scripts/ci/versions.ts";
 
 test("every promised GitLab minor from the floor, at its latest patch, as CE and EE", () => {
   const tags = {
@@ -24,6 +24,17 @@ test("a release that lands after the plugin's is in the matrix the next time it'
 
 test("a minor published in one edition only runs in that edition", () => {
   assert.deepEqual(gitlabMatrix({ ce: ["17.3.0-ce.0"], ee: [] }, "16.0").map((e) => e.edition), ["ce"]);
+});
+
+test("a run can be narrowed to some minors, in one edition or both", () => {
+  const matrix = gitlabMatrix({ ce: ["16.0.10-ce.0", "17.3.1-ce.0", "19.4.1-ce.0"], ee: ["16.0.10-ee.0", "17.3.1-ee.0", "19.4.1-ee.0"] }, "16.0");
+  assert.deepEqual(only(matrix, "16.0-ee, 19.4").map((e) => `${e.version} ${e.edition}`), ["16.0.10 ee", "19.4.1 ce", "19.4.1 ee"]);
+  assert.equal(only(matrix, "").length, 6, "no narrowing runs every job");
+});
+
+test("narrowing to a minor that isn't promised is refused rather than running nothing", () => {
+  const matrix = gitlabMatrix({ ce: ["16.0.10-ce.0"], ee: ["16.0.10-ee.0"] }, "16.0");
+  assert.throws(() => only(matrix, "15.11-ee"), /15\.11-ee/);
 });
 
 test("the promised GHES releases run from the oldest GitHub supports to the newest with a published schema", async () => {

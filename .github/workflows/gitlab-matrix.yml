@@ -17,6 +17,11 @@ on:
   schedule:
     - cron: "41 2 * * 0"
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Only these minors, such as 16.0-ee, 19.4 (both editions); empty runs every promised one"
+        required: false
+        default: ""
   workflow_call:
 
 permissions:
@@ -37,7 +42,12 @@ jobs:
         with:
           node-version: 24
       - id: versions
-        run: echo "matrix=$(node scripts/ci/versions.ts gitlab)" >> "$GITHUB_OUTPUT"
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          matrix=$(node scripts/ci/versions.ts gitlab "$ONLY")
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   gitlab:
     needs: versions
@@ -97,6 +107,26 @@ jobs:
             token.set_token(ENV["TOKEN"])
             token.save!'
           echo "GITLAB_TOKEN=$token" >> "$GITHUB_ENV"
+      # The schema recorded from each version's EE is what licensed tiers the build can't run are checked against (ADR 0004); it's recorded before seeding, so a seeding failure doesn't lose it.
+      - name: Record the GraphQL schema
+        if: matrix.edition == 'ee'
+        run: |
+          node --input-type=module -e '
+            import { getIntrospectionQuery } from "graphql";
+            import { writeFileSync } from "node:fs";
+            const response = await fetch("https://gitlab.test/api/graphql", {
+              method: "POST",
+              headers: { "content-type": "application/json", "private-token": process.env.GITLAB_TOKEN },
+              body: JSON.stringify({ query: getIntrospectionQuery() }),
+            });
+            const text = await response.text();
+            if (!JSON.parse(text).data?.__schema) throw new Error(`no schema in the answer: ${text.slice(0, 500)}`);
+            writeFileSync("schema.json", text);'
+      - if: matrix.edition == 'ee'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gitlab-${{ matrix.version }}-ee-schema
+          path: schema.json
       - name: Apply a test licence
         if: matrix.edition == 'ee' && vars.GITLAB_LICENCE_AGREED == 'true'
         env:
@@ -113,24 +143,6 @@ jobs:
           ISSUE_MAP_LIVE: ${{ (matrix.edition == 'ee' && vars.GITLAB_LICENCE_AGREED == 'true') && 'gitlab-free,gitlab-oss' || 'gitlab-free' }}
           ISSUE_MAP_LIVE_GITLAB_HOST: gitlab.test
         run: npm run test:live
-      # The schema recorded from each version's EE is what licensed tiers the build can't run are checked against (ADR 0004).
-      - name: Record the GraphQL schema
-        if: matrix.edition == 'ee'
-        run: |
-          node --input-type=module -e '
-            import { getIntrospectionQuery } from "graphql";
-            import { writeFileSync } from "node:fs";
-            const response = await fetch("https://gitlab.test/api/graphql", {
-              method: "POST",
-              headers: { "content-type": "application/json", "private-token": process.env.GITLAB_TOKEN },
-              body: JSON.stringify({ query: getIntrospectionQuery() }),
-            });
-            writeFileSync("schema.json", await response.text());'
-      - if: matrix.edition == 'ee'
-        uses: actions/upload-artifact@v7
-        with:
-          name: gitlab-${{ matrix.version }}-ee-schema
-          path: schema.json
       - if: failure()
         run: docker logs --tail 300 gitlab
 
