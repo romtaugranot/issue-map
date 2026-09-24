@@ -118,6 +118,28 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     assert.match(map, /^⚠ read 3h ago — couldn't refresh it: couldn't reach github.com\n\*\*fixture-org\/tools\*\* · 150 open/);
   });
 
+  test("offline, with no Tracker to say who the viewer is, the login the CLI holds draws its old Snapshot", async () => {
+    const { store, tracker, later } = await readStore();
+    later(3 * 3_600_000);
+    const offline: Tracker = {
+      ...tracker,
+      viewer: async () => ({ kind: "cant-tell", reason: "couldn't reach github.com", login: "fixture-viewer" }),
+      changes: async () => ({ kind: "cant-tell", reason: "couldn't reach github.com" }),
+    };
+    const map = await showMap(deps(store), offline, project, { kind: "overview" });
+    assert.match(map, /^⚠ read 3h ago — couldn't refresh it: couldn't reach github.com\n\*\*fixture-org\/tools\*\* · 150 open/);
+    const someoneElse = { ...offline, viewer: async () => ({ kind: "cant-tell", reason: "couldn't reach github.com", login: "someone-else" }) as const };
+    assert.doesNotMatch(await showMap({ ...deps(store), startRead: () => {} }, someoneElse, project, { kind: "overview" }), /150 open · 2 on the Map/, "never another login's");
+  });
+
+  test("a login the Tracker refuses outright has its Snapshot deleted too", async () => {
+    const { store, tracker } = await readStore();
+    const refused = { ...tracker, viewer: async () => ({ kind: "refused", reason: "github.com refused this login: Bad credentials", login: "fixture-viewer" }) as const };
+    const text = await showMap(deps(store), refused, project, { kind: "overview" });
+    assert.equal(text, "No Map of github.com/fixture-org/tools: GitHub refused: github.com refused this login: Bad credentials. What was kept of it is deleted.");
+    assert.notEqual((await store.state(key)).kind, "ready");
+  });
+
   test("once the Tracker refuses the login, no Map is drawn and its Snapshot is deleted", async () => {
     const { store, tracker, later } = await readStore();
     later(3 * 60_000);

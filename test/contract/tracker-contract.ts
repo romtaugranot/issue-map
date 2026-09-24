@@ -311,6 +311,18 @@ export function readContract(stage: Stage): void {
       test("can't tell when the Tracker can't be reached", async () => {
         assert.equal((await (await trackerIn({ network: "down" })).viewer()).kind, "cant-tell");
       });
+
+      test("when the Tracker can't be reached or refuses the login, still names the login the CLI holds, read without the network", async () => {
+        for (const [trouble, kind] of [[{ network: "down" }, "cant-tell"], [{ rateLimited: true }, "cant-tell"], [{ login: "refused" }, "refused"]] as const) {
+          const { kind: trackerKind, requests } = stage.arrange({ viewer: "fixture-bot", ...trouble });
+          const tracker = await trackerKind.recognise(wellKnownHost);
+          const answer = await tracker!.viewer();
+          assert.deepEqual([answer.kind, answer.kind !== "viewer" && answer.login], [kind, "fixture-bot"], JSON.stringify(trouble));
+          assert.equal(requests(), 1, "only the one request that failed left the machine");
+        }
+        const none = await (await trackerIn({ login: "none" })).viewer();
+        assert.equal(none.kind !== "viewer" && none.login, undefined, "no login held, none named");
+      });
     });
 
     describe("needs 3, 4 and 7: list open Issues with their Links and Closing Requests", () => {

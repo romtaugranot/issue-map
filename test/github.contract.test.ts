@@ -17,8 +17,11 @@ trackerContract({
       cli: async (command, args) => {
         if (command !== "gh" || (world.cli ?? "installed") === "missing") return { kind: "missing" };
         if (args[0] === "auth") {
+          // Read from gh's own config, without the network: the login held for each host.
           const hosts = [...(world.login === "none" ? [] : ["github.com"]), ...(world.loggedInTo ?? [])];
-          return exited(0, JSON.stringify({ hosts: Object.fromEntries(hosts.map((h) => [h, []])) }));
+          const held = (host: string) => [{ state: world.login === "refused" ? "error" : "success", active: true, host, login: world.viewer ?? "fixture-viewer" }];
+          const asked = args.includes("--hostname") ? args[args.indexOf("--hostname") + 1]! : null;
+          return exited(0, JSON.stringify({ hosts: Object.fromEntries(hosts.filter((h) => asked === null || h === asked).map((h) => [h, held(h)])) }));
         }
         requests++;
         loginsSentTo.push(args[args.indexOf("--hostname") + 1]!);

@@ -74,6 +74,8 @@ export interface SnapshotStore {
   refresh(key: SnapshotKey, tracker: Tracker, project: Project): Promise<RefreshOutcome>;
   /** The Snapshot to draw: refreshed first when it's more than two minutes old, or, when it can't be, as it is and why. */
   forDraw(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ForDraw>;
+  /** Deletes what's kept for a login the Tracker refused, keeping only why. */
+  forget(key: SnapshotKey, reason: string): Promise<Refused>;
 }
 
 /** How long a Snapshot is fresh; a draw refreshes one older than this first (ADR 0006). */
@@ -226,6 +228,12 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       const after = await this.state(key);
       if (outcome.kind === "done" || after.kind !== "ready") return after;
       return { ...after, stale: outcome.kind === "failed" ? outcome.reason : "another refresh of it is running" };
+    },
+
+    async forget(key, reason) {
+      const at = paths(key);
+      await mkdir(at.dir, { recursive: true, mode: 0o700 });
+      return forget(at, 0, reason);
     },
   };
 }
