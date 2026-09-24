@@ -186,9 +186,13 @@ export function githubSeeding(cli: Cli, host: string): Seeding {
   };
 }
 
-/** How long a GitLab gets to work out which Issues a merge request it opened closes, which it does in the background. */
-const CLOSING_TRIES = 60;
-const CLOSING_EVERY_MS = 2000;
+/**
+ * How long a GitLab gets to do what it does in the background: work out
+ * which Issues a merge request it opened closes, and let its GraphQL find a
+ * Project its REST just made.
+ */
+const TRIES = 60;
+const EVERY_MS = 2000;
 
 /**
  * Seeding on a GitLab, through `glab api`: REST for Projects and Issues, the
@@ -219,6 +223,13 @@ export function gitlabSeeding(cli: Cli, host: string, wait: (ms: number) => Prom
     if (!created.workItem) fail(`GitLab didn't make ${title(issue)} in ${path}: ${created.errors.join("; ")}`);
     return held(created.workItem);
   };
+  /** Resolves once `done` does, asking every `EVERY_MS`; `failure` stops the seeding if it never does. */
+  const until = async (done: () => Promise<boolean>, failure: string): Promise<void> => {
+    for (let tries = 1; !(await done()); tries++) {
+      if (tries === TRIES) fail(failure);
+      await wait(EVERY_MS);
+    }
+  };
 
   return {
     async namespace(path, create) {
@@ -232,6 +243,8 @@ export function gitlabSeeding(cli: Cli, host: string, wait: (ms: number) => Prom
       const [group, name] = [path.slice(0, path.lastIndexOf("/")), path.slice(path.lastIndexOf("/") + 1)];
       const { id } = ((await api([`groups/${encode(group)}`])) as { id: number } | null) ?? fail(`${group} isn't there`);
       await api(["projects", "--method", "POST", "-f", `name=${name}`, "-f", `path=${name}`, "-F", `namespace_id=${id}`, "-f", "visibility=public", "-F", "initialize_with_readme=true"]);
+      const found = async () => (await graphql(`query($path: ID!) { project(fullPath: $path) { id } }`, { path })).project != null;
+      await until(found, `GitLab never found ${path} in its GraphQL, though it made it`);
     },
     async issues({ path, namespace }) {
       const container = namespace ? "group" : "project";
@@ -287,12 +300,9 @@ export function gitlabSeeding(cli: Cli, host: string, wait: (ms: number) => Prom
       const [, iid] = split(issue.ref);
       const request = (await api([`${project}/merge_requests`, "--method", "POST", "-f", `source_branch=${branch}`, "-f", `target_branch=${base}`, "-f", `title=Fixture: closes ${key}`, "-f", `description=Closes #${iid}`])) as { iid: number };
       // Until GitLab has worked out what it closes, a read would find no Closing Request.
-      for (let tries = 1; ; tries++) {
-        const closes = (await api([`${project}/merge_requests/${request.iid}/closes_issues`])) as { iid: number }[] | null;
-        if (closes?.some((closed) => String(closed.iid) === iid)) return true;
-        if (tries === CLOSING_TRIES) fail(`GitLab never said ${path}!${request.iid} closes ${issue.ref}`);
-        await wait(CLOSING_EVERY_MS);
-      }
+      const closes = async () => ((await api([`${project}/merge_requests/${request.iid}/closes_issues`])) as { iid: number }[] | null)?.some((closed) => String(closed.iid) === iid) ?? false;
+      await until(closes, `GitLab never said ${path}!${request.iid} closes ${issue.ref}`);
+      return true;
     },
   };
 }

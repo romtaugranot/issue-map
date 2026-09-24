@@ -267,6 +267,28 @@ describe("seeding GitLab through glab", () => {
     assert.deepEqual(calls, ["POST projects/g%2Fmap/issues/2/notes -f body=/duplicate g/map#1", "PUT projects/g%2Fmap/issues/1 -f state_event=close"]);
   });
 
+  test("a Project it makes is done only once GitLab's GraphQL finds it, which lags its REST", async () => {
+    let asked = 0;
+    const { cli, calls } = scripted([
+      [/^GET groups\/g$/, () => ({ id: 5 })],
+      [/^POST projects$/, () => ({ id: 9 })],
+      [/^GET graphql$/, () => ({ data: { project: ++asked < 3 ? null : { id: "gid://gitlab/Project/9" } } })],
+    ]);
+    const waits: number[] = [];
+    await gitlabSeeding(cli, "gitlab.com", async (ms) => void waits.push(ms)).project("g/elsewhere");
+    assert.equal(calls.filter((c) => c.startsWith("GET graphql")).length, 3);
+    assert.equal(waits.length, 2);
+  });
+
+  test("a Project GitLab's GraphQL never finds stops the seeding", async () => {
+    const { cli } = scripted([
+      [/^GET groups\/g$/, () => ({ id: 5 })],
+      [/^POST projects$/, () => ({ id: 9 })],
+      [/^GET graphql$/, () => ({ data: { project: null } })],
+    ]);
+    await assert.rejects(gitlabSeeding(cli, "gitlab.com", async () => {}).project("g/elsewhere"), /GitLab never found g\/elsewhere/);
+  });
+
   test("a group is made only when it may be, as on the version matrix's own GitLab", async () => {
     const { cli, calls } = scripted([[/^POST groups$/, () => ({ id: 1 })]]);
     const seeding = gitlabSeeding(cli, "gitlab.test");

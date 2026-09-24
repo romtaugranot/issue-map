@@ -67,7 +67,7 @@ ISSUE_MAP_LIVE=github,gitlab-free,gitlab-oss npm run test:live
 
 The `issue-map-fixtures-oss` group is where the Map's licensed-tier reads are tested live: Blocks Links, epics as Parents, and the Link kinds a Premium or Ultimate Project records. Until GitLab licenses it, the `gitlab-oss` Fixture can't be seeded and isn't read nightly, and licensed tiers are stood in for only by the contract suite's recorded responses.
 
-GitLab's programme asks for a public project under an OSI-approved licence. This repository is private and has no licence yet, so both come first.
+GitLab's programme asks for a public project under an OSI-approved licence. This repository is private and has no licence yet, so both come first. Its application form, tried on 2026-09-24, refuses a group without a public project, so `issue-map-fixtures-oss` needs one too.
 
 When the outcome is known, record it here:
 
