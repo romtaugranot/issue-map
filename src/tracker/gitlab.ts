@@ -72,6 +72,12 @@ const SINCE = {
    * answered since 16.7.
    */
   duplicatedTo: "17.8",
+  /**
+   * The linked-items widget, on by default. REST's Issue Links don't know a
+   * task, so before `duplicatedTo` a task's Blocks and Related Links come
+   * from it; before it, GitLab can't link a task at all.
+   */
+  linkedItems: "16.7",
   /** The role this login has in a Project, however it came by it; before it, REST, which misses a role through a shared group. */
   maxAccessLevel: "16.9",
   forkedFrom: "18.0",
@@ -289,7 +295,7 @@ function endFragment(ctx: Ctx): string {
 
 /** What the Map reads of every work item, with the widgets this version has. */
 function itemFragment(ctx: Ctx, extra = ""): string {
-  const linked = ctx.has.duplicatedTo ? `... on WorkItemWidgetLinkedItems { linkedItems(first: 100) { nodes { linkType workItem { ...end } } } }` : "";
+  const linked = ctx.has.linkedItems ? `... on WorkItemWidgetLinkedItems { linkedItems(first: 100) { nodes { linkType workItem { ...end } } } }` : "";
   const closing = ctx.has.closingMergeRequests
     ? `... on WorkItemWidgetDevelopment { closingMergeRequests(first: 10) { nodes { mergeRequest { reference(full: true) webUrl draft state author { username } } } } }`
     : "";
@@ -981,6 +987,13 @@ async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nod
     for (const node of nodes) {
       const epic = epics.get(node.iid);
       if (epic && !widgetsOf(node).parent) node.widgets.push({ parent: epic });
+    }
+  }
+  if (!ctx.has.duplicatedTo) {
+    for (const node of nodes) {
+      // An ordinary Issue's Links come from REST, which tells a Related Link `/duplicate` made from any other; a task's can't.
+      if (node.workItemType.name !== "Task") node.widgets = node.widgets.filter((widget) => !("linkedItems" in widget));
+      else if (!widgetsOf(node).linkedItems) node.widgets.push({ linkedItems: { nodes: [] } });
     }
   }
   const unlinked = nodes.filter((node) => !widgetsOf(node).linkedItems);
