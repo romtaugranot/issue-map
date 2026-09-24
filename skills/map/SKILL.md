@@ -1,6 +1,6 @@
 ---
 name: map
-description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; or to move to another Project, `go`, `back` or `home`.
+description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; to move to another Project, `go`, `back` or `home`; or to set up the Map's status line.
 ---
 
 # The Map
@@ -16,6 +16,7 @@ The Map opens on the checkout's **Home Project**, and every command acts on the 
 - **Link Suggestions**: `issue-map suggest`, then `issue-map offer` and `issue-map confirm` — see **Link Suggestions**.
 - **The Unlinked Issues**, 15 a page, newest first: `issue-map unlinked`, and `issue-map unlinked --page <n>` when the user says `more` or asks for a page.
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
+- **The status line**: `issue-map statusline --setup` — see **The status line**.
 
 Reprint the output in your reply exactly as printed: tool output isn't reliably shown to the user, and the Map is already cut to fit one screen. Don't summarise it, reorder it or add Issues to it.
 
@@ -91,6 +92,12 @@ The user moves by typing a target, or with `go`, `back` and `home` — in the pr
 - To say **which Project is home**: away from it, the overview's `⌂ Home:` line names it; at home, it's the Project on screen.
 
 A move that can't open says why and leaves the user where they were; reprint that and ask nothing. Moving never changes the Home Project or what is kept warm for it. Away from home, everything works the same, on that Project's own band and login.
+
+## The status line
+
+When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and reprint what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing.
+
+The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
 
 ## Choices
 

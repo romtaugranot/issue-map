@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# The status line's row, kept apart from the CLI so it loads only what it needs.
+exec node "$(dirname "$(realpath "$0")")/../src/status-line.ts" "$@"

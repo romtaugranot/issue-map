@@ -16,14 +16,13 @@
  * `issue-map go [<target>] [--dir <path>]... [--pick-there <URL>]`: moves to a Project's or an Issue's URL, an `owner/repo[#n]` or a local path; on its own, offers nearby Projects, the added directories `--dir` names among them.
  * `issue-map back`: back one step along this session's trail.
  * `issue-map home`: returns to the Home Project's overview, and on it offers to re-pick it.
+ * `issue-map statusline [--setup]`: the status line's row for this checkout; with `--setup`, installs the status line in the user's Claude Code settings, wrapping theirs.
  * `issue-map read --host <host> --path <path>`: a full read of a Project, run detached by `map` and the refresher.
  * `issue-map refresher --host <host> --path <path> --login <login>`: keeps the Home Project's Snapshot warm, run detached by `map`.
  */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { mkdirSync, openSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -34,9 +33,13 @@ import { gitlab } from "./tracker/gitlab.ts";
 import { trackers, type Project, type Tracker, type Trackers } from "./tracker/tracker.ts";
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
 import { readdir, stat, unlink } from "node:fs/promises";
-import { resolveHome, type HomeAnswer, type LastHome } from "./home/home.ts";
+import { resolveHome, type HomeAnswer } from "./home/home.ts";
+import { lastHomeOf, readJson, stateDir, writeJson } from "./state.ts";
 import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
+import { statusRow } from "./map/status.ts";
+import { statusLine } from "./status/line.ts";
+import { installStatusLine, userSettings } from "./status/install.ts";
 import { showCard, showMap } from "./map/show.ts";
 import { assignToViewer } from "./map/assign.ts";
 import { startWork } from "./map/start.ts";
@@ -45,7 +48,7 @@ import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home — each takes [--pick <URL>]";
+  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup] — each takes [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -59,6 +62,7 @@ async function main(argv: string[]): Promise<number> {
       login: { type: "string" },
       dir: { type: "string", multiple: true },
       "pick-there": { type: "string" },
+      setup: { type: "boolean" },
     },
   });
   const [verb, ...rest] = positionals;
@@ -78,6 +82,14 @@ async function main(argv: string[]): Promise<number> {
     case "refresher":
       if (!values.host || !values.path || !values.login) return usage();
       return refresher(known, values.host, values.path, values.login);
+    case "statusline":
+      if (values.setup) {
+        console.log(await installStatusLine(userSettings(), fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url))));
+      } else {
+        const row = await statusLine({ checkoutRoot, lastHome: (root) => lastHomeOf(root).get(), store: openStore() }, process.cwd());
+        console.log(row || "No status line row: this isn't inside a git checkout.");
+      }
+      return 0;
     case "group":
       if (!opening) return usage();
       break;
@@ -204,8 +216,9 @@ async function connect(known: Trackers, host: string, path: string): Promise<{ t
   return resolved.kind === "project" ? { tracker: identified.tracker, project: resolved.project } : null;
 }
 
+/** Every Snapshot saved keeps the status line's row beside it. */
 function openStore() {
-  return snapshotStore(stateDir(), { now: Date.now });
+  return snapshotStore(stateDir(), { now: Date.now }, { summarise: statusRow });
 }
 
 /** Runs this CLI again in a process of its own that outlives this one; what it prints goes to a log beside the Snapshots. */
@@ -283,36 +296,6 @@ function recents(): Recents {
   const dir = stateDir();
   const path = join(dir, "recent.json");
   return { get: async () => readJson<Recent[]>(path, []), set: (recent) => writeJson(dir, path, recent) };
-}
-
-async function readJson<T>(path: string, none: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(path, "utf8")) as T;
-  } catch {
-    return none;
-  }
-}
-
-/** Readable only by this OS user. */
-async function writeJson(dir: string, path: string, value: unknown): Promise<void> {
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  await writeFile(path, JSON.stringify(value), { mode: 0o600 });
-}
-
-/** The Home Project last resolved for the checkout at `root`, kept beside the Snapshots, readable only by this OS user. */
-function lastHomeOf(root: string): LastHome {
-  const dir = join(stateDir(), "homes");
-  const path = join(dir, `${createHash("sha256").update(root).digest("hex")}.json`);
-  return {
-    get: () => readJson<Project | undefined>(path, undefined),
-    set: (project) => writeJson(dir, path, project),
-  };
-}
-
-/** Where Snapshots are kept: `ISSUE_MAP_STATE_DIR`, or the XDG state directory. */
-function stateDir(): string {
-  const env = process.env;
-  return env.ISSUE_MAP_STATE_DIR ?? join(env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "issue-map");
 }
 
 function usage(): number {

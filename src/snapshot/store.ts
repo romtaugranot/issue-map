@@ -7,9 +7,10 @@
  * A Snapshot is read in full again when a refresh couldn't prove it caught
  * up, and otherwise weekly; that read runs beside refreshes of the Snapshot
  * it replaces, which is drawn meanwhile. One refresher at a time may claim a
- * Snapshot to keep it warm.
+ * Snapshot to keep it warm. Beside each Snapshot it keeps a line summing it
+ * up, for the status line, which has no time to read a large Snapshot.
  */
-import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -78,6 +79,21 @@ export type ForDraw =
     }
   | Refused;
 
+/**
+ * What the status line glances at: the line kept beside the Snapshot of the
+ * login whose refresher keeps the Project warm, with the Snapshot's age; or,
+ * before there is one, how far that login's first read has got.
+ */
+export type Glance =
+  | { kind: "none" }
+  | { kind: "reading"; read: number; total: number }
+  | { kind: "ready"; line: string; ageMs: number };
+
+export interface StoreOptions {
+  /** The line kept beside a Snapshot whenever it's saved; without it, none is kept. */
+  summarise?(snapshot: Snapshot): string;
+}
+
 export interface SnapshotStore {
   state(key: SnapshotKey): Promise<SnapshotState>;
   /** Reads the Project in full, resuming an interrupted read; leaves it to another read already running. */
@@ -110,6 +126,20 @@ export interface SnapshotStore {
   claimRefresher(key: SnapshotKey): Promise<{ renew(): Promise<void>; release(): Promise<void> } | null>;
   /** Whether a live process is keeping it warm. */
   refresherRunning(key: SnapshotKey): Promise<boolean>;
+  /**
+   * What the status line shows of the Project `project` names by identity on
+   * the Tracker at `tracker`, without reading a Snapshot or the Tracker. The
+   * login is the one whose refresher keeps it warm: a refresher stops once
+   * the CLI holds another login, so no other login is shown it (ADR 0006).
+   */
+  glance(tracker: string, project: string): Promise<Glance>;
+}
+
+/** The line kept beside a Snapshot, as it was when the Snapshot was saved. */
+interface Summary {
+  format: typeof SNAPSHOT_FORMAT;
+  readAt: string;
+  line: string;
 }
 
 /** How long a Snapshot is fresh; a draw refreshes one older than this first (ADR 0006). */
@@ -120,6 +150,8 @@ const FULL_READ_EVERY_MS = 7 * 86_400_000;
 const MARGIN_MS = 60_000;
 /** How long a refresher's claim lasts unrenewed; it renews it every round. */
 const CLAIM_LAPSES_MS = 10 * 60_000;
+/** How the refresher's claim on a login's Snapshot is named, after the login. */
+const REFRESHER_LOCK = ".refresher.lock";
 /** How often a full read that's done looks again for a refresh to finish before putting its Snapshot in place. */
 const LOCK_POLL_MS = 50;
 
@@ -144,13 +176,15 @@ interface Progress {
   attempt?: string;
 }
 
-export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
+export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOptions = {}): SnapshotStore {
+  const projectDir = (tracker: string, project: string) => join(dir, "snapshots", safe(tracker), safe(project));
   const paths = (key: SnapshotKey) => {
-    const base = join(dir, "snapshots", safe(key.tracker), safe(key.project), safe(key.login));
+    const base = join(projectDir(key.tracker, key.project), safe(key.login));
     const reading = `${base}.reading`;
     return {
-      dir: join(dir, "snapshots", safe(key.tracker), safe(key.project)),
+      dir: projectDir(key.tracker, key.project),
       snapshot: `${base}.json`,
+      summary: `${base}.summary.json`,
       reading,
       progress: join(reading, "progress.json"),
       page: (n: number) => join(reading, `page-${n}.json`),
@@ -159,8 +193,15 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       /** Held by a full read throughout, so it runs beside refreshes of the Snapshot it replaces. */
       readLock: `${reading}.lock`,
       /** Held by the refresher for as long as it runs. */
-      refresherLock: `${base}.refresher.lock`,
+      refresherLock: `${base}${REFRESHER_LOCK}`,
     };
+  };
+
+  /** Saves the Snapshot, and the line summing it up beside it. */
+  const keep = async (at: { snapshot: string; summary: string }, snapshot: Snapshot) => {
+    await save(at.snapshot, snapshot);
+    if (!summarise) return rm(at.summary, { force: true });
+    await save(at.summary, { format: SNAPSHOT_FORMAT, readAt: snapshot.readAt, line: summarise(snapshot) } satisfies Summary);
   };
 
   /** Whether a live refresher holds the claim at `path` and renewed it lately. */
@@ -282,7 +323,7 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
         // A refresh of the Snapshot this replaces may be running; its changes are read again from `changesSince`.
         const replaced = await locked(at.lock, async () => {
           const deleted = await forgotten(at, attempt);
-          if (!deleted) await save(at.snapshot, snapshot);
+          if (!deleted) await keep(at, snapshot);
           return deleted;
         });
         if (replaced) return replaced;
@@ -313,7 +354,7 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           changesSince: new Date(started - MARGIN_MS).toISOString(),
           caughtUp: snapshot.caughtUp && changes.caughtUp,
         };
-        await save(at.snapshot, refreshed);
+        await keep(at, refreshed);
         return { kind: "done", caughtUp: refreshed.caughtUp };
       } finally {
         await rm(at.lock, { force: true });
@@ -336,7 +377,7 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       await locked(at.lock, async () => {
         const snapshot = current(await readJson<Snapshot>(at.snapshot));
         if (!snapshot?.issues.some((held) => held.id === issue)) return;
-        await save(at.snapshot, { ...snapshot, issues: snapshot.issues.map((held) => (held.id === issue ? { ...held, assignees } : held)) });
+        await keep(at, { ...snapshot, issues: snapshot.issues.map((held) => (held.id === issue ? { ...held, assignees } : held)) });
       });
     },
 
@@ -350,7 +391,7 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           const more = ends.filter((end) => end.issue === held.id && !held.links.some((l) => l.role === end.link.role && l.to.id === end.link.to.id));
           return more.length > 0 ? { ...held, links: [...held.links, ...more.map((end) => end.link)] } : held;
         });
-        await save(at.snapshot, { ...snapshot, issues });
+        await keep(at, { ...snapshot, issues });
       });
     },
 
@@ -372,6 +413,23 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
 
     async refresherRunning(key) {
       return renewed(paths(key).refresherLock);
+    },
+
+    async glance(tracker, project) {
+      const claimed = (await readdir(projectDir(tracker, project)).catch(() => [])).filter((name) => name.endsWith(REFRESHER_LOCK));
+      let warm: { login: string; renewedAt: number } | null = null;
+      for (const name of claimed) {
+        const path = join(projectDir(tracker, project), name);
+        const renewedAt = (await readJson<{ renewedAt?: number }>(path))?.renewedAt ?? 0;
+        if ((!warm || renewedAt > warm.renewedAt) && (await renewed(path))) warm = { login: decodeURIComponent(name.slice(0, -REFRESHER_LOCK.length)), renewedAt };
+      }
+      if (!warm) return { kind: "none" };
+      const at = paths({ tracker, project, login: warm.login });
+      const summary = current(await readJson<Summary>(at.summary));
+      if (summary) return { kind: "ready", line: summary.line, ageMs: clock.now() - Date.parse(summary.readAt) };
+      const progress = current(await readJson<Progress>(at.progress));
+      if (progress && (await held(at.readLock))) return { kind: "reading", read: progress.read, total: progress.total };
+      return { kind: "none" };
     },
   };
 }
@@ -422,7 +480,7 @@ function applied(snapshot: Snapshot, { open, ends, requests }: Extract<ChangesAn
   return [...kept.values(), ...open].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
-type Paths = { snapshot: string; reading: string; progress: string };
+type Paths = { snapshot: string; summary: string; reading: string; progress: string };
 
 /**
  * Deletes the Snapshot and every page read towards one, keeping only why,
@@ -430,6 +488,7 @@ type Paths = { snapshot: string; reading: string; progress: string };
  */
 async function forget(at: Paths, total: number, reason: string): Promise<Refused> {
   await rm(at.snapshot, { force: true });
+  await rm(at.summary, { force: true });
   await rm(at.reading, { recursive: true, force: true });
   await mkdir(at.reading, { recursive: true, mode: 0o700 });
   const empty: Progress = { format: SNAPSHOT_FORMAT, pages: 0, read: 0, after: null, total, startedAt: 0, spentMs: 0, unread: {} };
