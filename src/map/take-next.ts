@@ -4,7 +4,7 @@
  * Snapshot gives the same list.
  */
 import type { Snapshot } from "../snapshot/snapshot.ts";
-import type { Link, OpenIssue } from "../tracker/tracker.ts";
+import type { Link, OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { isOpen, oldestFirst, type Layout } from "./links.ts";
 
 /** How many open Issues wait on an Issue, as Take next counts them. */
@@ -22,6 +22,8 @@ export interface Pick {
   waiting: Waiting;
   /** Assigned to the viewer, or the viewer wrote one of its open Closing Requests. */
   yours: boolean;
+  /** The closed Issues that Blocked it, the last to close first; a closed blocker still unblocks. */
+  closedBlockers: ReadableEnd[];
 }
 
 export type TakeNext =
@@ -37,7 +39,7 @@ export type TakeNext =
       closingRequestsUnread: string | null;
     };
 
-export function takeNext(snapshot: Snapshot, { onMap }: Layout): TakeNext {
+export function takeNext(snapshot: Snapshot, { unlinked }: Layout): TakeNext {
   if (snapshot.unread.blocks !== undefined) return { kind: "blocks-unread", reason: snapshot.unread.blocks };
   const own = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
   /** Blocks Links between open Issues, from the Issue that Blocks to the Issues it Blocks. */
@@ -70,7 +72,11 @@ export function takeNext(snapshot: Snapshot, { onMap }: Layout): TakeNext {
   const yours = (issue: OpenIssue) =>
     issue.assignees.includes(viewer) || issue.closingRequests.some((request) => request.author === viewer);
 
-  const unblocked = new Set(onMap.filter((issue) => !linked(issue, "blocker", () => true)));
+  // An Issue no open Issue Blocks is Unblocked when it has a Link to another open Issue, or when a closed Issue Blocks it; an Unlinked Issue with neither isn't.
+  const isUnlinked = new Set(unlinked);
+  const unblocked = new Set(
+    snapshot.issues.filter((issue) => !linked(issue, "blocker", () => true) && (!isUnlinked.has(issue) || closedBlockers(issue).length > 0)),
+  );
   /** The Parent's own open children that could stand in for it: not in another Project, and not Task-level. */
   const hasStandIns = (issue: OpenIssue) => linked(issue, "child", (id) => own.get(id)?.taskLevel === false);
   /** A Task-level child is a step inside its Parent, never an Issue to take on its own. */
@@ -102,7 +108,7 @@ export function takeNext(snapshot: Snapshot, { onMap }: Layout): TakeNext {
   const candidates = [...unblocked].filter((issue) => !hasStandIns(issue) && !insideParent(issue));
   const free = candidates.filter((issue) => !takenByOthers(issue));
   const picks = free
-    .map((issue) => ({ issue, waiting: waitingFor(issue), yours: yours(issue) }))
+    .map((issue) => ({ issue, waiting: waitingFor(issue), yours: yours(issue), closedBlockers: closedBlockers(issue) }))
     .sort((a, b) => b.waiting.count - a.waiting.count || earliestPlanned(a.issue, b.issue) || oldestFirst(a.issue, b.issue));
   return { kind: "list", picks, takenByOthers: candidates.length - free.length, closingRequestsUnread: snapshot.unread.closingRequests ?? null };
 }
@@ -110,6 +116,12 @@ export function takeNext(snapshot: Snapshot, { onMap }: Layout): TakeNext {
 /** Whether the Issue has a Link of this role to an open Issue whose identity passes `test`. */
 function linked(issue: OpenIssue, role: Link["role"], test: (id: string) => boolean): boolean {
   return issue.links.some((link) => link.role === role && isOpen(link.to) && test(link.to.id));
+}
+
+/** The closed Issues that Block it, the last to close first; one the read gave no date for comes before them all, since it may have closed last. */
+export function closedBlockers(issue: OpenIssue): ReadableEnd[] {
+  const closed = issue.links.flatMap(({ role, to }) => (role === "blocker" && to.readable && !to.open ? [to] : []));
+  return closed.sort((a, b) => (a.closedAt === undefined ? -1 : 0) - (b.closedAt === undefined ? -1 : 0) || (b.closedAt ?? "").localeCompare(a.closedAt ?? ""));
 }
 
 /** An Issue with no Planned date comes after every Issue with one. */

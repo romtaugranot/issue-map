@@ -87,11 +87,10 @@ function oneIssue(world: World, spec: ProjectSpec, host: string, number: number)
   });
   // A pull request that closes an Issue names it too, and is no Mention.
   const pulls = (world.closingRequests ?? []).filter((r) => r.closes === self).map((r) => ({ source: { __typename: "PullRequest", id: `PR_${r.number}` } }));
-  const stateReason = issue.closed ? { completed: "COMPLETED", "not planned": "NOT_PLANNED", duplicate: "DUPLICATE" }[issue.closedAs ?? "completed"] : null;
   const node = {
     ...issueNode(world, spec, host, issue, at, errors),
     state: issue.closed ? "CLOSED" : "OPEN",
-    stateReason,
+    stateReason: stateReason(issue),
     repository: { nameWithOwner: spec.path },
     timelineItems: { nodes: [...mentions, ...pulls] },
   };
@@ -99,6 +98,16 @@ function oneIssue(world: World, spec: ProjectSpec, host: string, number: number)
 }
 
 type GraphqlError = { type: string; path: (string | number)[]; message: string };
+
+function stateReason(issue: IssueSpec): string | null {
+  return issue.closed ? { completed: "COMPLETED", "not planned": "NOT_PLANNED", duplicate: "DUPLICATE" }[issue.closedAs ?? "completed"] : null;
+}
+
+/** When a closed Issue closed: as it says, or the day after it was created. */
+function closedAt(issue: IssueSpec): string | null {
+  if (!issue.closed) return null;
+  return issue.closedAt ?? new Date(Date.UTC(2026, 0, issue.number + 1)).toISOString();
+}
 
 /** One Issue node as github.com gives it, with an error for each field this login can't see at `at`. */
 function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSpec, at: (string | number)[], errors: GraphqlError[]) {
@@ -115,7 +124,7 @@ function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSp
       errors.push({ type: "FORBIDDEN", path, message: "Resource not accessible by integration" });
       return null;
     }
-    return { id: nodeId(project, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${project}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", repository: { nameWithOwner: project } };
+    return { id: nodeId(project, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${project}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: project } };
   };
   // Asked for with `includeClosedPrs: false`, which leaves out closed pull requests but not merged ones.
   const closingPulls = (self: string, path: (string | number)[]) => {

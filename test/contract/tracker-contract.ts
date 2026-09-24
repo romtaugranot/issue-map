@@ -31,6 +31,8 @@ export interface IssueSpec {
   closed?: boolean;
   /** How it closed; `completed` by default. */
   closedAs?: "completed" | "not planned" | "duplicate";
+  /** When it closed, as an ISO date; the day after it was created by default. */
+  closedAt?: string;
   /** This login can't read it, though a Link to it is recorded. */
   hidden?: boolean;
 }
@@ -361,13 +363,31 @@ export function readContract(stage: Stage): void {
         assert.equal(issues.flatMap((i) => i.links).some((l) => l.to.readable && l.to.ref === `${plans}#8`), false);
       });
 
-      test("a Link to a closed Issue says it is closed", async () => {
+      test("a Link to a closed Issue says it is closed, when, and how", async () => {
         const world: World = {
-          projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }, { number: 2, closed: true }] }],
+          projects: [
+            {
+              path: tools,
+              number: 1,
+              open: 1,
+              issues: [{ number: 1 }, { number: 2, closed: true, closedAt: "2026-09-21T08:00:00Z" }, { number: 3, closed: true, closedAs: "duplicate", closedAt: "2026-09-22T08:00:00Z" }],
+            },
+          ],
+          links: [[`${tools}#2`, "blocks", `${tools}#1`], [`${tools}#3`, "blocks", `${tools}#1`]],
+        };
+        const one = byRef((await readAll(world, tools)).issues, "#1");
+        const [two, three] = [linkTo(one, "blocker", `${tools}#2`), linkTo(one, "blocker", `${tools}#3`)];
+        assert.deepEqual(two.readable && [two.open, two.closedAt, two.closedAs], [false, "2026-09-21T08:00:00Z", "completed"]);
+        assert.deepEqual(three.readable && [three.open, three.closedAt, three.closedAs], [false, "2026-09-22T08:00:00Z", "duplicate"]);
+      });
+
+      test("a Link to an open Issue says no close date or way", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2 }] }],
           links: [[`${tools}#2`, "blocks", `${tools}#1`]],
         };
         const end = linkTo(byRef((await readAll(world, tools)).issues, "#1"), "blocker", `${tools}#2`);
-        assert.equal(end.readable && end.open, false);
+        assert.deepEqual(end.readable && [end.open, "closedAt" in end, "closedAs" in end], [true, false, false]);
       });
 
       test("a Link to an Issue this login can't read is kept, without a name", async () => {

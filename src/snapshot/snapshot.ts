@@ -5,7 +5,7 @@
 import type { OpenIssue, Unread } from "../tracker/tracker.ts";
 
 /** The shape Snapshots are saved in; one saved in any other is read again. */
-export const SNAPSHOT_FORMAT = 2;
+export const SNAPSHOT_FORMAT = 3;
 
 export interface Snapshot {
   format: typeof SNAPSHOT_FORMAT;

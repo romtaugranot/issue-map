@@ -27,9 +27,10 @@ function read(n: number, more: Partial<IssueRead> = {}): IssueRead {
 }
 
 /** A Link to `#n` in the Project, or to `owner/name#n` elsewhere. */
-function link(role: NamedLink["role"], name: string, at: number | string, more: { open?: boolean; title?: string } = {}): NamedLink {
+function link(role: NamedLink["role"], name: string, at: number | string, more: { open?: boolean; title?: string; closedAs?: string } = {}): NamedLink {
   const [project, n] = typeof at === "number" ? [PROJECT, at] : (at.split("#") as [string, string]);
   const to: FarEnd = { id: `${project}#${n}`, readable: true, open: more.open ?? true, project, ref: `${project}#${n}`, title: more.title ?? `Issue ${n}`, url: `https://github.com/${project}/issues/${n}` };
+  if (more.closedAs) to.closedAs = more.closedAs;
   return { role, name, to };
 }
 
@@ -150,6 +151,19 @@ describe("an Issue card", () => {
   test("says it can't tell whether the Issue is Blocked when Blocks Links couldn't be read", () => {
     const { text } = card(read(12, { unread: { blocks: "this Tracker can't record Blocks" } }));
     assert.equal(text.split("\n")[2], "Blocked: can't tell — this Tracker can't record Blocks");
+  });
+
+  test("a Link to an Issue that closed as a duplicate or as not planned says so, and one that closed as completed only that it closed", () => {
+    const issue = read(12, {
+      links: [
+        link("blocker", "Blocked by", 5, { open: false, closedAs: "duplicate" }),
+        link("blocker", "Blocked by", 6, { open: false, closedAs: "not planned" }),
+        link("blocker", "Blocked by", 7, { open: false, closedAs: "completed" }),
+      ],
+    });
+    const { text, choices } = card(issue);
+    assert.deepEqual(text.split("\n").slice(4), ["**Blocked by: 3**", "- #5 Issue 5 — closed as duplicate", "- #6 Issue 6 — closed as not planned", "- #7 Issue 7 — closed"]);
+    assert.deepEqual(choices.map((c) => c.description), ["Blocked by · closed as duplicate · Issue 5", "Blocked by · closed as not planned · Issue 6", "Blocked by · closed · Issue 7"]);
   });
 
   test("a Blocks Link from a closed Issue, or to an Issue it Blocks, leaves it not Blocked", () => {

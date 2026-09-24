@@ -5,6 +5,10 @@ import type { FarEnd, Link, OpenIssue, Unread } from "../../src/tracker/tracker.
 export const PROJECT = "fixture-org/tools";
 /** The login that read every built Snapshot, so the viewer of every drawing. */
 export const VIEWER = "fixture-viewer";
+/** When every built Snapshot was read. */
+export const READ_AT = "2026-09-23T00:00:00Z";
+/** When a closed Issue closed, unless it says otherwise: two days before the read. */
+const CLOSED_AT = "2026-09-21T00:00:00Z";
 
 export interface IssueSpec {
   n: number;
@@ -22,7 +26,8 @@ export interface IssueSpec {
 /** An Issue outside the Project, a closed one, or one this login can't read. */
 export type Elsewhere =
   | { outside: string; title?: string; open?: boolean }
-  | { closed: number }
+  /** Closed two days before the Snapshot was read, and as completed, unless it says otherwise. */
+  | { closed: number; closedAt?: string; closedAs?: string }
   | { hidden: string };
 
 export type End = number | Elsewhere;
@@ -47,7 +52,7 @@ export function snapshot(issues: IssueSpec[], links: LinkSpec[] = [], unread: Un
     tracker: "github.com",
     project: { id: "github.com#1", path: PROJECT, url: `https://github.com/${PROJECT}` },
     login: VIEWER,
-    readAt: "2026-09-23T00:00:00Z",
+    readAt: READ_AT,
     issues: [...built.values()],
     unread,
   };
@@ -79,7 +84,18 @@ function farEnd(end: End): FarEnd {
   }
   if ("hidden" in end) return { id: end.hidden, readable: false };
   if ("closed" in end) {
-    return { id: `${PROJECT}#${end.closed}`, readable: true, open: false, project: PROJECT, ref: `${PROJECT}#${end.closed}`, title: `Issue ${end.closed}`, url: `https://github.com/${PROJECT}/issues/${end.closed}` };
+    const { closed, closedAt, closedAs } = end;
+    return {
+      id: `${PROJECT}#${closed}`,
+      readable: true,
+      open: false,
+      project: PROJECT,
+      ref: `${PROJECT}#${closed}`,
+      title: `Issue ${closed}`,
+      url: `https://github.com/${PROJECT}/issues/${closed}`,
+      closedAt: closedAt ?? CLOSED_AT,
+      closedAs: closedAs ?? "completed",
+    };
   }
   const [project, number] = end.outside.split("#") as [string, string];
   return { id: end.outside, readable: true, open: end.open ?? true, project, ref: end.outside, title: end.title ?? `Outside ${end.outside}`, url: `https://github.com/${project}/issues/${number}` };
