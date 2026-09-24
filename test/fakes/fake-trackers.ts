@@ -82,6 +82,9 @@ function tracker(host: string, fake: FakeHost, reads: string[]): Tracker {
       const found = fake.threads?.find((thread) => thread.ref === locator || thread.url === locator);
       return found ? { kind: "thread", thread: found } : { kind: "not-found", reason: `no Issue ${locator} on ${host} that this login can read` };
     },
+    async link() {
+      return { kind: "cant-tell", reason: "the fake writes no Links" };
+    },
     async assign(locator, viewer): Promise<AssignAnswer> {
       const found = fake.issues?.find((issue) => issue.ref === locator);
       if (!found) return { kind: "not-found", reason: `no Issue ${locator} on ${host} that this login can read` };

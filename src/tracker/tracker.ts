@@ -1,8 +1,8 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1 to 9 and 11 so far, and reading only what
- * changed for needs 3, 4 and 7.
+ * This file holds needs 1 to 11, and reading only what changed for needs
+ * 3, 4 and 7.
  */
 
 /** One kind of Tracker (GitHub, GitLab), able to say whether it runs at a host. */
@@ -74,7 +74,26 @@ export interface Tracker {
    * of the login.
    */
   assign(locator: string, viewer: string): Promise<AssignAnswer>;
+  /**
+   * Need 10: write a Link between the Issues `from` and `to` name, as `issue`
+   * takes them: `from` Blocks `to`, is the Parent of `to`, or is Related to
+   * it. It never moves `to` from a Parent it has: that write is refused. The
+   * Tracker's refusal of the write is told apart from its refusal of the
+   * login.
+   */
+  link(from: string, kind: LinkKind, to: string): Promise<LinkAnswer>;
 }
+
+export type LinkAnswer =
+  /** Written, or already recorded. */
+  | { kind: "linked" }
+  /** The Tracker can't record this kind of Link, here or between these Issues. */
+  | { kind: "cant-record"; reason: string }
+  /** The Tracker refused this write, though it still accepts the login; or it would move an Issue from its Parent. */
+  | { kind: "not-allowed"; reason: string }
+  /** No such Issue at either end, or none this login can read. */
+  | { kind: "not-found"; reason: string }
+  | CantAnswer;
 
 export type AssignAnswer =
   /** Written: whom the Issue is assigned to now, as the Tracker says after the write. */
@@ -283,10 +302,16 @@ export interface IssueRead {
   links: NamedLink[];
   /** Its open Closing Requests, drafts included; empty when they couldn't be read. */
   closingRequests: ClosingRequest[];
-  /** The identities of the Issues whose text names it, as the Tracker notes them. */
-  mentionedBy: string[];
+  /** The Issues whose text names it, as the Tracker notes them. */
+  mentionedBy: Mention[];
   /** What the read couldn't give. */
   unread: Unread;
+}
+
+/** An Issue that names another in its text: its identity, and the reference users type from anywhere, such as `owner/name#123`. */
+export interface Mention {
+  id: string;
+  ref: string;
 }
 
 /** A Link with the Tracker's own name for its kind, as seen from this Issue, such as `Blocked by`. */
@@ -316,6 +341,8 @@ export type FarEnd =
       closedAt?: string;
       /** How it closed, as the Tracker says, such as `completed`, `not planned` or `duplicate`; absent while it is open, or where the Tracker doesn't say. */
       closedAs?: string;
+      /** Where it closed as a duplicate, the Issue it duplicates, as `issue` takes it; absent otherwise, or where the Tracker doesn't say which. */
+      duplicateOf?: string;
     }
   /** The Tracker records the Link but won't show this login the Issue; the id is the adapter's own. */
   | { id: string; readable: false };

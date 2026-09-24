@@ -155,7 +155,7 @@ function closingRequests({ closingRequests, unread }: IssueRead): string[] {
 /** The other Issues whose text names it and that no Link joins it to. */
 function mentionedOnly({ id, links, mentionedBy }: IssueRead): number {
   const linked = new Set(links.map(({ to }) => to.id));
-  return new Set(mentionedBy.filter((other) => other !== id && !linked.has(other))).size;
+  return new Set(mentionedBy.filter((other) => other.id !== id && !linked.has(other.id)).map((other) => other.id)).size;
 }
 
 function blocked({ links, unread }: IssueRead): string {

@@ -1,6 +1,6 @@
 ---
 name: map
-description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; or to move to another Project, `go`, `back` or `home`.
+description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; or to move to another Project, `go`, `back` or `home`.
 ---
 
 # The Map
@@ -13,6 +13,7 @@ The Map opens on the checkout's **Home Project**, and every command acts on the 
 - **An Issue's card**: `issue-map issue '<ref>'`, with the reference as the Map prints it (`#123`, `owner/name#45`, a leading `↗` is fine), or a `#123` the user types. An Issue the user names another way — its URL, or `owner/name#45` typed — is a target to move to (see **Moving to another Project**). Use it when the user opens, shows or asks about one Issue; use `group '<ref>'` only for what sits beneath it. A card is read live from the Tracker, so it opens even while the Map is being read for the first time. When the user says `more` on a card, run the same command with `--page <n>` for the next page of its Links.
 - **Assigning an Issue to yourself**: `issue-map assign '<ref>'` — see **Assigning an Issue to yourself**.
 - **Starting work on an Issue**: `issue-map start '<ref>'` — see **Starting work on an Issue**.
+- **Link Suggestions**: `issue-map suggest`, then `issue-map offer` and `issue-map confirm` — see **Link Suggestions**.
 - **The Unlinked Issues**, 15 a page, newest first: `issue-map unlinked`, and `issue-map unlinked --page <n>` when the user says `more` or asks for a page.
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
 
@@ -57,6 +58,26 @@ An open Issue's card offers **Start work on #n** under **Choices**, an Outside I
 Its output is the Issue's body and comments, already cut to a fixed budget, for you to brief the user from — don't reprint it. Brief them in at most about 12 lines: what the Issue asks for; where the discussion stands now, the latest comments counting most; what's been decided, tried or ruled out; what's still open or in the way; and who is involved. Quote only a line or two where the exact words matter. When the output says comments or parts of long ones were left out, or that earlier comments weren't read, say the brief isn't from the whole thread. Reprint the card's name line and URL above the brief.
 
 Then stop and let the user say what's next. Nothing else starts: no branch, no editor, no checkout, no assignment and no code — don't offer them either. Where the user is doesn't change, so `back`, `map` and the card's Links carry on from the card. When the Issue can't be read, the output says why; reprint that.
+
+## Link Suggestions
+
+The Map draws only the Links the Tracker records. When the user asks for Link Suggestions, for Links nobody recorded, or what a card's Mentions mean, suggest from what is on screen:
+
+1. Run `issue-map suggest`. It reads the Issues on screen and no others: each one's text, its recorded Links, and what the Issues that mention it say of it. It never reads the whole Project; to suggest for other Issues, the user opens their page first — the Unlinked list, a Group, a card. Don't reprint its output.
+2. Propose Links from it, only where the text says one exists — "blocked by #12", "needs #7 first", "part of #3", "see also #9" — never from two Issues merely being about the same thing. Only the kinds its **Kinds to suggest** line names. Nothing already recorded, and never a Parent for an Issue that has one. `from` Blocks `to` (`to` waits on `from`); `from` is the Parent of `to`; `related` has no direction. Each proposal quotes the words it stands on exactly as written, and names as `source` the Issue whose text holds them: one on screen, or one that mentions it.
+3. Pipe the proposals to `issue-map offer` as a JSON array, even an empty one, since it also offers what the Map found itself:
+
+   ```
+   issue-map offer <<'EOF'
+   [{"from": "#12", "kind": "blocks", "to": "#5", "quote": "Blocked by #12 until the API lands", "source": "#5"}]
+   EOF
+   ```
+
+   It checks each one against the Tracker as it is now, and says why of any it doesn't offer: a quote that isn't word for word in its source, a source `suggest` didn't read, a kind the Project can't record, a Link already recorded, a Parent it would move an Issue from, a suggestion declined before. Reprint its list, less the **To confirm** block, which is for you. Don't propose again what it turned down.
+4. When it ends with **To confirm**, ask once with `AskUserQuestion`, `multiSelect: true`, the suggestions in their order: as few questions as hold them, at most four options each and never one alone (5 is 3 and 2), headed `Links 1–3` and so on, each option labelled as printed without its number, with its description. A single suggestion is one single-select question: its label, and **Decline**. Then run `issue-map confirm` with the numbers of those ticked, such as `issue-map confirm 1 3`; with none ticked, `issue-map confirm` alone. Ticking is the user's one confirmation. Those left unticked are declined and never suggested again, so when the user dismisses the picker without answering, run nothing.
+5. Reprint what `confirm` says. Each Link is read again before it's written, and once the Tracker refuses a write, the rest aren't tried: don't retry, and don't suggest another way to write them. A written Link is an ordinary Link: the Map draws it at once.
+
+When the output says **Not offered to write** — a login that may only read, or a `Best effort` Project — reprint the list, say why, and ask nothing: the list is still worth reading. When `AskUserQuestion` isn't available, as under `claude -p`, reprint the list and stop; nothing is written or declined.
 
 ## Moving to another Project
 

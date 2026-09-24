@@ -116,7 +116,7 @@ describe("an Issue card", () => {
   });
 
   test("counts Mentions and points at Link Suggestions, never listing them as Links", () => {
-    const issue = read(12, { links: [link("parent", "Parent issue", 3)], mentionedBy: [`${PROJECT}#3`, `${PROJECT}#8`, `fixture-org/plans#2`, `${PROJECT}#8`] });
+    const issue = read(12, { links: [link("parent", "Parent issue", 3)], mentionedBy: [`${PROJECT}#3`, `${PROJECT}#8`, `fixture-org/plans#2`, `${PROJECT}#8`].map((id) => ({ id, ref: id })) });
     const { text, choices } = card(issue);
     assert.equal(text.split("\n").at(-1), "Mentioned by 2 other Issues — Mentions aren't Links. Ask for Link Suggestions to see whether any should be.");
     assert.deepEqual(choices.map((c) => c.label), ["#3"], "an Issue it's already Linked to isn't counted, and no Mention is a choice");
@@ -249,7 +249,7 @@ describe("a reduced card", () => {
   const busy = {
     links: [link("parent", "Parent issue", 3), link("blocker", "Blocked by", 5)],
     closingRequests: [{ ref: `${PROJECT}#40`, url: `https://github.com/${PROJECT}/pull/40`, draft: false, author: "fixture-bot" }],
-    mentionedBy: [`${PROJECT}#8`],
+    mentionedBy: [{ id: `${PROJECT}#8`, ref: `${PROJECT}#8` }],
   };
 
   test("an Outside Issue's card shows its name, URL and state, and no Links, since the Map hasn't read its Project", () => {

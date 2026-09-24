@@ -1,8 +1,8 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1 to 9 and 11 including their "can't" answers, for a whole Project,
- * for only what changed in it, for one Issue read for its card, and for one
- * Issue's thread read to start work on it.
+ * needs 1 to 11 including their "can't" answers, for a whole Project, for
+ * only what changed in it, for one Issue read for its card, for one Issue's
+ * thread read to start work on it, and for the writes.
  * Each adapter supplies a Stage that stands a World up behind its own
  * boundary. Where kinds of Tracker differ in what they record, a Stage says
  * so, and a test of what its kind can't record is skipped with the reason.
@@ -139,6 +139,11 @@ export interface Stage {
   arrange(world: World): { kind: TrackerKind; requests(): number; loginsSentTo(): string[]; tokenSentTo(): string[] };
 }
 
+/** A test's options: skipped, with why, where the Stage's kind records what it needs not to. */
+function skipIf(record: true | string, why: string): { skip?: string } {
+  return record === true ? { skip: why } : {};
+}
+
 /** A test's options: skipped, with why, where the Stage's kind doesn't record what it needs. */
 function skipUnless(record: true | string): { skip?: string } {
   return record === true ? {} : { skip: record };
@@ -164,6 +169,7 @@ export function trackerContract(stage: Stage): void {
   capabilitiesContract(stage);
   threadContract(stage);
   assignContract(stage);
+  linkContract(stage);
 }
 
 export function identifyContract(stage: Stage): void {
@@ -808,7 +814,8 @@ export function cardContract(stage: Stage): void {
         assert.equal(new Set(names.values()).size, 4, `a name for each kind: ${JSON.stringify([...names])}`);
         assert.ok([...names.values()].every((name) => name.length > 0));
         assert.deepEqual(two.closingRequests.map((r) => [r.ref, r.draft, r.author]), [[stage.requestRef(tools, 40), true, "fixture-bot"]]);
-        assert.deepEqual([...two.mentionedBy].sort(), [ids.get(`${tools}#3`), ids.get(`${tools}#4`)].sort(), "Issues naming it, not the ones it names");
+        const mentions = two.mentionedBy.map((m) => [m.id, m.ref]).sort();
+        assert.deepEqual(mentions, [[ids.get(`${tools}#3`), `${tools}#3`], [ids.get(`${tools}#4`), `${tools}#4`]].sort(), "Issues naming it, not the ones it names");
         assert.deepEqual(two.unread, {});
       });
 
@@ -840,6 +847,20 @@ export function cardContract(stage: Stage): void {
       test("reads a closed Issue and says how it closed", async () => {
         const five = await issue(world, `${tools}#5`);
         assert.deepEqual([five.open, five.closedAs], [false, said(stage, "not planned") ?? null]);
+      });
+
+      test("a Link to an Issue closed as a duplicate names the Issue it duplicates, which reads by it", skipUnless(said(stage, "duplicate") ? true : "the Tracker doesn't say an Issue closed as a duplicate"), async () => {
+        const duplicated: World = {
+          projects: [{ path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2, closed: true, closedAs: "duplicate", duplicateOf: `${tools}#3` }, { number: 3 }, { number: 4, closed: true }] }],
+          links: [[`${tools}#2`, "blocks", `${tools}#1`], [`${tools}#4`, "blocks", `${tools}#1`]],
+        };
+        const one = await issue(duplicated, `${tools}#1`);
+        const ends = new Map(one.links.map((l) => [l.to.readable && l.to.ref, l.to]));
+        const two = ends.get(`${tools}#2`);
+        assert.ok(two?.readable && two.duplicateOf, JSON.stringify(two));
+        assert.equal((await issue(duplicated, two.duplicateOf)).ref, `${tools}#3`);
+        const four = ends.get(`${tools}#4`);
+        assert.equal(four?.readable && "duplicateOf" in four, false, "one closed otherwise duplicates nothing");
       });
 
       test("reads an Issue in another Project on the same Tracker", async () => {
@@ -1123,6 +1144,112 @@ export function threadContract(stage: Stage): void {
       test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
         for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
           assert.equal((await (await trackerIn({ ...world, ...trouble })).thread(`${tools}#1`)).kind, kind, JSON.stringify(trouble));
+        }
+      });
+    });
+  });
+}
+
+export function linkContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+  const tools = "fixture-org/tools";
+  // A task-level child is the one Issue any Tracker lets be put under an ordinary Issue.
+  const child = { taskLevel: stage.records.taskLevel === true };
+  const world: World = {
+    projects: [
+      {
+        path: tools,
+        number: 1,
+        open: 6,
+        issues: [{ number: 1 }, { number: 2 }, { number: 3, ...child }, { number: 4 }, { number: 5, ...child }, { number: 6 }, { number: 9, hidden: true }],
+      },
+    ],
+    links: [[`${tools}#4`, "parent", `${tools}#5`]],
+  };
+
+  async function trackerIn(more: World = {}): Promise<Tracker> {
+    const tracker = await stage.arrange({ ...world, ...more }).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    return tracker;
+  }
+
+  /** The Links the Issue `locator` names has, as `role far-end` read again from the Tracker. */
+  async function linksOf(tracker: Tracker, locator: string): Promise<string[]> {
+    const answer = await tracker.issue(locator);
+    assert.equal(answer.kind, "issue", JSON.stringify(answer));
+    return (answer as Extract<IssueAnswer, { kind: "issue" }>).issue.links.map((l) => `${l.role} ${l.to.readable ? l.to.ref : "?"}`).sort();
+  }
+
+  describe(`${product} Tracker contract`, () => {
+    describe("need 10: write a Link of a kind the Project records", () => {
+      test("writes a Blocks Link, and both Issues read again show it, each from its own end", async () => {
+        const tracker = await trackerIn();
+        assert.deepEqual(await tracker.link(`${tools}#1`, "blocks", `${tools}#2`), { kind: "linked" });
+        assert.deepEqual(await linksOf(tracker, `${tools}#2`), [`blocker ${tools}#1`]);
+        assert.deepEqual(await linksOf(tracker, `${tools}#1`), [`blocked ${tools}#2`]);
+      });
+
+      test("writes a Parent Link, and both Issues read again show it", async () => {
+        const tracker = await trackerIn();
+        assert.deepEqual(await tracker.link(`${tools}#1`, "parent", `${tools}#3`), { kind: "linked" });
+        assert.deepEqual(await linksOf(tracker, `${tools}#3`), [`parent ${tools}#1`]);
+        assert.deepEqual(await linksOf(tracker, `${tools}#1`), [`child ${tools}#3`]);
+      });
+
+      test("writes a Related Link, and both Issues read again show it", skipUnless(stage.records.related), async () => {
+        const tracker = await trackerIn();
+        assert.deepEqual(await tracker.link(`${tools}#1`, "related", `${tools}#2`), { kind: "linked" });
+        assert.deepEqual(await linksOf(tracker, `${tools}#2`), [`related ${tools}#1`]);
+        assert.deepEqual(await linksOf(tracker, `${tools}#1`), [`related ${tools}#2`]);
+      });
+
+      test("puts an Issue under a namespace's own Issue, such as a GitLab group's epic", skipUnless(stage.records.namespaceIssues), async () => {
+        const grouped: World = { projects: [...world.projects!, { path: "fixture-org", number: 3, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic" }] }] };
+        const tracker = await trackerIn(grouped);
+        assert.deepEqual(await tracker.link("fixture-org#12", "parent", `${tools}#1`), { kind: "linked" });
+        assert.deepEqual(await linksOf(tracker, `${tools}#1`), ["parent fixture-org#12"]);
+      });
+
+      test("a kind the Tracker can't record isn't written, and says why", skipIf(stage.records.related, "every kind the contract names is one this Tracker records"), async () => {
+        const answer = await (await trackerIn()).link(`${tools}#1`, "related", `${tools}#2`);
+        assert.deepEqual(answer, { kind: "cant-record", reason: stage.records.related });
+      });
+
+      test("never moves an Issue from the Parent it has: that write is refused, says why, and its Parent stays", async () => {
+        const tracker = await trackerIn();
+        const answer = await tracker.link(`${tools}#1`, "parent", `${tools}#5`);
+        assert.equal(answer.kind, "not-allowed", JSON.stringify(answer));
+        assert.match((answer as { reason: string }).reason, /Parent/);
+        assert.deepEqual(await linksOf(tracker, `${tools}#5`), [`parent ${tools}#4`]);
+      });
+
+      test("a login whose role may only read is refused the write, says why, and nothing is written", async () => {
+        const tracker = await trackerIn({ role: "reader" });
+        const answer = await tracker.link(`${tools}#1`, "blocks", `${tools}#2`);
+        assert.equal(answer.kind, "not-allowed", JSON.stringify(answer));
+        assert.match((answer as { reason: string }).reason, /fixture-org\/tools/);
+        assert.deepEqual(await linksOf(tracker, `${tools}#2`), []);
+      });
+
+      test("a login whose token may only read is refused the write, says why, and nothing is written", async () => {
+        const tracker = await trackerIn({ token: "reads" });
+        const answer = await tracker.link(`${tools}#1`, "parent", `${tools}#3`);
+        assert.equal(answer.kind, "not-allowed", JSON.stringify(answer));
+        assert.match((answer as { reason: string }).reason, /token/);
+        assert.deepEqual(await linksOf(tracker, `${tools}#3`), []);
+      });
+
+      test("says there's no such Issue when either end doesn't exist, this login can't read it, or its locator names none", async () => {
+        for (const [from, to] of [[`${tools}#1`, `${tools}#99`], [`${tools}#99`, `${tools}#1`], [`${tools}#1`, `${tools}#9`], ["not a reference", `${tools}#1`]] as const) {
+          for (const kind of ["blocks", "parent"] as const) {
+            assert.equal((await (await trackerIn()).link(from, kind, to)).kind, "not-found", `${from} ${kind} ${to}`);
+          }
+        }
+      });
+
+      test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
+        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
+          assert.equal((await (await trackerIn(trouble)).link(`${tools}#1`, "blocks", `${tools}#2`)).kind, kind, JSON.stringify(trouble));
         }
       });
     });

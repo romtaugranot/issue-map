@@ -56,6 +56,7 @@ function liveTracker(options: Options = {}) {
     host: "github.com",
     version: null,
     thread: async () => ({ kind: "cant-tell", reason: "unused" }),
+    link: async () => ({ kind: "cant-tell", reason: "unused" }),
     untested: options.untested ?? null,
     capabilities: async () => options.capabilities ?? { kind: "capabilities", ...READS_EVERYTHING },
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),

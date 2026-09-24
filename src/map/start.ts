@@ -7,7 +7,7 @@
  */
 import type { IssueComment, Project, Thread, Tracker } from "../tracker/tracker.ts";
 import { issueLocator, typedRef, why } from "./show.ts";
-import { count, plural, short } from "./text.ts";
+import { count, cut, plural, short } from "./text.ts";
 
 /** The most characters a thread is handed over in, however long it is. */
 export const THREAD_BUDGET = 12_000;
@@ -57,14 +57,7 @@ function commentCount({ comments, earlier }: Thread): string {
 }
 
 /** One comment: who wrote it and when, then what it says, cut to fit. */
-function commentBlock({ author, at, body }: IssueComment): string {
+export function commentBlock({ author, at, body }: IssueComment): string {
   return `${author ?? "a deleted account"} on ${at.slice(0, 10)}:\n${cut(body.trim(), COMMENT)}`;
 }
 
-/** `text` at most about `max` characters long: its start and its end, with how much was left out between. */
-function cut(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const start = Math.floor((max * 2) / 3);
-  const end = max - start;
-  return `${text.slice(0, start)}\n[… ${count(text.length - start - end)} characters left out …]\n${text.slice(-end)}`;
-}

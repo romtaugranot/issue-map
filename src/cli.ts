@@ -10,6 +10,9 @@
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
  * `issue-map start <ref>`: the body and comments of the Issue `ref` names, cut to a fixed budget, for Claude to brief the user from; where the user is doesn't change.
+ * `issue-map suggest`: the text of the Issues on screen, for Claude to propose Link Suggestions from; where the user is doesn't change.
+ * `issue-map offer`: checks the Link Suggestions Claude proposes, a JSON array of `{from, kind, to, quote, source}` on standard input, and offers those that hold up to confirm.
+ * `issue-map confirm [<n>]...`: writes the offered Link Suggestions numbered `n`, once the user has ticked them, and declines the rest.
  * `issue-map go [<target>] [--dir <path>]... [--pick-there <URL>]`: moves to a Project's or an Issue's URL, an `owner/repo[#n]` or a local path; on its own, offers nearby Projects, the added directories `--dir` names among them.
  * `issue-map back`: back one step along this session's trail.
  * `issue-map home`: returns to the Home Project's overview, and on it offers to re-pick it.
@@ -37,11 +40,12 @@ import { keepWarm } from "./snapshot/refresher.ts";
 import { showCard, showMap } from "./map/show.ts";
 import { assignToViewer } from "./map/assign.ts";
 import { startWork } from "./map/start.ts";
+import { confirm, offer, suggest, type Declines, type Pending, type PendingSuggestions, type Proposal } from "./map/suggest.ts";
 import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home — each takes [--pick <URL>]";
+  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home — each takes [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -62,7 +66,8 @@ async function main(argv: string[]): Promise<number> {
   const opening = verb === "group" ? toOpen(rest.shift(), page) : undefined;
   const cardRef = verb === "issue" || verb === "assign" || verb === "start" ? rest.shift() : undefined;
   const target = verb === "go" ? rest.shift() : undefined;
-  if (rest.length > 0 || !Number.isInteger(page) || page < 1) return usage();
+  const picked = verb === "confirm" ? rest.splice(0).map(Number) : [];
+  if (rest.length > 0 || !Number.isInteger(page) || page < 1 || picked.some((n) => !Number.isInteger(n) || n < 1)) return usage();
   const deps = { cli: processCli, http: anonymousHttp, env: process.env };
   const known = trackers([github(deps), gitlab(deps)]);
 
@@ -88,9 +93,18 @@ async function main(argv: string[]): Promise<number> {
     case "map":
     case "unlinked":
     case "back":
+    case "suggest":
+    case "offer":
+    case "confirm":
       break;
     default:
       return usage();
+  }
+
+  const proposals = verb === "offer" ? proposalsIn(await stdin()) : undefined;
+  if (proposals === null) {
+    console.error("issue-map offer takes a JSON array of {from, kind, to, quote, source} on standard input, each a string; kind is blocks, parent or related");
+    return 2;
   }
 
   const cwd = process.cwd();
@@ -113,8 +127,15 @@ async function main(argv: string[]): Promise<number> {
           ? { kind: "home", picked: values.pick !== undefined }
           : verb === "assign" || verb === "start"
             ? { kind: verb, ref: cardRef! }
+            : verb === "suggest"
+              ? { kind: "suggest" }
+              : verb === "offer"
+                ? { kind: "offer", proposals: proposals! }
+                : verb === "confirm"
+                  ? { kind: "confirm", picked }
             : { kind: "view", view: verb === "issue" ? { kind: "card", ref: cardRef!, page } : verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening! };
   const store = openStore();
+  const suggesting = { store, pending: pendingOf(process.env.CLAUDE_CODE_SESSION_ID), declines: declines() };
   const answer = await move(
     {
       trackers: known,
@@ -136,6 +157,9 @@ async function main(argv: string[]): Promise<number> {
       showCard,
       start: startWork,
       assign: (tracker, project, ref) => assignToViewer({ store }, tracker, project, ref),
+      suggest: (tracker, project, view) => suggest(suggesting, tracker, project, view),
+      offer: (tracker, project, proposed) => offer(suggesting, tracker, project, proposed),
+      confirm: (tracker, project, numbers) => confirm(suggesting, tracker, project, numbers),
     },
     request,
   );
@@ -214,6 +238,46 @@ function trailOf(session: string | undefined): Trail {
   };
 }
 
+/** This session's Link Suggestions, beside the Snapshots: only identities and references, never an Issue's text. */
+function pendingOf(session: string | undefined): Pending {
+  const dir = join(stateDir(), "suggestions");
+  const path = join(dir, `${createHash("sha256").update(session ?? "no session").digest("hex")}.json`);
+  return {
+    get: () => readJson<PendingSuggestions | null>(path, null),
+    set: async (pending) => (pending ? writeJson(dir, path, pending) : unlink(path).catch(() => {})),
+  };
+}
+
+/** The Link Suggestions each login declined, per Tracker and Project, beside the Snapshots. */
+function declines(): Declines {
+  const dir = join(stateDir(), "declined");
+  const path = (key: SnapshotKey) => join(dir, `${createHash("sha256").update(JSON.stringify([key.tracker, key.project, key.login])).digest("hex")}.json`);
+  return {
+    get: (key) => readJson<string[]>(path(key), []),
+    add: async (key, more) => writeJson(dir, path(key), [...new Set([...(await readJson<string[]>(path(key), [])), ...more])]),
+  };
+}
+
+/** All that is piped in, as text. */
+async function stdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** The proposals `offer` reads, or `null` when the text isn't a list of them. */
+function proposalsIn(text: string): Proposal[] | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const fields = ["from", "kind", "to", "quote", "source"] as const;
+  const isProposal = (item: unknown): item is Proposal => !!item && typeof item === "object" && fields.every((f) => typeof (item as Record<string, unknown>)[f] === "string");
+  return Array.isArray(value) && value.every(isProposal) ? value : null;
+}
+
 /** The Projects recently moved to, shared across checkouts, beside the Snapshots. */
 function recents(): Recents {
   const dir = stateDir();
@@ -256,9 +320,16 @@ function usage(): number {
   return 2;
 }
 
-/** The answer, then the Links to follow from a card, whose `label` is what `issue` takes; then any choices, each with the command that takes it. */
-function render({ text, links, choices }: Answer): string {
+/**
+ * The answer, then the Links to follow from a card, whose `label` is what
+ * `issue` takes; then any Link Suggestions to confirm, numbered; then any
+ * choices, each with the command that takes it.
+ */
+function render({ text, links, choices, confirm }: Answer): string {
   const lines = [text];
+  if (confirm) {
+    lines.push("", `To confirm in one multi-select, in this order; then run \`${confirm.run}\` with the numbers ticked:`, ...confirm.choices.map((c, i) => `${i + 1}. ${c.label} — ${c.description}`));
+  }
   if (links.length > 0) lines.push("", "Links to follow, in the card's order:", ...links.map((c) => `- ${c.label} — ${c.description}`));
   if (choices.length > 0) lines.push("", "Choices, best first:", ...choices.map((c: MoveChoice) => `- ${c.label} — ${c.description}\n  ${c.run}`));
   return lines.join("\n");

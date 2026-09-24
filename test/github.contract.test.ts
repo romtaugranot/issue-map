@@ -178,6 +178,8 @@ function ghApi(world: World, args: string[]): CliResult {
   if (missing) return answer({}, [{ type: "undefinedField", path: ["query"], message: `Field '${missing[0]}' doesn't exist on type 'Issue'` }], null);
   asked = query;
   if (/^\s*(query\s*)?\{\s*viewer\b/.test(query)) return exited(0, JSON.stringify({ data: { viewer: { login: world.viewer ?? "fixture-viewer" } } }));
+  if (/^\s*mutation\b/.test(query)) return linkMutation(world, query, field);
+  if (query.includes("from: repository(")) return linkEnds(world, field);
   if (query.includes("changed: nodes(ids:")) return nodesById(world, host, list("changed"), list("outside"));
   const path = `${field("owner")}/${field("name")}`;
   const spec = (world.projects ?? []).find((p) => [p.path, ...(p.oldPaths ?? [])].some((known) => known.toLowerCase() === path.toLowerCase()));
@@ -203,6 +205,7 @@ function ghApi(world: World, args: string[]): CliResult {
  */
 const GHES_LACKS: [string, string][] = [
   ["trackedInIssues", "99"],
+  ["duplicateOf", "99"],
   ["trackedIssues", "99"],
   ["parent", "3.17"],
   ["subIssues", "3.17"],
@@ -247,7 +250,7 @@ function oneIssue(world: World, spec: ProjectSpec, host: string, number: number)
   const at = ["repository", "issue"];
   const mentions = (world.mentions ?? []).filter(([, b]) => b === self).map(([a]) => {
     const [path, n] = a.split("#") as [string, string];
-    return { source: { __typename: "Issue", id: nodeId(path, Number(n)) } };
+    return { source: { __typename: "Issue", id: nodeId(path, Number(n)), number: Number(n), repository: { nameWithOwner: path } } };
   });
   // A pull request that closes an Issue names it too, and is no Mention.
   const pulls = (world.closingRequests ?? []).filter((r) => r.closes === self).map((r) => ({ source: { __typename: "PullRequest", id: `PR_${r.number}` } }));
@@ -404,13 +407,65 @@ function assignees(world: World, rest: string, logins: string[]): CliResult {
   return exited(0, JSON.stringify({ number: issue.number, assignees: (issue.assignees ?? []).map((login) => ({ login })) }));
 }
 
+/** The Issue at `owner/name#n` in the World, as `path` and spec, or `null`. */
+function issueIn(world: World, owner: string | undefined, name: string | undefined, n: number): { path: string; issue: IssueSpec } | null {
+  const path = `${owner}/${name}`;
+  const issue = world.projects?.find((p) => p.path === path)?.issues?.find((i) => i.number === n);
+  return issue ? { path, issue } : null;
+}
+
+/** Two Issues by repository and number, each with its sub-issue parent; `null`, with an error, for one that's missing or this login can't see. */
+function linkEnds(world: World, field: (name: string) => string | undefined): CliResult {
+  const errors: GraphqlError[] = [];
+  const end = (side: "from" | "to") => {
+    const found = issueIn(world, field(`${side}Owner`), field(`${side}Name`), Number(field(`${side}Number`)));
+    if (!found || found.issue.hidden) {
+      errors.push({ type: found ? "FORBIDDEN" : "NOT_FOUND", path: [side, "issue"], message: `Could not resolve to an issue with the number of ${field(`${side}Number`)}.` });
+      return { issue: null };
+    }
+    const self = `${found.path}#${found.issue.number}`;
+    const parent = (world.links ?? []).find(([, kind, b]) => kind === "parent" && b === self)?.[0];
+    const [parentPath, parentNumber] = parent?.split("#") ?? [];
+    return { issue: { id: nodeId(found.path, found.issue.number), parent: parent ? { id: nodeId(parentPath!, Number(parentNumber)), number: Number(parentNumber), repository: { nameWithOwner: parentPath } } : null } };
+  };
+  return answer({ from: end("from"), to: end("to") }, errors);
+}
+
+/**
+ * `addBlockedBy` and `addSubIssue`, by the Issues' identities. A login
+ * without the triage role is refused with an error at the mutation, and a
+ * token that may only read with one for its scopes; a sub-issue that has a
+ * parent is refused unless asked to replace it.
+ */
+function linkMutation(world: World, query: string, field: (name: string) => string | undefined): CliResult {
+  const name = /\{\s*(\w+)\(input:/.exec(query)?.[1] ?? "";
+  if (world.token === "reads") {
+    return answer({}, [{ type: "INSUFFICIENT_SCOPES", path: [name], message: `Your token has not been granted the required scopes to execute this query. The '${name}' field requires one of the following scopes: ['repo'], but your token has only been granted the: ['read:org'] scopes.` }], null);
+  }
+  if (world.role === "reader") return answer({ [name]: null }, [{ type: "FORBIDDEN", path: [name], message: `fixture-viewer does not have the correct permissions to execute \`${name}\`` }]);
+  const byId = (id: string | undefined) => {
+    for (const spec of world.projects ?? []) for (const issue of spec.issues ?? []) if (nodeId(spec.path, issue.number) === id) return `${spec.path}#${issue.number}`;
+    throw new Error(`the World has no Issue ${id}`);
+  };
+  const [from, to] = [byId(field("from")), byId(field("to"))];
+  world.links ??= [];
+  if (name === "addSubIssue") {
+    if (world.links.some(([, kind, b]) => kind === "parent" && b === to)) return answer({ addSubIssue: null }, [{ type: "UNPROCESSABLE", path: ["addSubIssue"], message: "Sub issue may only have one parent" }]);
+    world.links.push([from, "parent", to]);
+  } else if (name === "addBlockedBy") world.links.push([from, "blocks", to]);
+  else return answer({}, [{ type: "undefinedField", path: ["mutation"], message: `Field '${name}' doesn't exist on type 'Mutation'` }], null);
+  return answer({ [name]: { issue: { id: field("to") } } }, []);
+}
+
 /** An Issue read whole, open or closed, as a refresh reads it again. */
 function changedNode(world: World, spec: ProjectSpec, host: string, issue: IssueSpec, at: (string | number)[], errors: GraphqlError[]) {
   return { ...issueNode(world, spec, host, issue, at, errors), state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: spec.path } };
 }
 
 function endNode(path: string, issue: IssueSpec, host: string) {
-  return { id: nodeId(path, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${path}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: path } };
+  const [duplicatePath, n] = issue.duplicateOf?.split("#") ?? [];
+  const duplicateOf = /\bduplicateOf\b/.test(asked) ? { duplicateOf: n ? { number: Number(n), repository: { nameWithOwner: duplicatePath } } : null } : {};
+  return { id: nodeId(path, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${path}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: path }, ...duplicateOf };
 }
 
 const LONG_AGO = "2025-01-01T00:00:00Z";

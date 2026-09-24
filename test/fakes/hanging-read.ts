@@ -11,6 +11,7 @@ const tracker: Tracker = {
   host: "github.com",
   version: null,
   thread: async () => ({ kind: "cant-tell", reason: "unused" }),
+  link: async () => ({ kind: "cant-tell", reason: "unused" }),
   untested: null,
   capabilities: async () => ({ kind: "capabilities", ...READS_EVERYTHING }),
   resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),

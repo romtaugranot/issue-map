@@ -21,6 +21,8 @@ export type Command =
 
 export interface Drawing {
   text: string;
+  /** The Project's Issues it shows, by the reference users type inside the Project, such as `#12`: what `suggest` reads. */
+  issues?: string[];
 }
 
 /** Take next lines on the overview. */
@@ -50,22 +52,26 @@ export interface Context {
 }
 
 export function draw(snapshot: Snapshot, command: Command, { stale, home }: Context = {}): Drawing {
-  const text = drawn(snapshot, command, home);
-  return { text: stale ? `⚠ read ${age(stale.ageMs)} ago — couldn't refresh it: ${stale.reason}\n${text}` : text };
+  const shown = new Set<string>();
+  const text = drawn(snapshot, command, home, (issue) => shown.add(issue.ref));
+  return { text: stale ? `⚠ read ${age(stale.ageMs)} ago — couldn't refresh it: ${stale.reason}\n${text}` : text, issues: [...shown] };
 }
 
-function drawn(snapshot: Snapshot, command: Command, home: string | undefined): string {
+/** Called for each of the Project's Issues a drawing shows. */
+type Shows = (issue: OpenIssue) => void;
+
+function drawn(snapshot: Snapshot, command: Command, home: string | undefined, shows: Shows): string {
   const band = bandOf(snapshot.support);
   if (band.kind === "refused") return refusal(`${snapshot.tracker}/${snapshot.project.path}`, band);
   switch (command.kind) {
     case "overview":
-      return overview(snapshot, home);
+      return overview(snapshot, home, shows);
     case "unlinked":
-      return unlinkedPage(snapshot, layout(snapshot).unlinked, command.page).join("\n");
+      return unlinkedPage(snapshot, layout(snapshot).unlinked, command.page, shows).join("\n");
     case "group":
-      return outline(snapshot, openGroup(layout(snapshot), command.group), command.page);
+      return outline(snapshot, openGroup(layout(snapshot), command.group), command.page, shows);
     case "under":
-      return outline(snapshot, openUnder(snapshot, layout(snapshot), command.ref), command.page);
+      return outline(snapshot, openUnder(snapshot, layout(snapshot), command.ref), command.page, shows);
   }
 }
 
@@ -100,7 +106,7 @@ function timeLeft(ms: number): string {
   return seconds > 90 ? `about ${Math.round(seconds / 60)} min left` : `about ${Math.round(seconds)}s left`;
 }
 
-function overview(snapshot: Snapshot, home: string | undefined): string {
+function overview(snapshot: Snapshot, home: string | undefined, shows: Shows): string {
   const laidOut = layout(snapshot);
   const { onMap, unlinked, groups } = laidOut;
   const said = notes(snapshot.support);
@@ -117,16 +123,11 @@ function overview(snapshot: Snapshot, home: string | undefined): string {
       return [header, "", "No Issue here has a Link, so there's no Map to draw.", "", unlinkedLine].join("\n");
     }
     const noGroups = "No Issue here has a Link to another open Issue, so there are no Groups to draw.";
-    return [header, "", ...takeNextSection(snapshot, next), "", noGroups, "", unlinkedLine].join("\n");
+    return [header, "", ...takeNextSection(snapshot, next, shows), "", noGroups, "", unlinkedLine].join("\n");
   }
-  const lines = [
-    header,
-    "",
-    ...takeNextSection(snapshot, next),
-    "",
-    `**Groups: ${count(groups.length)}** — largest first`,
-    ...groups.slice(0, GROUP_LINES).map(groupLine),
-  ];
+  const shownGroups = groups.slice(0, GROUP_LINES);
+  for (const { head } of shownGroups) if (head.kind === "issue") shows(head.issue);
+  const lines = [header, "", ...takeNextSection(snapshot, next, shows), "", `**Groups: ${count(groups.length)}** — largest first`, ...shownGroups.map(groupLine)];
   const rest = groups.slice(GROUP_LINES);
   if (rest.length > 0) {
     lines.push(`- … ${count(rest.length)} more Groups, ${plural(rest.reduce((sum, g) => sum + g.issues.length, 0), "Issue")}`);
@@ -135,7 +136,7 @@ function overview(snapshot: Snapshot, home: string | undefined): string {
   return lines.join("\n");
 }
 
-function takeNextSection(snapshot: Snapshot, next: TakeNext): string[] {
+function takeNextSection(snapshot: Snapshot, next: TakeNext, shows: Shows): string[] {
   if (next.kind === "blocks-unread") {
     return [`**Take next: none** — the Map can't read this Project's Blocks Links (${next.reason}), so it calls no Issue Unblocked`];
   }
@@ -146,29 +147,30 @@ function takeNextSection(snapshot: Snapshot, next: TakeNext): string[] {
   }
   if (picks.length === 0) return [`**Take next: 0** — every Issue on the Map is Blocked, or a Parent of Blocked Issues${unread}`];
   const taken = takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
-  return [`**Take next: ${count(picks.length)}** — most waited on first${taken}${unread}`, ...pickLines(picks, snapshot)];
+  return [`**Take next: ${count(picks.length)}** — most waited on first${taken}${unread}`, ...pickLines(picks, snapshot, shows)];
 }
 
 /** Take next's lines, where the children standing in for one Parent past the first few are held in a count. */
-function pickLines(picks: Pick[], snapshot: Snapshot): string[] {
+function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): string[] {
   const lines: string[] = [];
   const shownUnder = new Map<OpenIssue, number>();
   for (const pick of picks) {
     if (lines.length === TAKE_NEXT_LINES) break;
     const parent = pick.waiting.via;
     if (!parent) {
-      lines.push(pickLine(pick, snapshot));
+      lines.push(pickLine(pick, snapshot, shows));
       continue;
     }
     const shown = shownUnder.get(parent) ?? 0;
     shownUnder.set(parent, shown + 1);
-    if (shown < STAND_INS) lines.push(pickLine(pick, snapshot));
+    if (shown < STAND_INS) lines.push(pickLine(pick, snapshot, shows));
     else if (shown === STAND_INS) lines.push(`- … ${count(picks.filter((p) => p.waiting.via === parent).length - STAND_INS)} more under ${parent.ref}`);
   }
   return lines;
 }
 
-function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot): string {
+function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows): string {
+  shows(issue);
   const waits = n === 0 ? "" : carried ? `▶${count(n)} via ${via!.ref}` : `▶${count(n)} wait on it`;
   const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
   const reasons = [
@@ -197,11 +199,12 @@ function unblockedBy(closed: ReadableEnd[], { readAt, project }: Snapshot): stri
   return [when, ...how];
 }
 
-function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number): string[] {
+function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number, shows: Shows): string[] {
   const pages = Math.max(1, Math.ceil(unlinked.length / PAGE));
   const at = Math.min(Math.max(1, page), pages);
   const newestFirst = [...unlinked].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
   const shown = newestFirst.slice((at - 1) * PAGE, at * PAGE);
+  shown.forEach(shows);
   return [
     `**Unlinked: ${count(unlinked.length)}** — newest first, page ${count(at)} of ${count(pages)}`,
     ...shown.map((issue) => {
@@ -213,7 +216,7 @@ function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number): 
   ];
 }
 
-function outline(snapshot: Snapshot, opened: Opened, page: number): string {
+function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows): string {
   if (opened.kind === "no-group") {
     if (opened.groups === 0) return "No Issue here has a Link, so there's no Group to open. `map` for the Map.";
     return `There ${opened.groups === 1 ? "is" : "are"} only ${plural(opened.groups, "Group")} on the Map of ${snapshot.project.path}. \`map\` for the Map.`;
@@ -234,6 +237,7 @@ function outline(snapshot: Snapshot, opened: Opened, page: number): string {
   const where = above ? `Under ${label(above)}${alone ? ", alone at the top" : ""}` : "At the top";
   lines.push(`**${where}: ${count(entries.length)}** — most under it first${pages > 1 ? ` · page ${count(at)} of ${count(pages)}` : ""}`);
   const shown = entries.slice((at - 1) * OUTLINE_PAGE, at * OUTLINE_PAGE);
+  for (const member of [above, ...shown.map((entry) => entry.member)]) if (member?.kind === "issue") shows(member.issue);
   lines.push(...shown.map(entryLine));
   const hints = [
     at < pages ? `\`more\` for the next ${OUTLINE_PAGE}` : "",
