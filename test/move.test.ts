@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { move, localCheckouts, type Answer, type MoveDeps, type Position, type Recent, type Request } from "../src/move/move.ts";
 import { showCard } from "../src/map/show.ts";
 import { assignToViewer } from "../src/map/assign.ts";
+import { startWork } from "../src/map/start.ts";
 import { snapshotStore } from "../src/snapshot/store.ts";
 import type { HomeAnswer } from "../src/home/home.ts";
 import type { Command } from "../src/map/draw.ts";
@@ -90,6 +91,7 @@ async function world(options: { others?: HomeAnswer["others"]; trail?: Position[
       return { text: `MAP ${line}`, drew: "map" };
     },
     showCard,
+    start: startWork,
     assign: (tracker, project, ref) => assignToViewer({ store: snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-move-")), { now: () => NOW }) }, tracker, project, ref),
   };
   return {
@@ -243,7 +245,10 @@ describe("an Outside Issue's card", () => {
     const w = await world();
     const card = await w.go({ kind: "view", view: { kind: "card", ref: `↗${PLANS}#7`, page: 1 } });
     assert.match(card.text, /an Outside Issue, in fixture-org\/plans/);
-    assert.deepEqual(card.choices, [{ label: `Open ${PLANS}'s Map`, description: "on this Issue's card there, which shows its Links", run: `issue-map go 'https://github.com/${PLANS}/issues/7'` }]);
+    assert.deepEqual(card.choices, [
+      { label: `Start work on ↗${PLANS}#7`, description: "reads its body and comments to brief you; makes no branch and opens no editor", run: `issue-map start '${PLANS}#7'` },
+      { label: `Open ${PLANS}'s Map`, description: "on this Issue's card there, which shows its Links", run: `issue-map go 'https://github.com/${PLANS}/issues/7'` },
+    ]);
     const moved = await w.go({ kind: "go", target: `https://github.com/${PLANS}/issues/7` });
     assert.match(moved.text, /^\*\*Sub-issues: 2\*\*$/m);
     assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} ↗${PLANS}#7`, `${PLANS} #7`]);
@@ -256,11 +261,11 @@ describe("assigning an Issue to yourself from its card", () => {
   test("the card's offer is a choice whose command assigns it, and assigning lands on its card in the Project on screen", async () => {
     const w = await world({ hosts: withViewer });
     const card = await w.go({ kind: "view", view: { kind: "card", ref: "#12", page: 1 } });
-    assert.deepEqual(card.choices, [{ label: "Assign #12 to me", description: "writes to GitHub: assigns #12 to fixture-viewer", run: "issue-map assign '#12'" }]);
+    assert.deepEqual(card.choices[0], { label: "Assign #12 to me", description: "writes to GitHub: assigns #12 to fixture-viewer", run: "issue-map assign '#12'" });
     const assigned = await w.go({ kind: "assign", ref: "#12" });
     assert.match(assigned.text, /^Assigned #12 to you on GitHub\.\n\n\*\*#12 Issue 12\*\*$/m);
     assert.match(assigned.text, /^Not Blocked · assigned to you$/m);
-    assert.deepEqual(assigned.choices, []);
+    assert.deepEqual(assigned.choices.map((c) => c.label), ["Start work on #12"]);
     assert.deepEqual(assigned.links.map((l) => l.label), [`${PLANS}#7`]);
     assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} #12`]);
   });
@@ -268,13 +273,59 @@ describe("assigning an Issue to yourself from its card", () => {
   test("an Issue moved to by its URL offers it too", async () => {
     const w = await world({ hosts: withViewer });
     const card = await w.go({ kind: "go", target: `https://github.com/${HOME}/issues/12` });
-    assert.deepEqual(card.choices.map((c) => c.run), ["issue-map assign '#12'"]);
+    assert.deepEqual(card.choices.map((c) => c.run), ["issue-map assign '#12'", "issue-map start '#12'"]);
   });
 
   test("an Issue that can't be assigned leaves the user where they are, and says why", async () => {
     const w = await world({ hosts: withViewer });
     const answer = await w.go({ kind: "assign", ref: "#99" });
     assert.equal(answer.text, `Not assigned: no Issue ${HOME}#99 on github.com that this login can read.`);
+    assert.deepEqual(where(w), []);
+  });
+});
+
+describe("starting work on an Issue from its card", () => {
+  const withThread: Record<string, FakeHost> = {
+    ...hosts,
+    "github.com": {
+      ...hosts["github.com"]!,
+      threads: [{ ref: `${HOME}#12`, title: "Issue 12", url: `https://github.com/${HOME}/issues/12`, open: true, body: "State lives in S3.", comments: [{ author: "fixture-dev", at: "2026-02-01T10:00:00Z", body: "I can take this." }], earlier: false }],
+    },
+  };
+
+  test("the card offers it as a choice whose command hands over the Issue's body and comments", async () => {
+    const w = await world({ hosts: withThread });
+    const card = await w.go({ kind: "view", view: { kind: "card", ref: "#12", page: 1 } });
+    assert.deepEqual(card.choices, [{ label: "Start work on #12", description: "reads its body and comments to brief you; makes no branch and opens no editor", run: "issue-map start '#12'" }]);
+    const started = await w.go({ kind: "start", ref: "#12" });
+    assert.match(started.text, /^\*\*#12 Issue 12\*\*$/m);
+    assert.match(started.text, /^State lives in S3\.$/m);
+    assert.match(started.text, /^I can take this\.$/m);
+    assert.deepEqual([started.links, started.choices], [[], []]);
+  });
+
+  test("leaves the user where they were, so they carry on moving from there", async () => {
+    const w = await world({ hosts: withThread });
+    await w.go({ kind: "view", view: { kind: "card", ref: "#12", page: 1 } });
+    await w.go({ kind: "view", view: { kind: "card", ref: `${PLANS}#7`, page: 1 } });
+    const before = where(w);
+    await w.go({ kind: "start", ref: "#12" });
+    assert.deepEqual(where(w), before);
+    assert.match((await w.go({ kind: "back" })).text, /^\*\*#12 Issue 12\*\*$/m, "back retraces from the card the user was on");
+  });
+
+  test("starts work on an Outside Issue by its full reference, from the Project on screen", async () => {
+    const hosts: Record<string, FakeHost> = { ...withThread, "github.com": { ...withThread["github.com"]!, threads: [{ ...withThread["github.com"]!.threads![0]!, ref: `${PLANS}#7`, title: "Q3 importer epic" }] } };
+    const w = await world({ hosts });
+    const started = await w.go({ kind: "start", ref: `${PLANS}#7` });
+    assert.match(started.text, /^\*\*↗fixture-org\/plans#7 Q3 importer epic\*\*$/m);
+    assert.deepEqual(where(w), []);
+  });
+
+  test("an Issue whose thread can't be read says why, and the user stays where they were", async () => {
+    const w = await world({ hosts: withThread });
+    const answer = await w.go({ kind: "start", ref: "#99" });
+    assert.equal(answer.text, `Can't start work on #99: no Issue ${HOME}#99 on github.com that this login can read.`);
     assert.deepEqual(where(w), []);
   });
 });

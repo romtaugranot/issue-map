@@ -1,7 +1,8 @@
 /**
  * The Issue card: what the Map shows about one Issue, read live. Pure. Its
- * Links are offered as the choices to move along, and an unassigned Issue
- * is offered to the viewer, where the Map writes (ADR 0003).
+ * Links are offered as the choices to move along, any open Issue is offered
+ * to start work on, and an unassigned one in the Project is offered to the
+ * viewer, where the Map writes (ADR 0003).
  */
 import type { IssueRead, NamedLink, WriteAnswer } from "../tracker/tracker.ts";
 import { wontWrite, type Band } from "./band.ts";
@@ -22,6 +23,8 @@ export interface Card extends Drawing {
   move?: Move;
   /** An offer to assign the Issue to the viewer; `ref` is what `assign` takes to make it. */
   assign?: Assign;
+  /** An offer to start work on the Issue; `ref` is what `start` takes to make it. */
+  start?: Start;
 }
 
 export interface Move extends Choice {
@@ -29,6 +32,10 @@ export interface Move extends Choice {
 }
 
 export interface Assign extends Choice {
+  ref: string;
+}
+
+export interface Start extends Choice {
   ref: string;
 }
 
@@ -61,11 +68,13 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
     const text = [...head, `${state}${why}`].join("\n");
     if (!outside) return { text, choices: [] };
     // Its own Project's Map reads its Links, so the move lands on its card there.
-    return { text, choices: [], move: { label: `Open ${issue.project}'s Map`, description: "on this Issue's card there, which shows its Links", target: issue.url } };
+    const start = issue.open ? { start: startOffer(short(issue.ref, project), issue.ref) } : {};
+    return { text, choices: [], ...start, move: { label: `Open ${issue.project}'s Map`, description: "on this Issue's card there, which shows its Links", target: issue.url } };
   }
   const lines = [...head, `${blocked(issue)} · ${assigned(issue, context.viewer)}`];
   const choices: Choice[] = [];
   const assign = offer(issue, project, context);
+  const start = startOffer(short(issue.ref, project));
   const kinds = byName(issue.links);
   const pages = Math.max(1, ...kinds.map(([, links]) => Math.ceil(links.length / PER_KIND)));
   const at = Math.min(Math.max(1, page), pages);
@@ -94,7 +103,7 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
     const left = links.length - from - shown.length;
     if (left > 0) lines.push(`- … ${count(left)} more — \`more\` for the next ${PER_KIND}`);
   }
-  const offered = assign ? { assign } : {};
+  const offered = { ...(assign ? { assign } : {}), start };
   if (at > 1) return { text: lines.join("\n"), choices, ...offered };
   lines.push(...closingRequests(issue));
   const mentions = mentionedOnly(issue);
@@ -122,6 +131,15 @@ function offer(issue: IssueRead, project: string, { viewer, writes }: CardContex
   const write = `writes to ${writes.product}: assigns ${ref} to ${viewer}`;
   const unsure = writes.write.kind === "cant-tell" ? `. ${writes.product} doesn't say whether this login may (${writes.write.reason}), so it stops at the first refusal` : "";
   return { label: `Assign ${ref} to me`, description: `${write}${unsure}`, ref };
+}
+
+/**
+ * The offer to start work on an open Issue, an Outside Issue among them: it
+ * only reads, so it's offered on every band. `shown` is its reference as the
+ * card shows it, `ref` as `start` takes it.
+ */
+function startOffer(shown: string, ref = shown): Start {
+  return { label: `Start work on ${shown}`, description: "reads its body and comments to brief you; makes no branch and opens no editor", ref };
 }
 
 function closingRequests({ closingRequests, unread }: IssueRead): string[] {

@@ -1,7 +1,7 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1 to 7, 9 and 11 so far, and reading only what
+ * This file holds needs 1 to 9 and 11 so far, and reading only what
  * changed for needs 3, 4 and 7.
  */
 
@@ -63,6 +63,11 @@ export interface Tracker {
    */
   capabilities(project: Project): Promise<CapabilitiesAnswer>;
   /**
+   * Need 8: what the Issue `locator` names, as `issue` takes it, says — its
+   * body and its latest comments — for starting work on it.
+   */
+  thread(locator: string): Promise<ThreadAnswer>;
+  /**
    * Need 11: assign the Issue `locator` names, as `issue` takes it, to the
    * viewer, the login `viewer` named, keeping whoever else it's assigned
    * to. The Tracker's refusal of the write is told apart from its refusal
@@ -79,6 +84,38 @@ export type AssignAnswer =
   /** No such Issue, or none this login can read. */
   | { kind: "not-found"; reason: string }
   | CantAnswer;
+
+export type ThreadAnswer =
+  | { kind: "thread"; thread: Thread }
+  /** No such Issue, or none this login can read. */
+  | { kind: "not-found"; reason: string }
+  | CantAnswer;
+
+/** Need 8: one Issue's body and comments, open or closed. */
+export interface Thread {
+  /** The reference users type from anywhere, such as `owner/name#123`. */
+  ref: string;
+  title: string;
+  url: string;
+  open: boolean;
+  /** Its body as written; empty when it has none. */
+  body: string;
+  /**
+   * Its latest comments, up to 100, oldest first. What the Tracker notes by
+   * itself, such as a Mention, isn't a comment.
+   */
+  comments: IssueComment[];
+  /** Whether it may have comments earlier than these, which weren't read. */
+  earlier: boolean;
+}
+
+export interface IssueComment {
+  /** The login that wrote it; `null` where its account is gone. */
+  author: string | null;
+  /** ISO date. */
+  at: string;
+  body: string;
+}
 
 export type LinkKind = "blocks" | "parent" | "related";
 

@@ -6,7 +6,7 @@
  * its REST API fills in.
  */
 import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
-import type { AssignAnswer, CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkKind, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
+import type { AssignAnswer, CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkKind, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitLab";
 
@@ -44,6 +44,9 @@ const OUTSIDE_BATCH = 50;
 
 /** Work items read by iid in one request. */
 const IID_BATCH = 20;
+
+/** Comments a thread reads, the latest. */
+const THREAD_COMMENTS = 100;
 
 /** REST requests one read keeps in flight, where an older GitLab gives an Issue's Links only one Issue at a time. */
 const REST_AT_ONCE = 4;
@@ -199,6 +202,7 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
       changes: async (project, since, outside) => (loginIsFor ? changes(ctx, project, since, outside) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? issue(ctx, locator) : noLogin(host)),
       capabilities: async (project) => (loginIsFor ? capabilities(ctx, project) : noLogin(host)),
+      thread: async (locator) => (loginIsFor ? thread(ctx, locator) : noLogin(host)),
       assign: async (locator, viewer) => (loginIsFor ? assign(ctx, locator, viewer) : noLogin(host)),
     };
   };
@@ -529,12 +533,9 @@ async function readEnds(ctx: Ctx, ids: string[]): Promise<FarEnd[] | Failure> {
 
 /** One Issue by its reference, `group/project#123` or `group&12`, or its URL on this host. */
 async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
-  const escaped = ctx.host.replaceAll(".", "\\.");
-  const byUrl = new RegExp(`^https://${escaped}/(groups/)?(.+?)/-/(?:issues|work_items|epics)/(\\d+)/?(?:[?#].*)?$`).exec(locator);
-  const byRef = /^([\w.-]+(?:\/[\w.-]+)*)([#&])(\d+)$/.exec(locator);
-  if (!byUrl && !byRef) return { kind: "not-found", reason: `${locator} isn't a GitLab Issue's reference or URL on ${ctx.host}` };
-  const [path, iid] = byUrl ? [byUrl[2]!, byUrl[3]!] : [byRef![1]!, byRef![3]!];
-  const inGroup = byUrl ? !!byUrl[1] : byRef![2] === "&";
+  const at = itemAt(ctx, locator);
+  if ("kind" in at) return at;
+  const { path, iid, inGroup } = at;
   if (inGroup && !ctx.has.epicWorkItems) return legacyEpicCard(ctx, path, iid, locator);
   if (!ctx.has.workItems) return issueFromRest(ctx, path, iid, locator);
   const notes = `... on WorkItemWidgetNotes { discussions(filter: ONLY_ACTIVITY, first: 100) { nodes { notes { nodes { body systemNoteMetadata { action } } } } } }`;
@@ -547,15 +548,9 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
   ${blocksField(ctx)}
 }
 ${itemFragment(ctx, notes)}`;
-  let answer = await graphql(ctx, within(inGroup ? "group" : "project"), { path }, path);
-  if ("kind" in answer) return notFound(answer, ctx, locator);
-  let container = (inGroup ? answer.data.group : answer.data.project) as { id?: string; userPermissions?: { readMergeRequest: boolean }; workItems: { nodes: ItemNode[] } } | null;
-  // A group's own Issue, such as an epic, has a `#` reference like any other now.
-  if (!container && !inGroup && ctx.has.epicWorkItems) {
-    answer = await graphql(ctx, within("group"), { path }, path);
-    if ("kind" in answer) return notFound(answer, ctx, locator);
-    container = answer.data.group as typeof container;
-  }
+  const found = await workItemIn<{ id?: string; userPermissions?: { readMergeRequest: boolean }; workItems: { nodes: ItemNode[] } }>(ctx, path, inGroup, within);
+  if ("kind" in found) return notFound(found, ctx, locator);
+  const { answer, container } = found;
   const node = container?.workItems.nodes[0];
   if (!node) return { kind: "not-found", reason: `no Issue ${path}#${iid} on ${ctx.host} that this login can read` };
   const { id, userPermissions } = container!;
@@ -573,6 +568,114 @@ ${itemFragment(ctx, notes)}`;
   const mentionedBy = await mentions(ctx, node);
   if (!Array.isArray(mentionedBy)) return mentionedBy;
   return card(node, mentionedBy, unread);
+}
+
+/** The Project or group and the iid `locator` names: a reference, `group/project#123` or `group&12`, or a URL on this host. */
+function itemAt(ctx: Ctx, locator: string): { path: string; iid: string; inGroup: boolean } | { kind: "not-found"; reason: string } {
+  const escaped = ctx.host.replaceAll(".", "\\.");
+  const byUrl = new RegExp(`^https://${escaped}/(groups/)?(.+?)/-/(?:issues|work_items|epics)/(\\d+)/?(?:[?#].*)?$`).exec(locator);
+  const byRef = /^([\w.-]+(?:\/[\w.-]+)*)([#&])(\d+)$/.exec(locator);
+  if (!byUrl && !byRef) return { kind: "not-found", reason: `${locator} isn't a GitLab Issue's reference or URL on ${ctx.host}` };
+  const [path, iid] = byUrl ? [byUrl[2]!, byUrl[3]!] : [byRef![1]!, byRef![3]!];
+  return { path, iid, inGroup: byUrl ? !!byUrl[1] : byRef![2] === "&" };
+}
+
+/**
+ * Asks `within` of the Project or group at `path`, as `inGroup` says; a
+ * group's own Issue, such as an epic, has a `#` reference like any other
+ * now, so a Project that isn't there is asked of as a group.
+ */
+async function workItemIn<T>(ctx: Ctx, path: string, inGroup: boolean, within: (container: "project" | "group") => string): Promise<{ answer: { data: Record<string, unknown> }; container: T | null } | Failure> {
+  let answer = await graphql(ctx, within(inGroup ? "group" : "project"), { path }, path);
+  if ("kind" in answer) return answer;
+  let container = (inGroup ? answer.data.group : answer.data.project) as T | null;
+  if (!container && !inGroup && ctx.has.epicWorkItems) {
+    answer = await graphql(ctx, within("group"), { path }, path);
+    if ("kind" in answer) return answer;
+    container = answer.data.group as T | null;
+  }
+  return { answer, container };
+}
+
+/**
+ * Need 8: one Issue's description and latest comments, from the work-item
+ * GraphQL; before 16.0, or for an epic before it was a work item, from REST.
+ * A comment's replies are comments too; the notes GitLab makes by itself,
+ * such as a Mention, aren't.
+ */
+async function thread(ctx: Ctx, locator: string): Promise<ThreadAnswer> {
+  const at = itemAt(ctx, locator);
+  if ("kind" in at) return at;
+  const { path, iid, inGroup } = at;
+  if (inGroup && !ctx.has.epicWorkItems) return threadFromRest(ctx, `groups/${encodeURIComponent(path)}/epics/${iid}`, path, locator);
+  if (!ctx.has.workItems) return threadFromRest(ctx, `projects/${encodeURIComponent(path)}/issues/${iid}`, path, locator);
+  const within = (container: string) => `query($path: ID!) {
+  currentUser { username }
+  ${container}(fullPath: $path) {
+    workItems(iids: ${JSON.stringify([iid])}, first: 1) {
+      nodes {
+        reference(full: true) title webUrl state
+        widgets {
+          ... on WorkItemWidgetDescription { description }
+          ... on WorkItemWidgetNotes { discussions(filter: ONLY_COMMENTS, last: ${THREAD_COMMENTS}) { pageInfo { hasPreviousPage } nodes { notes { nodes { body createdAt author { username } } } } } }
+        }
+      }
+    }
+  }
+}`;
+  const found = await workItemIn<{ workItems: { nodes: ThreadNode[] } }>(ctx, path, inGroup, within);
+  if ("kind" in found) return notFound(found, ctx, locator);
+  const node = found.container?.workItems.nodes[0];
+  if (!node) return { kind: "not-found", reason: `no Issue ${path}#${iid} on ${ctx.host} that this login can read` };
+  const widgets = Object.assign({}, ...node.widgets) as ThreadWidgets;
+  const notes = (widgets.discussions?.nodes ?? []).flatMap((d) => d.notes.nodes).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  return {
+    kind: "thread",
+    thread: {
+      ref: node.reference,
+      title: node.title,
+      url: node.webUrl,
+      open: node.state === "OPEN",
+      body: widgets.description ?? "",
+      comments: notes.slice(-THREAD_COMMENTS).map((n) => ({ author: n.author?.username ?? null, at: n.createdAt, body: n.body })),
+      earlier: (widgets.discussions?.pageInfo.hasPreviousPage ?? false) || notes.length > THREAD_COMMENTS,
+    },
+  };
+}
+
+/** One Issue's thread from REST, at `base`: a Project's Issue, or a group's epic. Its newest page of notes is read, so there may be earlier comments when it's full. */
+async function threadFromRest(ctx: Ctx, base: string, path: string, locator: string): Promise<ThreadAnswer> {
+  const item = await rest(ctx, base, path);
+  if ("kind" in item) return notFound(item, ctx, locator);
+  const notes = await rest(ctx, `${base}/notes?sort=desc&order_by=created_at&per_page=${THREAD_COMMENTS}`, path);
+  if ("kind" in notes) return notFound(notes, ctx, locator);
+  const found = item.json as { title: string; web_url: string; state: string; description: string | null; references: { full: string } };
+  const page = notes.json as { body: string; created_at: string; system: boolean; author: { username: string } | null }[];
+  return {
+    kind: "thread",
+    thread: {
+      ref: found.references.full,
+      title: found.title,
+      url: found.web_url,
+      open: found.state === "opened",
+      body: found.description ?? "",
+      comments: page.filter((n) => !n.system).reverse().map((n) => ({ author: n.author?.username ?? null, at: n.created_at, body: n.body })),
+      earlier: page.length === THREAD_COMMENTS,
+    },
+  };
+}
+
+interface ThreadNode {
+  reference: string;
+  title: string;
+  webUrl: string;
+  state: "OPEN" | "CLOSED";
+  widgets: Partial<ThreadWidgets>[];
+}
+
+interface ThreadWidgets {
+  description?: string | null;
+  discussions?: { pageInfo: { hasPreviousPage: boolean }; nodes: { notes: { nodes: { body: string; createdAt: string; author: { username: string } | null }[] } }[] };
 }
 
 function card(node: ItemNode, mentionedBy: string[], unread: Unread): IssueAnswer {
@@ -636,7 +739,7 @@ async function assign(ctx: Ctx, locator: string, viewer: string): Promise<Assign
   return { kind: "not-allowed", reason: `GitLab refused to let this login assign ${ref}: assigning in ${path} takes at least the Reporter role` };
 }
 
-function notFound(answer: Failure, ctx: Ctx, locator: string): IssueAnswer {
+function notFound(answer: Failure, ctx: Ctx, locator: string): Failure {
   return answer.kind === "not-found" ? { kind: "not-found", reason: `no Issue ${locator} on ${ctx.host} that this login can read` } : answer;
 }
 

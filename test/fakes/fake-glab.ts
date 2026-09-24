@@ -199,7 +199,7 @@ class Gitlab {
       createdAt: createdAt(issue),
       updatedAt: this.updatedAt(spec, issue),
       widgets: [
-        ["WorkItemWidgetDescription", {}],
+        ["WorkItemWidgetDescription", { description: issue.body ?? null }],
         ["WorkItemWidgetAssignees", { assignees: { nodes: (issue.assignees ?? []).map((username) => ({ username })) } }],
         ["WorkItemWidgetMilestone", { milestone: issue.planned ? { dueDate: issue.planned.slice(0, 10) } : null }],
         [
@@ -218,7 +218,10 @@ class Gitlab {
             },
           },
         ],
-        ["WorkItemWidgetNotes", notesWidget([{ body: "changed the description", systemNoteMetadata: { action: "description" } }, ...mentions, ...noted])],
+        [
+          "WorkItemWidgetNotes",
+          query.includes("filter: ONLY_COMMENTS") ? commentsWidget(issue, query) : notesWidget([{ body: "changed the description", systemNoteMetadata: { action: "description" } }, ...mentions, ...noted]),
+        ],
       ].map(([type, widget]) => (query.includes(`on ${type as string} `) ? widget : {})),
     };
   }
@@ -227,6 +230,20 @@ class Gitlab {
 /** The notes widget: a flat list from 17.11, and discussions of notes in every version. */
 function notesWidget(notes: { body: string; systemNoteMetadata: { action: string } }[]) {
   return { notes: { nodes: notes }, discussions: { nodes: notes.map((note) => ({ notes: { nodes: [note] } })) } };
+}
+
+/**
+ * The comments widget: the last `n` discussions the query asks for, oldest
+ * first; each comment in the World starts a discussion, and its first reply
+ * is in the same one.
+ */
+function commentsWidget(issue: IssueSpec, query: string) {
+  const last = Number(/filter: ONLY_COMMENTS, last: (\d+)/.exec(query)?.[1] ?? 20);
+  const note = (c: NonNullable<IssueSpec["comments"]>[number]) => ({ body: c.body, createdAt: c.at, author: { username: c.author } });
+  const comments = issue.comments ?? [];
+  const discussions = comments.map((c) => ({ notes: { nodes: [note(c)] } }));
+  const latest = discussions.slice(-last);
+  return { discussions: { pageInfo: { hasPreviousPage: latest.length < discussions.length }, nodes: latest } };
 }
 
 /**
@@ -385,6 +402,7 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
     const group = world.projects?.find((p) => p.namespace && (p.path === path || String(projectId(p)) === path));
     const epic = group?.issues?.find((i) => i.number === Number(rest[1]));
     if (!group || !epic || epic.hidden || rest[0] !== "epics" || !licensed) return notFound;
+    if (rest[2] === "notes") return restNotes(gl, group, epic, url);
     if (rest[2] === "issues") {
       const self = gl.addr(group, epic);
       const children = gl.links().filter(([a, k]) => k === "parent" && a === self).map(([, , b]) => gl.found(b)).filter((c) => !c.issue.hidden);
@@ -433,6 +451,10 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
     return issue && !issue.hidden ? exited(0, JSON.stringify(withTier(issue))) : notFound;
   }
+  if (rest[0] === "issues" && rest[2] === "notes") {
+    const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
+    return issue && !issue.hidden ? restNotes(gl, spec, issue, url) : notFound;
+  }
   if (rest[0] === "issues" && rest[2] === "links") {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
     if (!issue || issue.hidden) return notFound;
@@ -446,6 +468,18 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
   return notFound;
 }
 
+/** An Issue's or an epic's notes, a page at a time in the order asked for: the notes GitLab makes by itself, marked `system`, and the comments. */
+function restNotes(gl: Gitlab, spec: ProjectSpec, issue: IssueSpec, url: URL): CliResult {
+  const self = gl.addr(spec, issue);
+  const system = (gl.world.mentions ?? []).filter(([, b]) => b === self).map(([a]) => ({ body: `mentioned in issue ${a}`, created_at: LONG_AGO, system: true, author: { username: "fixture-dev" } }));
+  const comments = (issue.comments ?? []).map((c) => ({ body: c.body, created_at: c.at, system: false, author: { username: c.author } }));
+  const notes = [...system, ...comments].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  if (url.searchParams.get("sort") === "desc") notes.reverse();
+  const perPage = Number(url.searchParams.get("per_page") ?? 20);
+  const page = Number(url.searchParams.get("page") ?? 1);
+  return exited(0, JSON.stringify(notes.slice((page - 1) * perPage, page * perPage)));
+}
+
 function restIssue(gl: Gitlab, spec: ProjectSpec, issue: IssueSpec) {
   const duplicate = issue.duplicateOf ? gl.found(issue.duplicateOf) : null;
   return {
@@ -453,6 +487,7 @@ function restIssue(gl: Gitlab, spec: ProjectSpec, issue: IssueSpec) {
     iid: issue.number,
     project_id: projectId(spec),
     title: title(issue),
+    description: issue.body ?? null,
     state: issue.closed ? "closed" : "opened",
     closed_at: closedAt(issue),
     web_url: `https://${gl.host}/${spec.path}/-/issues/${issue.number}`,
@@ -472,6 +507,7 @@ function restEpic(gl: Gitlab, group: ProjectSpec, epic: IssueSpec) {
     iid: epic.number,
     group_id: projectId(group),
     title: title(epic),
+    description: epic.body ?? null,
     state: epic.closed ? "closed" : "opened",
     closed_at: closedAt(epic),
     web_url: `https://${gl.host}/groups/${group.path}/-/epics/${epic.number}`,

@@ -218,6 +218,33 @@ describe("assigning an Issue to yourself from its card", () => {
   });
 });
 
+describe("starting work on an Issue from its card", () => {
+  const offer = (issue: IssueRead, context: CardContext = {}) => drawCard(issue, PROJECT, 1, context).start;
+
+  test("an open Issue's card offers to start work on it, saying what that does and doesn't do", () => {
+    assert.deepEqual(offer(read(12)), { label: "Start work on #12", description: "reads its body and comments to brief you; makes no branch and opens no editor", ref: "#12" });
+  });
+
+  test("is offered whoever the Issue is assigned to, and on every band, since it writes nothing", () => {
+    assert.equal(offer(read(12, { assignees: ["fixture-dev"] }))?.ref, "#12");
+    assert.equal(offer(read(12), { viewer: "fixture-viewer", writes: { product: "GitHub", band: { kind: "best-effort", untested: "GHES 3.17.4 is older than 3.18" }, write: { kind: "cant", reason: "read-only" } } })?.ref, "#12");
+  });
+
+  test("is offered on every page of the card", () => {
+    const links = Array.from({ length: 12 }, (_, i) => link("child", "Sub-issues", 20 + i));
+    assert.equal(drawCard(read(12, { links }), PROJECT, 2).start?.ref, "#12");
+  });
+
+  test("an open Outside Issue's card offers it too, by its full reference, since it only reads", () => {
+    assert.equal(offer({ ...read(7), project: "fixture-org/plans", ref: "fixture-org/plans#7" })?.ref, "fixture-org/plans#7");
+  });
+
+  test("isn't offered for a closed Issue", () => {
+    assert.equal(offer(read(12, { open: false, closedAs: "completed" })), undefined);
+    assert.equal(offer({ ...read(7), project: "fixture-org/plans", ref: "fixture-org/plans#7", open: false, closedAs: "completed" }), undefined);
+  });
+});
+
 describe("a reduced card", () => {
   const busy = {
     links: [link("parent", "Parent issue", 3), link("blocker", "Blocked by", 5)],
@@ -234,6 +261,7 @@ describe("a reduced card", () => {
         "Open · an Outside Issue, in fixture-org/plans. The Map hasn't read that Project, so this card shows none of its Links.",
       ].join("\n"),
       choices: [],
+      start: { label: "Start work on ↗fixture-org/plans#7", description: "reads its body and comments to brief you; makes no branch and opens no editor", ref: "fixture-org/plans#7" },
       move: {
         label: "Open fixture-org/plans's Map",
         description: "on this Issue's card there, which shows its Links",

@@ -44,6 +44,7 @@ function fakeTracker(time: ReturnType<typeof clock>, script: { viewer?: ViewerAn
     product: "GitHub",
     host: "github.com",
     version: null,
+    thread: async () => ({ kind: "cant-tell", reason: "unused" }),
     untested: null,
     capabilities: async () => ({ kind: "capabilities", ...READS_EVERYTHING }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),

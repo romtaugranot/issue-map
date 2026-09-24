@@ -71,6 +71,8 @@ export interface MoveDeps {
   showCard(tracker: Tracker, project: Project, ref: string, page: number, read?: IssueRead): Promise<ShownCard>;
   /** Assigns the Issue `ref` names to the viewer, and shows its card; one that can't be says why. */
   assign(tracker: Tracker, project: Project, ref: string): Promise<ShownCard>;
+  /** The body and comments of the Issue `ref` names, to brief the user from; one that can't be read says why. */
+  start(tracker: Tracker, project: Project, ref: string): Promise<string>;
 }
 
 export type Request =
@@ -81,6 +83,8 @@ export type Request =
   | { kind: "back" }
   /** Assigns the Issue `ref` names in the Project on screen to the viewer. */
   | { kind: "assign"; ref: string }
+  /** Starts work on the Issue `ref` names in the Project on screen. */
+  | { kind: "start"; ref: string }
   /** `picked` when the Home Project was just picked, so `home` goes there rather than re-pick. */
   | { kind: "home"; picked?: boolean };
 
@@ -163,6 +167,14 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
       return cardAnswer(card);
     }
 
+    case "start": {
+      if (!here) return say(deps.home.text);
+      const found = await trackerAt(deps, here.project.host);
+      if ("why" in found) return say(`Can't start work on ${typedRef(request.ref)}: ${found.why}.`);
+      // It hands the Issue over and moves nothing, so the user carries on from where they are.
+      return say(await deps.start(found.tracker, here.project, request.ref));
+    }
+
     case "back": {
       if (trail.length < 2) return say("Nothing to go back to: this is where this session's trail starts.");
       const back = trail.slice(0, -1);
@@ -215,6 +227,7 @@ function say(text: string): Answer {
 function cardAnswer(card: Card): Answer {
   const choices: MoveChoice[] = [];
   if (card.assign) choices.push({ label: card.assign.label, description: card.assign.description, run: `issue-map assign ${quote(card.assign.ref)}` });
+  if (card.start) choices.push({ label: card.start.label, description: card.start.description, run: `issue-map start ${quote(card.start.ref)}` });
   if (card.move) choices.push({ label: card.move.label, description: card.move.description, run: `issue-map go ${quote(card.move.target)}` });
   return { text: card.text, links: card.choices, choices };
 }

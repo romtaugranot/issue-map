@@ -191,6 +191,7 @@ function ghApi(world: World, args: string[]): CliResult {
     const changes = changedSince(world, spec, host, since, field("withIssues") === "true" ? (field("issuesAfter") ?? "0") : null, field("withPulls") === "true" ? (field("pullsAfter") ?? "0") : null);
     return withOutside(world, host, changes, list("outside"));
   }
+  if (query.includes("comments(last:")) return threadOf(spec, host, Number(field("number")));
   if (query.includes("issue(number:")) return oneIssue(world, spec, host, Number(field("number")));
   const viewerPermission = world.role === "reader" ? "READ" : "TRIAGE";
   return exited(0, JSON.stringify({ data: { repository: { ...repository(spec, host), viewerPermission, parent: spec.parent ? repository(spec.parent, host) : null } } }));
@@ -258,6 +259,30 @@ function oneIssue(world: World, spec: ProjectSpec, host: string, number: number)
     timelineItems: { nodes: [...mentions, ...pulls] },
   };
   return answer({ repository: { issue: node } }, errors);
+}
+
+/** One Issue's body and its latest 100 comments, oldest first, as github.com gives them. */
+function threadOf(spec: ProjectSpec, host: string, number: number): CliResult {
+  const issue = spec.issues?.find((i) => i.number === number);
+  if (!issue || issue.hidden) {
+    const message = `Could not resolve to an issue or pull request with the number of ${number}.`;
+    return answer({ repository: { issue: null } }, [{ type: "NOT_FOUND", path: ["repository", "issue"], message }]);
+  }
+  const comments = issue.comments ?? [];
+  const latest = comments.slice(-100);
+  return answer({
+    repository: {
+      issue: {
+        number,
+        title: title(issue),
+        url: `https://${host}/${spec.path}/issues/${number}`,
+        state: issue.closed ? "CLOSED" : "OPEN",
+        body: issue.body ?? "",
+        repository: { nameWithOwner: spec.path },
+        comments: { pageInfo: { hasPreviousPage: latest.length < comments.length }, nodes: latest.map((c) => ({ author: { login: c.author }, createdAt: c.at, body: c.body })) },
+      },
+    },
+  }, []);
 }
 
 /**

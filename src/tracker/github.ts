@@ -1,7 +1,7 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
 import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { AssignAnswer, CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
+import type { AssignAnswer, CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
 
@@ -113,6 +113,16 @@ const issueQuery = (ctx: Ctx) => `query($owner: String!, $name: String!, $number
   }
 }
 ${issueFields(ctx)}`;
+
+/** Need 8 in one request: an Issue's body and its latest 100 comments; timeline events, such as a Mention, aren't comments. */
+const THREAD_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      number title url state body repository { nameWithOwner }
+      comments(last: 100) { pageInfo { hasPreviousPage } nodes { author { login } createdAt body } }
+    }
+  }
+}`;
 
 /** What a refresh reads again of an Issue that changed: all the Map reads of an open one, and how a closed one closed. */
 const CHANGED_FIELDS = `fragment changed on Issue { ...issue state closedAt stateReason repository { nameWithOwner } }`;
@@ -288,6 +298,7 @@ export function github(deps: AdapterDeps): TrackerKind {
       changes: async (project, since, outside) => (loginIsFor ? withSchema((ctx) => changes(ctx, project, since, outside)) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? withSchema((ctx) => issue(ctx, locator)) : noLogin(host)),
       capabilities: async (project) => (loginIsFor ? withSchema((ctx) => capabilities(ctx, project)) : noLogin(host)),
+      thread: async (locator) => (loginIsFor ? thread(cliHere, host, locator) : noLogin(host)),
       assign: async (locator, viewer) => (loginIsFor ? assign(cliHere, host, locator, viewer) : noLogin(host)),
     };
   };
@@ -735,6 +746,43 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
       unread,
     },
   };
+}
+
+/** Need 8: one Issue's body and latest comments, by its reference or its URL on this host. */
+async function thread(cli: Cli, host: string, locator: string): Promise<ThreadAnswer> {
+  const at = issueAt(host, locator);
+  if ("kind" in at) return at;
+  const { owner, name, number } = at;
+  const answer = await graphql(cli, host, THREAD_QUERY, { owner, name, number });
+  if (answer.kind === "missing") return ghMissing(host);
+  const body = parse(answer.stdout);
+  const node = (body?.data as { repository?: { issue?: ThreadNode | null } | null } | undefined)?.repository?.issue;
+  if (!node || answer.code !== 0) {
+    const failed = failure(answer, body, host, `${owner}/${name}`);
+    return failed.kind === "not-found" ? { kind: "not-found", reason: `no Issue ${owner}/${name}#${number} on ${host} that this login can read` } : failed;
+  }
+  return {
+    kind: "thread",
+    thread: {
+      ref: `${node.repository.nameWithOwner}#${node.number}`,
+      title: node.title,
+      url: node.url,
+      open: node.state === "OPEN",
+      body: node.body,
+      comments: node.comments.nodes.map((c) => ({ author: c.author?.login ?? null, at: c.createdAt, body: c.body })),
+      earlier: node.comments.pageInfo.hasPreviousPage,
+    },
+  };
+}
+
+interface ThreadNode {
+  number: number;
+  title: string;
+  url: string;
+  state: "OPEN" | "CLOSED";
+  body: string;
+  repository: { nameWithOwner: string };
+  comments: { pageInfo: { hasPreviousPage: boolean }; nodes: { author: { login: string } | null; createdAt: string; body: string }[] };
 }
 
 /**
