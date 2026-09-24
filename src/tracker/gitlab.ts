@@ -5,8 +5,8 @@
  * for the fields its version has; what an older one's GraphQL leaves out,
  * its REST API fills in.
  */
-import { hostNamed, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
-import type { CantAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
+import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
+import type { CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkKind, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitLab";
 
@@ -21,6 +21,20 @@ const FOR_ONE_HOST = [...TOKEN_VARIABLES, "CI_JOB_TOKEN", "GITLAB_API_HOST"];
 
 /** Why no Issue is Unblocked in a Project whose tier can't record Blocks Links, such as GitLab Free. */
 const CANT_RECORD_BLOCKS = "this Project's GitLab tier can't record Blocks Links";
+
+/** The oldest GitLab the Map reads Links from: its REST API gives each Link's kind from 13.4. */
+const READS_FROM = "13.4";
+
+/** The oldest GitLab the Map is tested on (ADR 0003). */
+const TESTED_FROM = "16.0";
+
+/** GitLab's access levels for the roles that may write a Link: Guest from 17.0, Reporter before. */
+const GUEST = 10;
+const REPORTER = 20;
+const GUEST_WRITES_LINKS = "17.0";
+
+/** The first version that says what a personal access token may do. */
+const TOKEN_SCOPES = "15.5";
 
 /** Pages one refresh reads before it gives up proving it caught up. */
 const REFRESH_PAGES = 10;
@@ -39,6 +53,8 @@ const REST_AT_ONCE = 4;
  * release's GraphQL reference. Where a version doesn't, REST gives it.
  */
 const SINCE = {
+  /** Issues as work items, and a task's Parent; before it, Issues are read from REST. */
+  workItems: TESTED_FROM,
   workItemsByReference: "16.7",
   closingMergeRequests: "17.1",
   hasParent: "17.2",
@@ -53,6 +69,8 @@ const SINCE = {
    * answered since 16.7.
    */
   duplicatedTo: "17.8",
+  /** The role this login has in a Project, however it came by it; before it, REST, which misses a role through a shared group. */
+  maxAccessLevel: "16.9",
   forkedFrom: "18.0",
   /** `availableFeatures { hasBlockedIssuesFeature }`; before it, REST's `weight` key stands in (ADR 0003). */
   availableFeatures: "18.3",
@@ -169,16 +187,18 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
 
   /** A host found only by probing is never read: it could be any server that answers like GitLab. */
   const trackerAt = (host: string, version: string | null, loginIsFor: boolean): Tracker => {
-    const ctx: Ctx = { cli: glabAt(host), host, version, has: capabilities(version) };
+    const ctx: Ctx = { cli: glabAt(host), host, version, has: schemaOf(version) };
     return {
       product: PRODUCT,
       host,
       version,
+      untested: untested(version),
       resolveProject: async (path) => (loginIsFor ? resolveProject(ctx, path) : noLogin(host)),
       viewer: async () => (loginIsFor ? viewer(ctx) : noLogin(host)),
       openIssues: async (project, after) => (loginIsFor ? openIssues(ctx, project, after) : noLogin(host)),
       changes: async (project, since, outside) => (loginIsFor ? changes(ctx, project, since, outside) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? issue(ctx, locator) : noLogin(host)),
+      capabilities: async (project) => (loginIsFor ? capabilities(ctx, project) : noLogin(host)),
     };
   };
 
@@ -238,17 +258,13 @@ function isGitLabUnauthorized(text: string): boolean {
 }
 
 /** What a GitLab of this version gives through GraphQL; one that states no version runs GitLab's latest. */
-function capabilities(version: string | null): Has {
+function schemaOf(version: string | null): Has {
   return Object.fromEntries(Object.entries(SINCE).map(([name, since]) => [name, version === null || atLeast(version, since)])) as Has;
 }
 
-function atLeast(version: string, since: string): boolean {
-  const [have, want] = [version, since].map((v) => {
-    const parts = v.split(/[.-]/);
-    return [0, 1, 2].map((i) => Number.parseInt(parts[i] ?? "0", 10) || 0);
-  });
-  for (let i = 0; i < 3; i++) if (have![i] !== want![i]) return have![i]! > want![i]!;
-  return true;
+/** Why the Map is untested on this GitLab, or `null` where it's tested (ADR 0003). */
+function untested(version: string | null): string | null {
+  return version === null || atLeast(version, TESTED_FROM) ? null : `GitLab ${version} is older than ${TESTED_FROM}, the oldest the Map is tested on`;
 }
 
 /** A Link's far end, as every read asks for it. */
@@ -335,6 +351,7 @@ async function heldLogin(ctx: Ctx): Promise<string | null> {
 }
 
 async function openIssues(ctx: Ctx, found: Project, after: string | null): Promise<IssuePage> {
+  if (!ctx.has.workItems) return openIssuesFromRest(ctx, found, after);
   const first = after === null;
   const query = `query($path: ID!, $after: String) {
   currentUser { username }
@@ -377,6 +394,7 @@ ${itemFragment(ctx)}`;
  * updated since are read too, and the Issues each closes.
  */
 async function changes(ctx: Ctx, found: Project, since: string, outside: string[]): Promise<ChangesAnswer> {
+  if (!ctx.has.workItems) return changesFromRest(ctx, found, since, outside);
   const changed = new Map<string, ItemNode>();
   const unread: Unread = {};
   let caughtUp = false;
@@ -517,6 +535,7 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
   const [path, iid] = byUrl ? [byUrl[2]!, byUrl[3]!] : [byRef![1]!, byRef![3]!];
   const inGroup = byUrl ? !!byUrl[1] : byRef![2] === "&";
   if (inGroup && !ctx.has.epicWorkItems) return legacyEpicCard(ctx, path, iid, locator);
+  if (!ctx.has.workItems) return issueFromRest(ctx, path, iid, locator);
   const notes = `... on WorkItemWidgetNotes { discussions(filter: ONLY_ACTIVITY, first: 100) { nodes { notes { nodes { body systemNoteMetadata { action } } } } } }`;
   const within = (container: string) => `query($path: ID!) {
   currentUser { username }
@@ -552,6 +571,10 @@ ${itemFragment(ctx, notes)}`;
   }
   const mentionedBy = await mentions(ctx, node);
   if (!Array.isArray(mentionedBy)) return mentionedBy;
+  return card(node, mentionedBy, unread);
+}
+
+function card(node: ItemNode, mentionedBy: string[], unread: Unread): IssueAnswer {
   return {
     kind: "issue",
     issue: {
@@ -597,25 +620,104 @@ async function mentions(ctx: Ctx, node: ItemNode): Promise<string[] | Failure> {
 
 /** Need 5 for Blocks, into `unread`: nothing where the Project can record them, else why not. */
 async function readBlocksUnread(ctx: Ctx, path: string, data: Record<string, unknown>, unread: Unread): Promise<Failure | undefined> {
-  const why = await blocksUnread(ctx, path, data);
-  if (typeof why === "object") return why;
-  if (why !== undefined) unread.blocks = why;
+  const blocks = await blocksAnswer(ctx, path, data);
+  if (blocks.kind === "readable") return undefined;
+  if (blocks.kind === "cant-record" || blocks.kind === "cant-read") unread.blocks = blocks.reason;
+  else return blocks;
   return undefined;
 }
 
-/** `undefined` where the Project can record Blocks Links, else why not. */
-async function blocksUnread(ctx: Ctx, path: string, data: Record<string, unknown>): Promise<string | undefined | Failure> {
+/** Need 5 for Blocks: whether the Project can record them, from `blocksField` where the version says. */
+async function blocksAnswer(ctx: Ctx, path: string, data: Record<string, unknown>): Promise<KindAnswer | Failure> {
   if (ctx.has.availableFeatures) {
     const recordable = (data.namespace as { availableFeatures?: { hasBlockedIssuesFeature?: boolean } } | null)?.availableFeatures?.hasBlockedIssuesFeature;
-    if (recordable === undefined) return `GitLab doesn't say whether ${path} can record Blocks Links`;
-    return recordable ? undefined : CANT_RECORD_BLOCKS;
+    if (recordable === undefined) return { kind: "cant-read", reason: `GitLab doesn't say whether ${path} can record Blocks Links` };
+    return recordable ? { kind: "readable" } : { kind: "cant-record", reason: CANT_RECORD_BLOCKS };
   }
   // Before 18.3, REST gives an Issue's `weight` only where the tier that records Blocks Links is licensed (ADR 0003).
   const answer = await rest(ctx, `projects/${encodeURIComponent(path)}/issues?per_page=1&issue_type=issue`, path);
   if ("kind" in answer) return answer;
   const [first] = Array.isArray(answer.json) ? (answer.json as Record<string, unknown>[]) : [];
-  if (!first) return `GitLab ${ctx.version} doesn't say whether ${path} can record Blocks Links, and it has no Issue to tell by`;
-  return "weight" in first ? undefined : CANT_RECORD_BLOCKS;
+  if (!first) return { kind: "cant-read", reason: `GitLab ${ctx.version} doesn't say whether ${path} can record Blocks Links, and it has no Issue to tell by` };
+  return "weight" in first ? { kind: "readable" } : { kind: "cant-record", reason: CANT_RECORD_BLOCKS };
+}
+
+/**
+ * Needs 5 and 9: which Link kinds the Map reads in this Project, and
+ * whether this login can write one. Before 13.4 it reads none; before 16.0,
+ * no task's Parent.
+ */
+async function capabilities(ctx: Ctx, found: Project): Promise<CapabilitiesAnswer> {
+  const query = `query($path: ID!) {
+  currentUser { username }
+  project(fullPath: $path) { id ${ctx.has.maxAccessLevel ? "maxAccessLevel { integerValue }" : ""} }
+  ${blocksField(ctx)}
+}`;
+  const answer = await graphql(ctx, query, { path: found.path }, found.path);
+  if ("kind" in answer) return answer;
+  const project = answer.data.project as { maxAccessLevel?: { integerValue: number } } | null;
+  if (!project) return gone(ctx, found.path);
+  const blocks = await blocksAnswer(ctx, found.path, answer.data);
+  if (!isKindAnswer(blocks)) return blocks;
+  const write = await writes(ctx, found.path, project.maxAccessLevel?.integerValue);
+  const { version } = ctx;
+  if (version !== null && !atLeast(version, READS_FROM)) {
+    const none: KindAnswer = { kind: "cant-read", reason: `GitLab ${version} is older than ${READS_FROM}, the oldest the Map reads` };
+    return { kind: "capabilities", links: { blocks: none, parent: none, related: none }, write };
+  }
+  const parent: KindAnswer = ctx.has.workItems
+    ? { kind: "readable" }
+    : { kind: "cant-read", reason: `GitLab ${version} doesn't say which Issue a task is in, so the Map reads only the epic an Issue is in` };
+  return { kind: "capabilities", links: { blocks, parent, related: { kind: "readable" } } satisfies Record<LinkKind, KindAnswer>, write };
+}
+
+function isKindAnswer(answer: KindAnswer | Failure): answer is KindAnswer {
+  return answer.kind === "readable" || answer.kind === "cant-record" || answer.kind === "cant-read";
+}
+
+/**
+ * Need 9: whether this login's role in the Project and its token both let
+ * it write a Link. The role comes from GraphQL from 16.9, before from REST;
+ * what the token may do, only where it's a personal access token, from 15.5.
+ * Where GitLab doesn't answer, it can't be told: only a write needs it.
+ */
+async function writes(ctx: Ctx, path: string, level: number | undefined): Promise<WriteAnswer> {
+  const role = await roleIn(ctx, path, level);
+  if (role.kind === "cant") return role;
+  const token = await tokenWrites(ctx);
+  if (token.kind === "cant") return token;
+  return role.kind === "cant-tell" ? role : token;
+}
+
+async function roleIn(ctx: Ctx, path: string, level: number | undefined): Promise<WriteAnswer> {
+  const guest = ctx.version === null || atLeast(ctx.version, GUEST_WRITES_LINKS);
+  let held = level;
+  if (held === undefined) {
+    const answer = await rest(ctx, `projects/${encodeURIComponent(path)}`, path);
+    if ("kind" in answer) return cantTell(`GitLab didn't say this login's role in ${path}: ${answer.reason}`);
+    const { permissions } = answer.json as { permissions?: Record<"project_access" | "group_access", { access_level: number } | null> };
+    const levels = [permissions?.project_access, permissions?.group_access].flatMap((access) => (access ? [access.access_level] : []));
+    // REST names a role held in the Project or its own group, but not one through a group the Project is shared with.
+    if (levels.length === 0) return cantTell(`GitLab ${ctx.version} names no role this login has in ${path}, and wouldn't name one it has through a shared group`);
+    held = Math.max(...levels);
+  }
+  if (held >= (guest ? GUEST : REPORTER)) return { kind: "can" };
+  return { kind: "cant", reason: `this login can only read ${path}: writing a Link there takes the ${guest ? "Guest" : "Reporter"} role` };
+}
+
+/** Whether this login's token may write; GitLab says only of a personal access token, from 15.5. */
+async function tokenWrites(ctx: Ctx): Promise<WriteAnswer> {
+  if (ctx.version !== null && !atLeast(ctx.version, TOKEN_SCOPES)) return cantTell(`GitLab ${ctx.version} doesn't say what this login's token may write`);
+  const answer = await rest(ctx, "personal_access_tokens/self", "this login's token");
+  // It answers only for a personal access token, not for glab's OAuth login or a CI job's token.
+  if ("kind" in answer) return cantTell("GitLab says what a token may write only of a personal access token, and this login's token isn't one");
+  const scopes = (answer.json as { scopes?: string[] } | null)?.scopes ?? [];
+  if (scopes.includes("api")) return { kind: "can" };
+  return { kind: "cant", reason: `this login's token can't write: it has no \`api\` scope — run \`glab auth login --hostname ${ctx.host}\` with a token that has it` };
+}
+
+function cantTell(reason: string): WriteAnswer {
+  return { kind: "cant-tell", reason };
 }
 
 function closingRequestsUnread(ctx: Ctx, permissions: { readMergeRequest: boolean }, path: string): Unread {
@@ -733,6 +835,96 @@ async function legacyEpicCard(ctx: Ctx, group: string, iid: string, locator: str
       mentionedBy: [],
       unread: { blocks: `GitLab ${ctx.version} keeps epics apart from Issues, and the Map doesn't read the Links between epics` },
     },
+  };
+}
+
+/** An Issue as GitLab's REST API gives it, with what the Map reads of an Issue in the Project. */
+interface RestItem extends RestIssue {
+  project_id: number;
+  created_at: string;
+  updated_at: string;
+  assignees: { username: string }[];
+  milestone: { due_date: string | null } | null;
+}
+
+/** Issues REST gives in one page. */
+const REST_PAGE = 100;
+
+/**
+ * Before 16.0 Issues are read from REST, oldest first, a page by its
+ * number; their Links and the epic each is in are filled in as for an
+ * older GitLab's GraphQL. A task's Parent isn't read.
+ */
+async function openIssuesFromRest(ctx: Ctx, found: Project, after: string | null): Promise<IssuePage> {
+  const page = after === null ? 1 : Number(after);
+  const read = await restItems(ctx, found, `state=opened&order_by=created_at&sort=asc&page=${page}`);
+  if (!Array.isArray(read)) return read;
+  const unread = closingRequestsUnread(ctx, { readMergeRequest: true }, found.path);
+  if (page === 1) {
+    const blocks = await readBlocksUnread(ctx, found.path, {}, unread);
+    if (blocks) return blocks;
+  }
+  return {
+    kind: "page",
+    issues: read.map(openIssue),
+    total: found.issues === "off" ? 0 : found.issues.open,
+    next: read.length === REST_PAGE ? String(page + 1) : null,
+    unread,
+  };
+}
+
+/**
+ * What changed since `since`, from REST before 16.0: the Issues updated
+ * since, oldest update first, so that one updated during the read moves
+ * later, not past the page being read.
+ */
+async function changesFromRest(ctx: Ctx, found: Project, since: string, outside: string[]): Promise<ChangesAnswer> {
+  const changed: ItemNode[] = [];
+  let caughtUp = false;
+  for (let page = 1; page <= REFRESH_PAGES && !caughtUp; page++) {
+    const read = await restItems(ctx, found, `updated_after=${encodeURIComponent(since)}&order_by=updated_at&sort=asc&page=${page}`, (node) => node.state === "OPEN");
+    if (!Array.isArray(read)) return read;
+    changed.push(...read);
+    caughtUp = read.length < REST_PAGE;
+  }
+  const ends = await readEnds(ctx, outside);
+  if (!Array.isArray(ends)) return ends;
+  const open = changed.filter((node) => node.state === "OPEN");
+  ends.push(...changed.filter((node) => node.state !== "OPEN").map(farEnd));
+  // No merge request is read with the Issues it closes before 17.1, so none is named as changed.
+  return { kind: "changes", open: open.map(openIssue), ends, requests: [], caughtUp, unread: closingRequestsUnread(ctx, { readMergeRequest: true }, found.path) };
+}
+
+/** One Issue of a Project from REST before 16.0, with no Mentions: only its notes name them. */
+async function issueFromRest(ctx: Ctx, path: string, iid: string, locator: string): Promise<IssueAnswer> {
+  const answer = await rest(ctx, `projects/${encodeURIComponent(path)}/issues/${iid}`, path);
+  if ("kind" in answer) return notFound(answer, ctx, locator);
+  const found = answer.json as RestItem;
+  const node = restItem(found);
+  const filled = await fillFromRest(ctx, { path, id: String(found.project_id) }, [node]);
+  if (filled) return filled;
+  const unread = closingRequestsUnread(ctx, { readMergeRequest: true }, path);
+  const failed = await readBlocksUnread(ctx, path, {}, unread);
+  if (failed) return failed;
+  return card(node, [], unread);
+}
+
+/** A page of a Project's Issues from REST, as work items, with the Links of those `fill` picks filled in. */
+async function restItems(ctx: Ctx, found: Project, params: string, fill: (node: ItemNode) => boolean = () => true): Promise<ItemNode[] | Failure> {
+  const answer = await rest(ctx, `projects/${encodeURIComponent(found.path)}/issues?${params}&per_page=${REST_PAGE}`, found.path);
+  if ("kind" in answer) return answer;
+  const nodes = (answer.json as RestItem[]).map(restItem);
+  const filled = await fillFromRest(ctx, found, nodes.filter(fill));
+  return filled ?? nodes;
+}
+
+/** An Issue from REST as GitLab's GraphQL gives a work item, before its Links are filled in. */
+function restItem(issue: RestItem): ItemNode {
+  return {
+    ...restEnd(issue),
+    createdAt: issue.created_at,
+    updatedAt: issue.updated_at,
+    widgets: [{ assignees: { nodes: issue.assignees.map(({ username }) => ({ username })) } }, { milestone: issue.milestone && { dueDate: issue.milestone.due_date } }],
   };
 }
 

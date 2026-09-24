@@ -17,3 +17,4 @@ Where they differ from what a live read would hold:
 - **Closing Requests** weren't recorded, so each Snapshot says they're unread and no Issue has one.
 - **Personal accounts.** An Outside Issue in a Project owned by a person, rather than an organisation or group, has its owner renamed `fixture-user-<n>` in its path, reference and URL. The repo is headed public, and a fixture names no person.
 - **Close dates and ways.** The prototypes kept only whether a Link's far end was open, so a closed one has no `closedAt` or `closedAs`, and the Snapshots are still in format 2. The Map names such a blocker rather than dating when it closed.
+- **Link kinds.** The prototypes didn't ask which Link kinds each Project records, so each Snapshot says what github.com or gitlab.com answers a Project that records every kind (GitHub records no Related Links), on a version the Map is tested on.

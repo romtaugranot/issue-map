@@ -11,6 +11,7 @@ import { SNAPSHOT_FORMAT, type Snapshot } from "../src/snapshot/snapshot.ts";
 import type { IssuePage, OpenIssue, ProjectResolution, Unread } from "../src/tracker/tracker.ts";
 import type { World } from "./contract/tracker-contract.ts";
 import { arrange } from "./fakes/fake-glab.ts";
+import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
 
 const tools = "fixture-org/tools";
 
@@ -30,7 +31,7 @@ async function snapshotOf(world: World): Promise<Snapshot> {
   } while (after !== null);
   const at = "2026-09-24T00:00:00Z";
   const { id, path, url } = resolved.project;
-  return { format: SNAPSHOT_FORMAT, tracker: "gitlab.com", project: { id, path, url }, login: "fixture-viewer", readAt: at, fullReadAt: at, changesSince: at, caughtUp: true, issues, unread };
+  return { format: SNAPSHOT_FORMAT, tracker: "gitlab.com", project: { id, path, url }, login: "fixture-viewer", readAt: at, fullReadAt: at, changesSince: at, caughtUp: true, issues, unread, support: { untested: null, links: READS_EVERYTHING.links } };
 }
 
 const world: World = {

@@ -26,13 +26,23 @@ export interface AdapterDeps {
   env: Record<string, string | undefined>;
 }
 
-/** A JSON object, or `null` for anything else. */
+/** Whether a Tracker's version, such as `16.11.2-ee` or `3.19.1`, is `since` or later. */
+export function atLeast(version: string, since: string): boolean {
+  const [have, want] = [version, since].map((v) => {
+    const parts = v.split(/[.-]/);
+    return [0, 1, 2].map((i) => Number.parseInt(parts[i] ?? "0", 10) || 0);
+  });
+  for (let i = 0; i < 3; i++) if (have![i] !== want![i]) return have![i]! > want![i]!;
+  return true;
+}
+
 /** The host an environment variable names, which may be written as a URL; `null` where it names none. */
 export function hostNamed(value: string | undefined): string | null {
   const name = value?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
   return name || null;
 }
 
+/** A JSON object, or `null` for anything else. */
 export function parseJson(text: string): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(text);

@@ -240,6 +240,7 @@ const SINCE: [RegExp, string, string][] = [
   [/\bcount\b/, "17.2", "Field 'count' doesn't exist on type 'WorkItemConnection'"],
   [/\bduplicatedToWorkItemUrl\b/, "17.8", "Field 'duplicatedToWorkItemUrl' doesn't exist on type 'WorkItem'"],
   [/on WorkItemWidgetNotes \{ notes\b/, "17.11", "Field 'notes' doesn't exist on type 'WorkItemWidgetNotes'"],
+  [/\bmaxAccessLevel\b/, "16.9", "Field 'maxAccessLevel' doesn't exist on type 'Project'"],
   [/\bforkedFrom\b/, "18.0", "Field 'forkedFrom' doesn't exist on type 'Project'"],
   [/\bavailableFeatures\b/, "18.3", "Field 'availableFeatures' doesn't exist on type 'Namespace'"],
 ];
@@ -302,6 +303,8 @@ function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: st
   const start = Number(field("after") ?? 0);
   const page = <T>(all: T[]) => ({ nodes: all.slice(start, start + PAGE), pageInfo: { hasNextPage: start + PAGE < all.length, endCursor: String(start + PAGE) } });
   const answer: Record<string, unknown> = { id: project(spec).id, userPermissions: { readMergeRequest: gl.world.readsClosingRequests !== false } };
+  // The effective role: Developer, or no access at all.
+  if (query.includes("maxAccessLevel")) answer.maxAccessLevel = { integerValue: gl.world.role === "reader" ? 0 : 30 };
   const issues = (spec.issues ?? []).filter((i) => !i.hidden);
   if (query.includes("sort: CREATED_ASC")) {
     const open = issues.filter((i) => !i.closed);
@@ -336,6 +339,14 @@ function byIids(gl: Gitlab, spec: ProjectSpec, query: string) {
 function restApi(gl: Gitlab, endpoint: string): CliResult {
   const { world, host } = gl;
   if (endpoint === "version") return exited(0, JSON.stringify({ version: gl.version, revision: "0000000" }));
+  if (endpoint === "personal_access_tokens/self") {
+    // From 15.5, for a personal access token; any other kind of token is a bad request.
+    if (!gl.at("15.5")) return exited(1, JSON.stringify({ error: "404 Not Found" }), "glab: 404 Not Found (HTTP 404)\n");
+    // A CI job's token may ask only a few endpoints.
+    if (gl.world.token === "cant-ask") return exited(1, JSON.stringify({ message: "401 Unauthorized" }), "glab: 401 Unauthorized (HTTP 401)\n");
+    if ((gl.world.token ?? "writes") === "unknown") return exited(1, JSON.stringify({ message: "400 Bad request - Token type not supported" }), "glab: 400 Bad request (HTTP 400)\n");
+    return exited(0, JSON.stringify({ name: "glab", scopes: (gl.world.token ?? "writes") === "reads" ? ["read_api"] : ["api"] }));
+  }
   const url = new URL(endpoint, "https://api.invalid/");
   const [, kind, encoded, ...rest] = url.pathname.split("/");
   const path = decodeURIComponent(encoded ?? "");
@@ -357,7 +368,10 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
   if (kind !== "projects" || !spec) return exited(1, JSON.stringify({ message: "404 Project Not Found" }), "glab: 404 Project Not Found (HTTP 404)\n");
   if (rest.length === 0) {
     const fork = spec.parent ? { forked_from_project: { id: projectId(spec.parent), path_with_namespace: spec.parent.path } } : {};
-    return exited(0, JSON.stringify({ id: projectId(spec), path_with_namespace: spec.path, web_url: `https://${host}/${spec.path}`, ...fork }));
+    // Direct membership only: access through a shared group isn't said.
+    const permissions = { project_access: world.role === "reader" ? null : { access_level: 30 }, group_access: null };
+    const issues = { issues_enabled: spec.open !== "off", open_issues_count: spec.open === "off" ? 0 : spec.open };
+    return exited(0, JSON.stringify({ id: projectId(spec), path_with_namespace: spec.path, web_url: `https://${host}/${spec.path}`, ...issues, ...fork, permissions }));
   }
   if (rest[0] === "merge_requests" && rest[2] === "closes_issues") {
     const closes = (world.closingRequests ?? []).filter((r) => r.number === Number(rest[1]) && r.closes.startsWith(`${spec.path}#`));
@@ -366,17 +380,30 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
       return { id: gidNumber(spec, { number: iid }), iid, project_id: projectId(spec) };
     })));
   }
+  // `weight` and `epic` are given only where the tier that has them is licensed.
+  const withTier = (issue: IssueSpec) => {
+    const epic = gl.parentOf(gl.addr(spec, issue), false);
+    const found = epic === undefined ? null : gl.found(epic);
+    const epicOf = found?.spec.namespace && !found.issue.hidden ? { id: epicId(found.spec, found.issue), iid: found.issue.number, group_id: projectId(found.spec), title: title(found.issue) } : null;
+    return { ...restIssue(gl, spec, issue), ...(licensed ? { weight: null, epic: epicOf } : {}) };
+  };
   if (rest[0] === "issues" && rest.length === 1) {
-    // `weight` and `epic` are given only where the tier that has them is licensed.
+    const param = (name: string) => url.searchParams.get(name);
     const iids = url.searchParams.getAll("iids[]").map(Number);
-    const perPage = Number(url.searchParams.get("per_page") ?? 20);
-    const issues = (spec.issues ?? []).filter((i) => !i.hidden && (iids.length === 0 || iids.includes(i.number))).slice(0, perPage);
-    return exited(0, JSON.stringify(issues.map((issue) => {
-      const epic = gl.parentOf(gl.addr(spec, issue), false);
-      const found = epic === undefined ? null : gl.found(epic);
-      const epicOf = found?.spec.namespace && !found.issue.hidden ? { id: epicId(found.spec, found.issue), iid: found.issue.number, group_id: projectId(found.spec), title: title(found.issue) } : null;
-      return { ...restIssue(gl, spec, issue), ...(licensed ? { weight: null, epic: epicOf } : {}) };
-    })));
+    const perPage = Number(param("per_page") ?? 20);
+    const page = Number(param("page") ?? 1);
+    const state = { opened: false, closed: true }[param("state") ?? ""];
+    const updatedAfter = param("updated_after");
+    const order = param("order_by") === "updated_at" ? (i: IssueSpec) => gl.updatedAt(spec, i) : createdAt;
+    const issues = (spec.issues ?? [])
+      .filter((i) => !i.hidden && (iids.length === 0 || iids.includes(i.number)) && (state === undefined || !!i.closed === state))
+      .filter((i) => updatedAfter === null || Date.parse(gl.updatedAt(spec, i)) >= Date.parse(updatedAfter))
+      .sort((a, b) => order(a).localeCompare(order(b)) * (param("sort") === "desc" ? -1 : 1));
+    return exited(0, JSON.stringify(issues.slice((page - 1) * perPage, page * perPage).map(withTier)));
+  }
+  if (rest[0] === "issues" && rest.length === 2) {
+    const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
+    return issue && !issue.hidden ? exited(0, JSON.stringify(withTier(issue))) : notFound;
   }
   if (rest[0] === "issues" && rest[2] === "links") {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
@@ -403,6 +430,10 @@ function restIssue(gl: Gitlab, spec: ProjectSpec, issue: IssueSpec) {
     web_url: `https://${gl.host}/${spec.path}/-/issues/${issue.number}`,
     references: { full: gl.addr(spec, issue) },
     issue_type: issue.taskLevel ? "task" : "issue",
+    created_at: createdAt(issue),
+    updated_at: gl.updatedAt(spec, issue),
+    assignees: (issue.assignees ?? []).map((username) => ({ username })),
+    milestone: issue.planned ? { title: "next", due_date: issue.planned.slice(0, 10) } : null,
     _links: { closed_as_duplicate_of: duplicate ? `https://${gl.host}/api/v4/projects/${projectId(duplicate.spec)}/issues/${duplicate.issue.number}` : null },
   };
 }

@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { keepWarm } from "../src/snapshot/refresher.ts";
 import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
 import type { ChangesAnswer, OpenIssue, Project, ProjectResolution, Tracker, ViewerAnswer } from "../src/tracker/tracker.ts";
+import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 5 } };
 const key: SnapshotKey = { tracker: "github.com", project: project.id, login: "fixture-viewer" };
@@ -43,6 +44,8 @@ function fakeTracker(time: ReturnType<typeof clock>, script: { viewer?: ViewerAn
     product: "GitHub",
     host: "github.com",
     version: null,
+    untested: null,
+    capabilities: async () => ({ kind: "capabilities", ...READS_EVERYTHING }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => (script.viewer ? (script.viewer[time.round] ?? { kind: "viewer", login: "someone-else" }) : me),
     resolveProject: async () => script.project ?? { kind: "project", project, parent: null },

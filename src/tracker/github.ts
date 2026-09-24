@@ -1,12 +1,43 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
-import { hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
+import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { CantAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
+import type { CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
 
 /** Why a login gets no Closing Requests: a token without pull request access, such as a fine-grained one scoped to Issues. */
 const CANT_READ_PULLS = "this login can't read pull requests";
+
+/** The oldest GHES release GitHub still supports, a window that rolls as GitHub retires releases (ADR 0003). */
+const OLDEST_SUPPORTED_GHES = "3.18";
+
+/**
+ * The first GHES release whose published GraphQL schema has each Link kind's
+ * fields, which the note names; which fields a GHES has is asked of its own
+ * schema. No GHES schema has task-list Links (`trackedIssues`).
+ */
+const GHES_SINCE = { subIssues: "3.17", blocks: "3.19" };
+
+/** The fields an Issue has in this GitHub's schema, which say which Link kinds it records (ADR 0004). */
+const SCHEMA_QUERY = `query { __type(name: "Issue") { fields { name } } }`;
+
+/** Which Link kinds' fields this GitHub's schema has. */
+interface Has {
+  subIssues: boolean;
+  blocks: boolean;
+  tracked: boolean;
+}
+
+type Failure = CantAnswer | { kind: "not-found"; reason: string };
+
+/** One GitHub at one host, as every read reaches it. */
+interface Ctx {
+  cli: Cli;
+  host: string;
+  /** `null` for github.com and GHEC; else the GHES release, or `null` inside when it couldn't be learnt. */
+  ghes: { version: string | null } | null;
+  has: Has;
+}
 
 const PROJECT_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -21,29 +52,39 @@ fragment project on Repository {
 
 const VIEWER_QUERY = `query { viewer { login } }`;
 
-/** What the Map reads of every Issue, with its Links and open Closing Requests. */
-const ISSUE_FIELDS = `fragment issue on Issue {
+/** Need 9's half the Tracker states: this login's role in the repository. */
+const ROLE_QUERY = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) { viewerPermission }
+}`;
+
+/** Roles that may write a Link or assign: triage and above. */
+const ROLES_THAT_WRITE = new Set(["TRIAGE", "WRITE", "MAINTAIN", "ADMIN"]);
+
+/** What the Map reads of every Issue, with its Links and open Closing Requests: only the Link kinds this GitHub's schema has. */
+function issueFields({ has }: Ctx): string {
+  return `fragment issue on Issue {
   id number title url createdAt
   assignees(first: 10) { nodes { login } }
   milestone { dueOn }
-  parent { ...end }
-  trackedInIssues(first: 100) { nodes { ...end } }
-  subIssues(first: 100) { nodes { ...end } }
-  trackedIssues(first: 100) { nodes { ...end } }
-  blockedBy(first: 100) { nodes { ...end } }
-  blocking(first: 100) { nodes { ...end } }
+  ${has.subIssues ? "parent { ...end }" : ""}
+  ${has.tracked ? "trackedInIssues(first: 100) { nodes { ...end } }" : ""}
+  ${has.subIssues ? "subIssues(first: 100) { nodes { ...end } }" : ""}
+  ${has.tracked ? "trackedIssues(first: 100) { nodes { ...end } }" : ""}
+  ${has.blocks ? "blockedBy(first: 100) { nodes { ...end } }" : ""}
+  ${has.blocks ? "blocking(first: 100) { nodes { ...end } }" : ""}
   closedByPullRequestsReferences(first: 10, includeClosedPrs: false) {
     nodes { number url isDraft state author { login } repository { nameWithOwner } }
   }
 }
 fragment end on Issue { id number title url state closedAt stateReason repository { nameWithOwner } }`;
+}
 
 /**
  * Needs 3, 4 and 7 in one request a page. GitHub allows 100 sub-issues a
  * parent, 50 blockers each way and 10 assignees, so only task-list Links
  * past the 100th are left unread. Closing Requests past the 10th are too.
  */
-const ISSUES_QUERY = `query($owner: String!, $name: String!, $after: String) {
+const issuesQuery = (ctx: Ctx) => `query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     issues(states: OPEN, first: 100, after: $after, orderBy: {field: CREATED_AT, direction: ASC}) {
       totalCount
@@ -52,14 +93,14 @@ const ISSUES_QUERY = `query($owner: String!, $name: String!, $after: String) {
     }
   }
 }
-${ISSUE_FIELDS}`;
+${issueFields(ctx)}`;
 
 /**
  * One Issue for its card, open or closed, with the Issues that name it. The
  * Tracker notes a Mention on the Issue named, not the one naming it; only
  * the first 100 are read, pull requests that name it among them.
  */
-const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+const issueQuery = (ctx: Ctx) => `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     issue(number: $number) {
       ...issue
@@ -71,7 +112,7 @@ const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
     }
   }
 }
-${ISSUE_FIELDS}`;
+${issueFields(ctx)}`;
 
 /** What a refresh reads again of an Issue that changed: all the Map reads of an open one, and how a closed one closed. */
 const CHANGED_FIELDS = `fragment changed on Issue { ...issue state closedAt stateReason repository { nameWithOwner } }`;
@@ -83,7 +124,7 @@ const CHANGED_FIELDS = `fragment changed on Issue { ...issue state closedAt stat
  * Requests changed without marking them. Either is left out once read. The
  * first page reads the first 100 Outside Issues too.
  */
-const CHANGES_QUERY = `query($owner: String!, $name: String!, $since: DateTime!, $withIssues: Boolean!, $withPulls: Boolean!, $issuesAfter: String, $pullsAfter: String, $outside: [ID!]! = []) {
+const changesQuery = (ctx: Ctx) => `query($owner: String!, $name: String!, $since: DateTime!, $withIssues: Boolean!, $withPulls: Boolean!, $issuesAfter: String, $pullsAfter: String, $outside: [ID!]! = []) {
   repository(owner: $owner, name: $name) {
     issues(filterBy: {since: $since}, states: [OPEN, CLOSED], first: 100, after: $issuesAfter, orderBy: {field: UPDATED_AT, direction: ASC}) @include(if: $withIssues) {
       pageInfo { hasNextPage endCursor }
@@ -96,15 +137,15 @@ const CHANGES_QUERY = `query($owner: String!, $name: String!, $since: DateTime!,
   }
   outside: nodes(ids: $outside) { ... on Issue { ...end } }
 }
-${ISSUE_FIELDS}
+${issueFields(ctx)}
 ${CHANGED_FIELDS}`;
 
 /** Issues by identity, 100 of each at a time: ones that changed, read whole, and Outside Issues, read as far ends. */
-const NODES_QUERY = `query($changed: [ID!]!, $outside: [ID!]!) {
+const nodesQuery = (ctx: Ctx) => `query($changed: [ID!]!, $outside: [ID!]!) {
   changed: nodes(ids: $changed) { ... on Issue { ...changed } }
   outside: nodes(ids: $outside) { ... on Issue { ...end } }
 }
-${ISSUE_FIELDS}
+${issueFields(ctx)}
 ${CHANGED_FIELDS}`;
 
 /**
@@ -135,12 +176,13 @@ interface IssueNode {
   createdAt: string;
   assignees: { nodes: { login: string }[] };
   milestone: { dueOn: string | null } | null;
-  parent: EndNode | null;
-  trackedInIssues: { nodes: (EndNode | null)[] };
-  subIssues: { nodes: (EndNode | null)[] };
-  trackedIssues: { nodes: (EndNode | null)[] };
-  blockedBy: { nodes: (EndNode | null)[] };
-  blocking: { nodes: (EndNode | null)[] };
+  /** Each Link kind's field only where this GitHub's schema has it. */
+  parent?: EndNode | null;
+  trackedInIssues?: { nodes: (EndNode | null)[] };
+  subIssues?: { nodes: (EndNode | null)[] };
+  trackedIssues?: { nodes: (EndNode | null)[] };
+  blockedBy?: { nodes: (EndNode | null)[] };
+  blocking?: { nodes: (EndNode | null)[] };
   /** `null` for a login that can't read pull requests. */
   closedByPullRequestsReferences: { nodes: (PullNode | null)[] } | null;
 }
@@ -222,17 +264,30 @@ export function github(deps: AdapterDeps): TrackerKind {
    * host found only by probing is never read: it could be any server that
    * answers like GitHub.
    */
-  const trackerAt = (host: string, version: string | null, loginIsFor: boolean): Tracker => {
+  const trackerAt = (host: string, ghes: Ctx["ghes"], loginIsFor: boolean): Tracker => {
     const cliHere: Cli = (command, args) => cli(command, args, foreignTokens(env, host));
+    // Asked once, before the first read that needs it; asked again after a failure.
+    let schema: Promise<Has | Failure> | undefined;
+    const withSchema = async <T>(read: (ctx: Ctx) => Promise<T>): Promise<T | Failure> => {
+      schema ??= schemaOf(cliHere, host, ghes);
+      const has = await schema;
+      if ("kind" in has) {
+        schema = undefined;
+        return has;
+      }
+      return read({ cli: cliHere, host, ghes, has });
+    };
     return {
       product: PRODUCT,
       host,
-      version,
+      version: ghes?.version ?? null,
+      untested: untested(ghes),
       resolveProject: async (path) => (loginIsFor ? resolveProject(cliHere, host, path) : noLogin(host)),
       viewer: async () => (loginIsFor ? viewer(cliHere, host) : noLogin(host)),
-      openIssues: async (project, after) => (loginIsFor ? openIssues(cliHere, host, project, after) : noLogin(host)),
-      changes: async (project, since, outside) => (loginIsFor ? changes(cliHere, host, project, since, outside) : noLogin(host)),
-      issue: async (locator) => (loginIsFor ? issue(cliHere, host, locator) : noLogin(host)),
+      openIssues: async (project, after) => (loginIsFor ? withSchema((ctx) => openIssues(ctx, project, after)) : noLogin(host)),
+      changes: async (project, since, outside) => (loginIsFor ? withSchema((ctx) => changes(ctx, project, since, outside)) : noLogin(host)),
+      issue: async (locator) => (loginIsFor ? withSchema((ctx) => issue(ctx, locator)) : noLogin(host)),
+      capabilities: async (project) => (loginIsFor ? withSchema((ctx) => capabilities(ctx, project)) : noLogin(host)),
     };
   };
 
@@ -250,7 +305,7 @@ export function github(deps: AdapterDeps): TrackerKind {
       const answer = await http(`https://${host}/api/v3/meta`);
       if (answer.kind === "unreachable") {
         return known
-          ? { kind: "identified", tracker: trackerAt(host, null, true) }
+          ? { kind: "identified", tracker: trackerAt(host, { version: null }, true) }
           : { kind: "cant-tell", reason: `couldn't reach ${host} (${answer.reason})` };
       }
       // A GHES in private mode refuses the meta call but still marks its answer as GitHub's.
@@ -259,11 +314,78 @@ export function github(deps: AdapterDeps): TrackerKind {
         answer.headers["x-github-enterprise-version"]?.replace(/^enterprise-server@/, "") ??
         null;
       if (version || answer.headers["x-github-request-id"] || known) {
-        return { kind: "identified", tracker: trackerAt(host, version, known) };
+        return { kind: "identified", tracker: trackerAt(host, { version }, known) };
       }
       return { kind: "not-this-kind" };
     },
   };
+}
+
+/**
+ * Which Link kinds' fields this GitHub's schema has: every one on github.com
+ * and GHEC; on GHES, what its own schema says, never what an error's shape
+ * suggests (ADR 0004).
+ */
+async function schemaOf(cli: Cli, host: string, ghes: Ctx["ghes"]): Promise<Has | Failure> {
+  if (!ghes) return { subIssues: true, blocks: true, tracked: true };
+  const answer = await graphql(cli, host, SCHEMA_QUERY, {});
+  if (answer.kind === "missing") return ghMissing(host);
+  const body = parse(answer.stdout);
+  const fields = (body?.data as { __type?: { fields?: { name: string }[] } | null } | undefined)?.__type?.fields;
+  if (answer.code !== 0 || !fields) return failure(answer, body, host, "its schema");
+  const has = (...names: string[]) => names.every((name) => fields.some((field) => field.name === name));
+  return { subIssues: has("parent", "subIssues"), blocks: has("blockedBy", "blocking"), tracked: has("trackedIssues", "trackedInIssues") };
+}
+
+/** Why the Map isn't tested on this GitHub: a GHES release GitHub no longer supports. */
+function untested(ghes: Ctx["ghes"]): string | null {
+  if (!ghes) return null;
+  if (ghes.version === null) return "couldn't learn which GHES release this is";
+  return atLeast(ghes.version, OLDEST_SUPPORTED_GHES) ? null : `GHES ${ghes.version} is older than ${OLDEST_SUPPORTED_GHES}, the oldest release GitHub still supports`;
+}
+
+/** Need 5 for one kind, from the schema: a GHES whose schema lacks its fields can't record it, and the note says which release can. */
+function linkKind({ ghes, host }: Ctx, present: boolean, name: string, since: string): KindAnswer {
+  if (present) return { kind: "readable" };
+  if (ghes?.version && !atLeast(ghes.version, since)) return { kind: "cant-record", reason: `GHES ${ghes.version} can't record ${name} Links; ${since} and later can` };
+  return { kind: "cant-record", reason: `the GHES at ${host} can't record ${name} Links: its schema has no fields for them` };
+}
+
+/** Blocks Links, as unread where this GitHub can't record them. */
+function blocksUnread(ctx: Ctx): Unread {
+  const blocks = linkKind(ctx, ctx.has.blocks, "Blocks", GHES_SINCE.blocks);
+  return blocks.kind === "readable" ? {} : { blocks: blocks.reason };
+}
+
+/**
+ * Needs 5 and 9. The Link kinds come from the schema; the role from the
+ * repository, and the token's grants from the scopes `gh` holds for it,
+ * which a fine-grained token doesn't list.
+ */
+async function capabilities(ctx: Ctx, { path }: Project): Promise<CapabilitiesAnswer> {
+  const [owner = "", name = ""] = path.split("/");
+  const answer = await graphql(ctx.cli, ctx.host, ROLE_QUERY, { owner, name });
+  if (answer.kind === "missing") return ghMissing(ctx.host);
+  const body = parse(answer.stdout);
+  const repository = (body?.data as { repository?: { viewerPermission: string | null } | null } | undefined)?.repository;
+  if (answer.code !== 0 || !repository) return failure(answer, body, ctx.host, path);
+  const links: Capabilities["links"] = {
+    blocks: linkKind(ctx, ctx.has.blocks, "Blocks", GHES_SINCE.blocks),
+    parent: linkKind(ctx, ctx.has.subIssues, "Parent", GHES_SINCE.subIssues),
+    related: { kind: "cant-record", reason: "GitHub records no Related Links" },
+  };
+  return { kind: "capabilities", links, write: await writes(ctx, path, repository.viewerPermission) };
+}
+
+async function writes(ctx: Ctx, path: string, role: string | null): Promise<WriteAnswer> {
+  if (role === null) return { kind: "cant-tell", reason: `GitHub doesn't say this login's role in ${path}, as it doesn't for an app's token` };
+  if (!ROLES_THAT_WRITE.has(role)) return { kind: "cant", reason: `this login can only read ${path}; writing a Link or assigning takes the triage role` };
+  const held = await heldEntry(ctx.cli, ctx.host);
+  if (held === null) return { kind: "cant-tell", reason: `\`gh auth status\` didn't say what this login's token may write; \`gh\` 2.64 and later do` };
+  const scopes = held.scopes?.split(",").map((scope) => scope.trim()).filter(Boolean) ?? [];
+  if (scopes.includes("repo")) return { kind: "can" };
+  if (scopes.length === 0) return { kind: "cant-tell", reason: "this login's token doesn't list what it may write, as a fine-grained token doesn't" };
+  return { kind: "cant", reason: `this login's token can't write: it has no \`repo\` scope — run \`gh auth refresh --hostname ${ctx.host} --scopes repo\`` };
 }
 
 /**
@@ -317,15 +439,21 @@ async function viewer(cli: Cli, host: string): Promise<ViewerAnswer> {
 
 /** The login `gh` holds for a host, from its own config, without the network. */
 async function heldLogin(cli: Cli, host: string): Promise<string | null> {
-  const answer = await cli("gh", ["auth", "status", "--active", "--hostname", host, "--json", "hosts"]);
-  if (answer.kind !== "exited") return null;
-  const hosts = parse(answer.stdout)?.hosts as Record<string, { login?: string; active?: boolean }[]> | undefined;
-  return hosts?.[host]?.find((entry) => entry.active)?.login ?? null;
+  return (await heldEntry(cli, host))?.login ?? null;
 }
 
-async function openIssues(cli: Cli, host: string, { path }: Project, after: string | null): Promise<IssuePage> {
+/** What `gh` holds for its active login at a host: the login, and the token's scopes where it lists them. */
+async function heldEntry(cli: Cli, host: string): Promise<{ login?: string; scopes?: string } | null> {
+  const answer = await cli("gh", ["auth", "status", "--active", "--hostname", host, "--json", "hosts"]);
+  if (answer.kind !== "exited") return null;
+  const hosts = parse(answer.stdout)?.hosts as Record<string, { login?: string; scopes?: string; active?: boolean }[]> | undefined;
+  return hosts?.[host]?.find((entry) => entry.active) ?? null;
+}
+
+async function openIssues(ctx: Ctx, { path }: Project, after: string | null): Promise<IssuePage> {
+  const { cli, host } = ctx;
   const [owner = "", name = ""] = path.split("/");
-  const answer = await graphql(cli, host, ISSUES_QUERY, after === null ? { owner, name } : { owner, name, after });
+  const answer = await graphql(cli, host, issuesQuery(ctx), after === null ? { owner, name } : { owner, name, after });
   if (answer.kind === "missing") return ghMissing(host);
   const body = parse(answer.stdout);
   const issues = (body?.data as { repository?: { issues?: { totalCount: number; pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: IssueNode[] } } | null } | undefined)?.repository?.issues;
@@ -334,7 +462,7 @@ async function openIssues(cli: Cli, host: string, { path }: Project, after: stri
   const onlyHidden = errors.every((e) => e.type === "FORBIDDEN" && e.path?.[2] === "nodes");
   if (issues && (answer.code === 0 || onlyHidden)) {
     const hiddenParents = new Set(errors.filter((e) => e.path?.[4] === "parent").map((e) => e.path?.[3]));
-    const unread: Unread = {};
+    const unread = blocksUnread(ctx);
     // A token without pull request access, such as a fine-grained one scoped to Issues, is refused this field on every Issue.
     if (errors.some((e) => e.path?.[4] === "closedByPullRequestsReferences" && e.path.length === 5)) {
       unread.closingRequests = CANT_READ_PULLS;
@@ -356,14 +484,15 @@ async function openIssues(cli: Cli, host: string, { path }: Project, after: stri
  * Issues updated since, it reads the repository's issue-events feed and the
  * pull requests updated since, then the Issues they name.
  */
-async function changes(cli: Cli, host: string, project: Project, since: string, outside: string[]): Promise<ChangesAnswer> {
+async function changes(ctx: Ctx, project: Project, since: string, outside: string[]): Promise<ChangesAnswer> {
+  const { cli, host } = ctx;
   const [owner = "", name = ""] = project.path.split("/");
   const changed = new Map<string, { node: ChangedNode; hiddenParent: boolean }>();
   const named = new Set<string>();
   const requests: string[] = [];
   const ends: FarEnd[] = [];
   const outsideFirst = outside.slice(0, 100);
-  const unread: Unread = {};
+  const unread = blocksUnread(ctx);
   let caughtUp = true;
   let issuesAfter: string | null = null;
   let pullsAfter: string | null = null;
@@ -374,7 +503,7 @@ async function changes(cli: Cli, host: string, project: Project, since: string, 
       caughtUp = false;
       break;
     }
-    const answer = await graphql(cli, host, CHANGES_QUERY, {
+    const answer = await graphql(cli, host, changesQuery(ctx), {
       owner,
       name,
       since,
@@ -420,7 +549,7 @@ async function changes(cli: Cli, host: string, project: Project, since: string, 
   const outsideRest = outside.slice(100);
   for (let at = 0; at < Math.max(reread.length, outsideRest.length); at += 100) {
     const [someChanged, someOutside] = [reread.slice(at, at + 100), outsideRest.slice(at, at + 100)];
-    const answer = await graphql(cli, host, NODES_QUERY, { changed: someChanged, outside: someOutside });
+    const answer = await graphql(cli, host, nodesQuery(ctx), { changed: someChanged, outside: someOutside });
     if (answer.kind === "missing") return ghMissing(host);
     const body = parse(answer.stdout);
     const data = body?.data as { changed?: (ChangedNode | null)[]; outside?: (EndNode | null)[] } | undefined;
@@ -499,12 +628,12 @@ function linksOf(node: IssueNode, hiddenParent: boolean): NamedLink[] {
     seen.add(`${role} ${to.id}`);
     links.push({ role, name, to });
   };
-  if (node.parent || hiddenParent) add("parent", "Parent issue", node.parent);
-  for (const end of node.trackedInIssues.nodes) add("parent", "Tracked by", end);
-  for (const end of node.subIssues.nodes) add("child", "Sub-issues", end);
-  for (const end of node.trackedIssues.nodes) add("child", "Tracks", end);
-  for (const end of node.blockedBy.nodes) add("blocker", "Blocked by", end);
-  for (const end of node.blocking.nodes) add("blocked", "Blocking", end);
+  if (node.parent || hiddenParent) add("parent", "Parent issue", node.parent ?? null);
+  for (const end of node.trackedInIssues?.nodes ?? []) add("parent", "Tracked by", end);
+  for (const end of node.subIssues?.nodes ?? []) add("child", "Sub-issues", end);
+  for (const end of node.trackedIssues?.nodes ?? []) add("child", "Tracks", end);
+  for (const end of node.blockedBy?.nodes ?? []) add("blocker", "Blocked by", end);
+  for (const end of node.blocking?.nodes ?? []) add("blocked", "Blocking", end);
   return links;
 }
 
@@ -556,13 +685,14 @@ function closedAs(reason: StateReason | null): string | null {
 }
 
 /** One Issue by its reference, `owner/name#123`, or its URL on this host. */
-async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnswer> {
+async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
+  const { cli, host } = ctx;
   const escaped = host.replaceAll(".", "\\.");
   const found =
     /^([\w.-]+)\/([\w.-]+)#(\d+)$/.exec(locator) ?? new RegExp(`^https://${escaped}/([\\w.-]+)/([\\w.-]+)/issues/(\\d+)/?(?:[?#].*)?$`).exec(locator);
   if (!found) return { kind: "not-found", reason: `${locator} isn't a GitHub Issue's reference or URL on ${host}` };
   const [, owner = "", name = "", number = ""] = found;
-  const answer = await graphql(cli, host, ISSUE_QUERY, { owner, name, number });
+  const answer = await graphql(cli, host, issueQuery(ctx), { owner, name, number });
   if (answer.kind === "missing") return ghMissing(host);
   const body = parse(answer.stdout);
   const node = (body?.data as { repository?: { issue?: OneIssueNode | null } | null } | undefined)?.repository?.issue;
@@ -573,7 +703,7 @@ async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnsw
     const failed = failure(answer, body, host, `${owner}/${name}`);
     return failed.kind === "not-found" ? { kind: "not-found", reason: `no Issue ${owner}/${name}#${number} on ${host} that this login can read` } : failed;
   }
-  const unread: Unread = {};
+  const unread = blocksUnread(ctx);
   if (errors.some((e) => e.path?.[2] === "closedByPullRequestsReferences" && e.path.length === 3)) {
     unread.closingRequests = CANT_READ_PULLS;
   }

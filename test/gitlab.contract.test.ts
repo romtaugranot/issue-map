@@ -12,6 +12,7 @@ import { arrange, LATEST } from "./fakes/fake-glab.ts";
 trackerContract({
   product: "GitLab",
   wellKnownHost: "gitlab.com",
+  untestedVersion: "15.4.0",
   currentVersion: "19.4.0",
   records: {
     related: true,
@@ -116,6 +117,112 @@ describe("GitLab by version: a self-hosted GitLab from 16.0 is asked only for wh
     assert.match(page.unread.closingRequests ?? "", /17\.0\.0/);
     assert.deepEqual(card.closingRequests, []);
     assert.match(card.unread.closingRequests ?? "", /merge requests/);
+  });
+});
+
+describe("GitLab before 16.0: Best effort, read from REST", () => {
+  const host = "git.example.com";
+  const tools = "fixture-org/tools";
+  const epic: ProjectSpec = { path: "fixture-org", number: 2, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic" }] };
+  const world = (version: string, more: World = {}): World => ({
+    servers: { [host]: { runs: "this-kind", version } },
+    loggedInTo: [host],
+    projects: [
+      { path: tools, number: 1, open: 4, issues: [{ number: 1, assignees: ["fixture-bot"], planned: "2026-10-01T00:00:00Z" }, { number: 2 }, { number: 3, taskLevel: true }, { number: 4, updatedAt: "2026-09-21T00:00:00Z" }, { number: 5, closed: true, closedAt: "2026-09-22T00:00:00Z" }] },
+      epic,
+    ],
+    links: [
+      [`${tools}#1`, "blocks", `${tools}#2`],
+      [`${tools}#1`, "parent", `${tools}#3`],
+      [`${tools}#4`, "related", `${tools}#1`],
+      ["fixture-org#12", "parent", `${tools}#1`],
+    ],
+    ...more,
+  });
+
+  async function trackerAt(world: World) {
+    const probed = await arrange(world).kind.probe(host);
+    assert.equal(probed.kind, "identified");
+    const tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+    const resolved = await tracker.resolveProject(tools);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    return { tracker, project: (resolved as Extract<ProjectResolution, { kind: "project" }>).project };
+  }
+
+  test("15.11 reads Blocks and Related Links and the epic an Issue is in, marked untested; a task's Parent can't be read, and says why", async () => {
+    const { tracker, project } = await trackerAt(world("15.11.3"));
+    assert.equal(tracker.untested, "GitLab 15.11.3 is older than 16.0, the oldest the Map is tested on");
+    assert.deepEqual(project.issues, { open: 4 });
+    const page = await tracker.openIssues(project, null);
+    assert.equal(page.kind, "page", JSON.stringify(page));
+    const { issues, next, unread } = page as Extract<IssuePage, { kind: "page" }>;
+    assert.equal(next, null);
+    assert.deepEqual(issues.map((i) => i.ref), ["#1", "#2", "#3", "#4"]);
+    const one = issues[0]!;
+    assert.deepEqual([one.assignees, one.planned?.slice(0, 10), one.links.map((l) => l.role).sort()], [["fixture-bot"], "2026-10-01", ["blocked", "parent", "related"]]);
+    assert.equal(issues[2]!.taskLevel, true);
+    assert.equal(unread.blocks, undefined);
+    assert.match(unread.closingRequests ?? "", /15\.11\.3/);
+
+    const said = await tracker.capabilities(project);
+    assert.equal(said.kind, "capabilities", JSON.stringify(said));
+    const { links } = said as Extract<typeof said, { kind: "capabilities" }>;
+    assert.deepEqual([links.blocks, links.related], [{ kind: "readable" }, { kind: "readable" }]);
+    assert.equal(links.parent.kind, "cant-read");
+    assert.match(links.parent.kind === "cant-read" ? links.parent.reason : "", /task/);
+
+    const card = await tracker.issue(`${tools}#2`);
+    assert.equal(card.kind, "issue", JSON.stringify(card));
+    assert.deepEqual((card as Extract<IssueAnswer, { kind: "issue" }>).issue.links.map((l) => `${l.role} ${l.name}`), ["blocker Blocked by"]);
+
+    const changes = await tracker.changes(project, "2026-09-20T00:00:00Z", []);
+    assert.equal(changes.kind, "changes", JSON.stringify(changes));
+    const { open, ends } = changes as Extract<ChangesAnswer, { kind: "changes" }>;
+    assert.deepEqual([open.map((i) => i.ref), ends.map((e) => e.readable && e.ref)], [["#4"], [`${tools}#5`]]);
+  });
+
+  test("a tier without Blocks Links says so from 13.4", async () => {
+    const { tracker, project } = await trackerAt(world("13.4.0", { recordsBlocks: false }));
+    const said = await tracker.capabilities(project);
+    assert.equal(said.kind === "capabilities" && said.links.blocks.kind, "cant-record");
+  });
+
+  test("before 13.4 the Map reads no Link kind", async () => {
+    const { tracker, project } = await trackerAt(world("13.3.0"));
+    const said = await tracker.capabilities(project);
+    assert.equal(said.kind, "capabilities");
+    const { links } = said as Extract<typeof said, { kind: "capabilities" }>;
+    assert.deepEqual(Object.values(links), Array(3).fill({ kind: "cant-read", reason: "GitLab 13.3.0 is older than 13.4, the oldest the Map reads" }));
+  });
+});
+
+describe("GitLab by version: whether this login can write, and whether a Project records Blocks", () => {
+  const host = "git.example.com";
+  const tools = "fixture-org/tools";
+  async function capabilities(version: string, more: World = {}, issues: ProjectSpec["issues"] = [{ number: 1 }]) {
+    const world: World = { servers: { [host]: { runs: "this-kind", version } }, loggedInTo: [host], projects: [{ path: tools, number: 1, open: issues?.length ?? 0, issues }], ...more };
+    const probed = await arrange(world).kind.probe(host);
+    const tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+    const { project } = (await tracker.resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
+    const said = await tracker.capabilities(project);
+    assert.equal(said.kind, "capabilities", JSON.stringify(said));
+    return said as Extract<typeof said, { kind: "capabilities" }>;
+  }
+  const write = async (version: string, more: World = {}) => (await capabilities(version, more)).write;
+
+  test("before 18.3 a Project with no Issue to tell its tier by can't say whether it records Blocks, so the Map can't read them", async () => {
+    const { blocks } = (await capabilities("18.2.0", {}, [])).links;
+    assert.equal(blocks.kind, "cant-read");
+    assert.match(blocks.kind === "cant-read" ? blocks.reason : "", /no Issue to tell by/);
+  });
+
+  test("before 16.9 the role comes from REST, which misses access through a shared group, so a login it finds none for can't be told", async () => {
+    assert.deepEqual(await write("16.5.0"), { kind: "can" });
+    assert.equal((await write("16.5.0", { role: "reader" })).kind, "cant-tell");
+  });
+
+  test("before 15.5 GitLab doesn't say what a token may write", async () => {
+    assert.equal((await write("15.4.0")).kind, "cant-tell");
   });
 });
 

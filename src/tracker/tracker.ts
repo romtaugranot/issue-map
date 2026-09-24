@@ -1,8 +1,8 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1 to 7 so far — need 5 as what a read couldn't give — and
- * reading only what changed for needs 3, 4 and 7.
+ * This file holds needs 1 to 7 and 9 so far, and reading only what changed
+ * for needs 3, 4 and 7.
  */
 
 /** One kind of Tracker (GitHub, GitLab), able to say whether it runs at a host. */
@@ -25,6 +25,11 @@ export interface Tracker {
   readonly host: string;
   /** The version it runs, where it has one; `null` for a Tracker that isn't versioned, such as github.com. */
   readonly version: string | null;
+  /**
+   * `null` where the Map is tested on this Tracker's version (ADR 0003,
+   * 0004); else why it isn't, such as a release older than the oldest tested.
+   */
+  readonly untested: string | null;
   /** Need 2: turn a Project's path on this Tracker into one stable Project identity. */
   resolveProject(path: string): Promise<ProjectResolution>;
   /** Need 6: who this login is. */
@@ -50,7 +55,48 @@ export interface Tracker {
    * URL on this Tracker; an Issue in any Project here can be read.
    */
   issue(locator: string): Promise<IssueAnswer>;
+  /**
+   * Needs 5 and 9: per Link kind, whether the Project records it and the Map
+   * can read it there, and whether this login can write a Link or assign.
+   * Told from what the Tracker states, such as its version, its published
+   * schema or a field saying so, never from a kind's name or an error's shape.
+   */
+  capabilities(project: Project): Promise<CapabilitiesAnswer>;
 }
+
+export type LinkKind = "blocks" | "parent" | "related";
+
+/** Need 5 for one Link kind in one Project. */
+export type KindAnswer =
+  /** Recorded here and read: where none is read, none is recorded. */
+  | { kind: "readable" }
+  /** The Project can't record this kind, so none exists. */
+  | { kind: "cant-record"; reason: string }
+  /** The Project may record it, but the Map can't read it, or can't tell. */
+  | { kind: "cant-read"; reason: string };
+
+/** Need 9: whether this login can write a Link or assign. */
+export type WriteAnswer = { kind: "can" } | { kind: "cant"; reason: string } | { kind: "cant-tell"; reason: string };
+
+/** Need 5 for every Link kind in one Project. */
+export type LinkKinds = Record<LinkKind, KindAnswer>;
+
+/**
+ * What a Project's band is decided from (ADR 0003): why the Map isn't
+ * tested on the Tracker's version, `null` where it is, and which Link kinds
+ * it reads in the Project.
+ */
+export interface Support {
+  untested: string | null;
+  links: LinkKinds;
+}
+
+export interface Capabilities {
+  links: LinkKinds;
+  write: WriteAnswer;
+}
+
+export type CapabilitiesAnswer = ({ kind: "capabilities" } & Capabilities) | { kind: "not-found"; reason: string } | CantAnswer;
 
 /** What a Tracker says when it can't answer. */
 export type CantAnswer =

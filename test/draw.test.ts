@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { draw, drawProgress } from "../src/map/draw.ts";
 import { snapshot, VIEWER, type IssueSpec, type LinkSpec } from "./fakes/snapshot-builder.ts";
+import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
 
 const overview = (s: ReturnType<typeof snapshot>) => draw(s, { kind: "overview" }).text;
 
@@ -15,7 +16,7 @@ describe("the overview", () => {
     assert.equal(
       overview(s),
       [
-        "**fixture-org/tools** · 3 open · 2 on the Map · 1 Unlinked",
+        "**fixture-org/tools** · 3 open · 2 on the Map · 1 Unlinked · Promised",
         "",
         "**Take next: 1** — most waited on first",
         "- #1 Plan the importer — ▶1 wait on it",
@@ -67,7 +68,7 @@ describe("Take next", () => {
     // #1 Blocks #2, which Blocks #3; #4 Blocks #5.
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }], [[1, "blocks", 2], [2, "blocks", 3], [4, "blocks", 5]]);
     assert.deepEqual(overview(s).split("\n").slice(0, 7), [
-      "**fixture-org/tools** · 5 open · 5 on the Map · 0 Unlinked",
+      "**fixture-org/tools** · 5 open · 5 on the Map · 0 Unlinked · Promised",
       "",
       "**Take next: 2** — most waited on first",
       "- #1 Issue 1 — ▶2 wait on it",
@@ -243,7 +244,7 @@ describe("Groups (ADR 0008)", () => {
       [[1, "parent", 2], [3, "related", 4], [4, "related", 5], [5, "related", 2]],
     );
     const text = overview(s);
-    assert.match(text, /^\*\*fixture-org\/tools\*\* · 6 open · 5 on the Map · 1 Unlinked$/m);
+    assert.match(text, /^\*\*fixture-org\/tools\*\* · 6 open · 5 on the Map · 1 Unlinked · Promised$/m);
     assert.deepEqual(groupLines(text), [
       "**Groups: 2** — largest first",
       "- #3 Issue 3 — 3 Issues",
@@ -254,7 +255,7 @@ describe("Groups (ADR 0008)", () => {
   test("an Issue whose only Links reach closed Issues is Unlinked", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }], [[{ closed: 9 }, "related", 1], [2, "related", { closed: 8 }]]);
     const text = overview(s);
-    assert.match(text, /· 2 open · 0 on the Map · 2 Unlinked$/m);
+    assert.match(text, /· 2 open · 0 on the Map · 2 Unlinked · Promised$/m);
     assert.match(text, /^No Issue here has a Link, so there's no Map to draw\.$/m);
   });
 });
@@ -265,7 +266,7 @@ describe("closed Issues", () => {
     assert.equal(
       overview(s),
       [
-        "**fixture-org/tools** · 2 open · 0 on the Map · 2 Unlinked",
+        "**fixture-org/tools** · 2 open · 0 on the Map · 2 Unlinked · Promised",
         "",
         "**Take next: 1** — most waited on first",
         "- #1 Issue 1 — unblocked 2d ago",
@@ -353,7 +354,7 @@ describe("Outside Issues (ADR 0005)", () => {
 
   test("a closed Outside Issue joins nothing", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }], [[{ ...plans, open: false }, "parent", 1], [{ ...plans, open: false }, "parent", 2]]);
-    assert.match(overview(s), /· 0 on the Map · 2 Unlinked$/m);
+    assert.match(overview(s), /· 0 on the Map · 2 Unlinked · Promised$/m);
   });
 
   test("an Outside Issue joins Issues that have no Parent or Blocks Link only through Related", () => {
@@ -373,7 +374,7 @@ describe("Outside Issues (ADR 0005)", () => {
     // The Tracker names neither end the same way, so nothing says they're one Issue: each joins nothing.
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[{ hidden: "h1" }, "parent", 1], [{ hidden: "h2" }, "parent", 2], [3, "blocks", { hidden: "h3" }]]);
     const text = overview(s);
-    assert.match(text, /· 3 on the Map · 0 Unlinked$/m);
+    assert.match(text, /· 3 on the Map · 0 Unlinked · Promised$/m);
     assert.deepEqual(groupLines(text), [
       "**Groups: 3** — largest first",
       "- ↗ an Issue this login can't read — 1 Issue, 1↗",
@@ -533,7 +534,7 @@ describe("the Unlinked list", () => {
     assert.equal(
       overview(snapshot([{ n: 1 }, { n: 2 }])),
       [
-        "**fixture-org/tools** · 2 open · 0 on the Map · 2 Unlinked",
+        "**fixture-org/tools** · 2 open · 0 on the Map · 2 Unlinked · Promised",
         "",
         "No Issue here has a Link, so there's no Map to draw.",
         "",
@@ -607,5 +608,55 @@ describe("an old Snapshot (ADR 0006)", () => {
     assert.equal(aged(150_000), "⚠ read 2 min ago — couldn't refresh it: why");
     assert.equal(aged(47 * 3_600_000), "⚠ read 47h ago — couldn't refresh it: why");
     assert.equal(aged(3 * 86_400_000), "⚠ read 3d ago — couldn't refresh it: why");
+  });
+});
+
+describe("the Project's band (ADR 0003)", () => {
+  const links: LinkSpec[] = [[1, "blocks", 2]];
+  const issues: IssueSpec[] = [{ n: 1 }, { n: 2 }, { n: 3 }];
+  const untested = "GHES 3.17.2 is older than 3.18, the oldest release GitHub still supports";
+  const reads = READS_EVERYTHING.links;
+
+  test("a Project on a Tracker the Map is tested on, with a Link kind it can read, is Promised, and the overview says so", () => {
+    assert.equal(overview(snapshot(issues, links)).split("\n")[0], "**fixture-org/tools** · 3 open · 2 on the Map · 1 Unlinked · Promised");
+  });
+
+  test("one on an untested version is Best effort: its Map is drawn, marked untested and read-only, and says why", () => {
+    const lines = overview(snapshot(issues, links, {}, { untested })).split("\n");
+    assert.equal(lines[0], "**fixture-org/tools** · 3 open · 2 on the Map · 1 Unlinked · Best effort");
+    assert.equal(lines[1], `⚠ Best effort: ${untested} — the Map is untested here, and read-only: it writes nothing`);
+    assert.ok(lines.includes("- #1 Issue 1 — 2 Issues"), "the Map is still drawn");
+  });
+
+  test("a Link kind the Map can't read is named with why, since Links of it may be missing; one the Project can't record is named only on Best effort", () => {
+    const parent = { kind: "cant-read", reason: "GitLab 15.4 gives a task's Parent only through GraphQL the Map doesn't read" } as const;
+    const related = { kind: "cant-record", reason: "GitHub records no Related Links" } as const;
+    const lines = overview(snapshot(issues, links, {}, { links: { ...reads, parent, related } })).split("\n");
+    assert.equal(lines[1], `⚠ Parent Links can't be read here: ${parent.reason}`);
+    assert.doesNotMatch(lines.join("\n"), /Related/);
+    const both = overview(snapshot(issues, links, {}, { untested, links: { ...reads, parent, related } })).split("\n");
+    assert.equal(both[1], `⚠ Best effort: ${untested} — the Map is untested here, and read-only: it writes nothing · Parent Links can't be read here: ${parent.reason} · Related Links can't be recorded here: ${related.reason}`);
+  });
+
+  test("a Project where the Map can read no Link kind is Refused: no Map, and every kind named with why", () => {
+    const refused = snapshot(issues, [], { blocks: "GHES 3.16.0 can't record Blocks Links" }, {
+      untested,
+      links: {
+        blocks: { kind: "cant-record", reason: "GHES 3.16.0 can't record Blocks Links; 3.19 and later can" },
+        parent: { kind: "cant-record", reason: "GHES 3.16.0 can't record Parent Links; 3.17 and later can" },
+        related: { kind: "cant-record", reason: "GitHub records no Related Links" },
+      },
+    });
+    const text =
+      "No Map of github.com/fixture-org/tools: Refused — the Map can read no Link kind here. Blocks: GHES 3.16.0 can't record Blocks Links; 3.19 and later can. Parent: GHES 3.16.0 can't record Parent Links; 3.17 and later can. Related: GitHub records no Related Links.";
+    for (const command of [{ kind: "overview" }, { kind: "unlinked", page: 1 }, { kind: "group", group: 1, page: 1 }, { kind: "under", ref: "#1", page: 1 }] as const) {
+      assert.equal(draw(refused, command).text, text, command.kind);
+    }
+  });
+
+  test("one reason for every kind, such as a version too old to read, is said once", () => {
+    const none = { kind: "cant-read", reason: "GitLab 13.3.0 is older than 13.4, the oldest the Map reads" } as const;
+    const refused = snapshot(issues, [], {}, { untested: "GitLab 13.3.0 is older than 16.0, the oldest the Map is tested on", links: { blocks: none, parent: none, related: none } });
+    assert.equal(overview(refused), "No Map of github.com/fixture-org/tools: Refused — the Map can read no Link kind here. GitLab 13.3.0 is older than 13.4, the oldest the Map reads.");
   });
 });

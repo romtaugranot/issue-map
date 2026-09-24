@@ -2,13 +2,17 @@
  * The contract suite against the GitHub adapter, with `gh` and the network
  * stood in for by replies in the shapes github.com and GHES give.
  */
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 import { github } from "../src/tracker/github.ts";
+import type { IssueAnswer, IssuePage, ProjectResolution, Tracker } from "../src/tracker/tracker.ts";
 import type { CliResult, HttpResult } from "../src/tracker/boundary.ts";
 import { trackerContract, type IssueSpec, type ProjectSpec, type World } from "./contract/tracker-contract.ts";
 
 trackerContract({
   product: "GitHub",
   wellKnownHost: "github.com",
+  untestedVersion: "3.17.0",
   currentVersion: "3.20.0",
   records: {
     related: "GitHub records no Related Links",
@@ -30,13 +34,8 @@ trackerContract({
       env,
       cli: async (command, args, unset = []) => {
         if (command !== "gh" || (world.cli ?? "installed") === "missing") return { kind: "missing" };
-        if (args[0] === "auth") {
-          // Read from gh's own config, without the network: the login held for each host.
-          const hosts = [...(world.login === "none" ? [] : ["github.com"]), ...(world.loggedInTo ?? [])];
-          const held = (host: string) => [{ state: world.login === "refused" ? "error" : "success", active: true, host, login: world.viewer ?? "fixture-viewer" }];
-          const asked = args.includes("--hostname") ? args[args.indexOf("--hostname") + 1]! : null;
-          return exited(0, JSON.stringify({ hosts: Object.fromEntries(hosts.filter((h) => asked === null || h === asked).map((h) => [h, held(h)])) }));
-        }
+        // Read from gh's own config, without the network.
+        if (args[0] === "auth") return authStatus(world, args);
         requests++;
         const host = args[args.indexOf("--hostname") + 1]!;
         loginsSentTo.push(host);
@@ -56,6 +55,95 @@ trackerContract({
   },
 });
 
+describe("GHES by release: each Link kind is known from the GHES's own schema, never from an error's shape", () => {
+  const host = "ghes.example.com";
+  const tools = "fixture-org/tools";
+
+  /**
+   * A GHES of `version` with #1 the Parent of #2, and #3 Blocking #2 where
+   * the release records Blocks; in private mode, it doesn't say its release.
+   */
+  async function ghes(version: string, privateMode = false) {
+    const links: NonNullable<World["links"]> = [];
+    if (newer(version, "3.17")) links.push([`${tools}#1`, "parent", `${tools}#2`]);
+    if (newer(version, "3.19")) links.push([`${tools}#3`, "blocks", `${tools}#2`]);
+    const world: World = {
+      servers: { [host]: { runs: "this-kind", version } },
+      loggedInTo: [host],
+      projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }],
+      links,
+    };
+    const privately: HttpResult = { kind: "response", status: 401, headers: { "x-github-request-id": "0000:0000:0000000:0000000:00000000" }, body: "" };
+    const kind = github({ env: {}, cli: async (command, args) => (args[0] === "auth" ? authStatus(world, args) : ghApi(world, args)), http: async (url) => (privateMode ? privately : probe(world, new URL(url))) });
+    const probed = await kind.probe(host);
+    assert.equal(probed.kind, "identified");
+    const tracker: Tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+    const resolved = (await tracker.resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
+    const page = (await tracker.openIssues(resolved.project, null)) as Extract<IssuePage, { kind: "page" }>;
+    assert.equal(page.kind, "page", JSON.stringify(page));
+    const card = (await tracker.issue(`${tools}#2`)) as Extract<IssueAnswer, { kind: "issue" }>;
+    assert.equal(card.kind, "issue", JSON.stringify(card));
+    const said = await tracker.capabilities(resolved.project);
+    assert.equal(said.kind, "capabilities", JSON.stringify(said));
+    const changes = await tracker.changes(resolved.project, "2020-01-01T00:00:00Z", []);
+    assert.equal(changes.kind, "changes", JSON.stringify(changes));
+    const two = page.issues.find((i) => i.ref === "#2")!;
+    return { tracker, page, card: card.issue, two: two.links.map((l) => l.role).sort(), ...(said as Extract<typeof said, { kind: "capabilities" }>) };
+  }
+
+  test("a supported release from 3.19 reads Parent and Blocks Links, and is tested", async () => {
+    for (const version of ["3.19.0", "3.22.1"]) {
+      const { tracker, page, two, links } = await ghes(version);
+      assert.equal(tracker.untested, null);
+      assert.deepEqual(two, ["blocker", "parent"], version);
+      assert.deepEqual([links.blocks, links.parent, page.unread], [{ kind: "readable" }, { kind: "readable" }, {}]);
+      assert.equal(links.related.kind, "cant-record");
+    }
+  });
+
+  test("3.18 is supported but can't record Blocks Links, so a read says so and no Issue is Unblocked", async () => {
+    const { tracker, page, card, two, links } = await ghes("3.18.2");
+    assert.equal(tracker.untested, null);
+    assert.deepEqual(two, ["parent"]);
+    const why = "GHES 3.18.2 can't record Blocks Links; 3.19 and later can";
+    assert.deepEqual(links.blocks, { kind: "cant-record", reason: why });
+    assert.deepEqual([page.unread.blocks, card.unread.blocks], [why, why]);
+  });
+
+  test("3.17, which GitHub no longer supports, still reads Parent Links, untested", async () => {
+    const { tracker, two, links } = await ghes("3.17.4");
+    assert.equal(tracker.untested, "GHES 3.17.4 is older than 3.18, the oldest release GitHub still supports");
+    assert.deepEqual([two, links.parent.kind, links.blocks.kind], [["parent"], "readable", "cant-record"]);
+  });
+
+  test("a GHES whose release can't be learnt is read by what its own schema has: untested, not Refused", async () => {
+    const { tracker, two, links } = await ghes("3.19.0", true);
+    assert.equal(tracker.version, null);
+    assert.match(tracker.untested ?? "", /release/);
+    assert.deepEqual([two, links.blocks, links.parent], [["blocker", "parent"], { kind: "readable" }, { kind: "readable" }]);
+    const older = await ghes("3.18.0", true);
+    assert.deepEqual([older.two, older.links.blocks.kind], [["parent"], "cant-record"]);
+    assert.match(older.links.blocks.kind === "cant-record" ? older.links.blocks.reason : "", /schema/);
+  });
+
+  test("before 3.17 GHES records no Link kind the Map can read", async () => {
+    const { links } = await ghes("3.16.3");
+    assert.deepEqual(Object.values(links).map((l) => l.kind), ["cant-record", "cant-record", "cant-record"]);
+  });
+});
+
+/** `gh auth status`: the login `gh` holds for each host, read from its own config. */
+function authStatus(world: World, args: string[]): CliResult {
+  // `gh` before 2.64 has no `--json` for it.
+  if (world.token === "cant-ask" && args.includes("--json")) return exited(1, "", "unknown flag: --json\n");
+  const hosts = [...(world.login === "none" ? [] : ["github.com"]), ...(world.loggedInTo ?? [])];
+  // A classic or OAuth token lists its scopes; a fine-grained one lists none.
+  const scopes = { writes: "gist, read:org, repo", reads: "read:org", unknown: "", "cant-ask": "" }[world.token ?? "writes"];
+  const held = (host: string) => [{ state: world.login === "refused" ? "error" : "success", active: true, host, login: world.viewer ?? "fixture-viewer", scopes }];
+  const asked = args.includes("--hostname") ? args[args.indexOf("--hostname") + 1]! : null;
+  return exited(0, JSON.stringify({ hosts: Object.fromEntries(hosts.filter((h) => asked === null || h === asked).map((h) => [h, held(h)])) }));
+}
+
 function ghApi(world: World, args: string[]): CliResult {
   const host = args[args.indexOf("--hostname") + 1]!;
   if ((world.network ?? "up") === "down")
@@ -73,6 +161,20 @@ function ghApi(world: World, args: string[]): CliResult {
   const rest = args.find((a) => a.startsWith("repos/"));
   if (rest) return restApi(world, rest);
   const query = field("query") ?? "";
+  const server = world.servers?.[host];
+  // The schema's own account of an Issue's fields, as its release publishes it.
+  if (query.includes('__type(name: "Issue")')) {
+    const lacks = (field: string) => server?.runs === "this-kind" && GHES_LACKS.some(([name, since]) => name === field && !newer(server.version, since));
+    const fields = ["id", "number", "title", "state", ...GHES_LACKS.map(([name]) => name)].filter((name) => !lacks(name));
+    return exited(0, JSON.stringify({ data: { __type: { fields: fields.map((name) => ({ name })) } } }));
+  }
+  // The fields of an Issue, as the query asks for them; a repository has a `parent` of its own.
+  const issueAt = query.indexOf("fragment issue on Issue");
+  const onIssue = issueAt === -1 ? "" : query.slice(issueAt);
+  const missing = server?.runs === "this-kind" ? GHES_LACKS.find(([field, since]) => new RegExp(`\\b${field}\\b`).test(onIssue) && !newer(server.version, since)) : undefined;
+  // Asking for a field the schema lacks fails the whole query.
+  if (missing) return answer({}, [{ type: "undefinedField", path: ["query"], message: `Field '${missing[0]}' doesn't exist on type 'Issue'` }], null);
+  asked = query;
   if (/^\s*(query\s*)?\{\s*viewer\b/.test(query)) return exited(0, JSON.stringify({ data: { viewer: { login: world.viewer ?? "fixture-viewer" } } }));
   if (query.includes("changed: nodes(ids:")) return nodesById(world, host, list("changed"), list("outside"));
   const path = `${field("owner")}/${field("name")}`;
@@ -88,7 +190,30 @@ function ghApi(world: World, args: string[]): CliResult {
     return withOutside(world, host, changes, list("outside"));
   }
   if (query.includes("issue(number:")) return oneIssue(world, spec, host, Number(field("number")));
-  return exited(0, JSON.stringify({ data: { repository: { ...repository(spec, host), parent: spec.parent ? repository(spec.parent, host) : null } } }));
+  const viewerPermission = world.role === "reader" ? "READ" : "TRIAGE";
+  return exited(0, JSON.stringify({ data: { repository: { ...repository(spec, host), viewerPermission, parent: spec.parent ? repository(spec.parent, host) : null } } }));
+}
+
+/**
+ * Link kinds' fields each GHES release's published GraphQL schema lacks: no
+ * release has task-list Links; sub-issues come in 3.17, and Blocks in 3.19.
+ */
+const GHES_LACKS: [string, string][] = [
+  ["trackedInIssues", "99"],
+  ["trackedIssues", "99"],
+  ["parent", "3.17"],
+  ["subIssues", "3.17"],
+  ["blockedBy", "3.19"],
+  ["blocking", "3.19"],
+];
+
+/** The query being answered: an answer holds only the fields it asks for. */
+let asked = "";
+
+function newer(version: string, than: string): boolean {
+  const [a, b] = [version, than].map((v) => v.split(".").map(Number));
+  for (let i = 0; i < 3; i++) if ((a![i] ?? 0) !== (b![i] ?? 0)) return (a![i] ?? 0) > (b![i] ?? 0);
+  return true;
 }
 
 /**
@@ -308,7 +433,7 @@ function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSp
   const children = links.filter(([a, kind]) => kind === "parent" && a === self).map(([, , b]) => b);
   // A sub-issue has one parent; any further Parent is recorded by a task list.
   const [parent, ...trackedIn] = parents;
-  return {
+  const node = {
     id: nodeId(spec.path, issue.number),
     number: issue.number,
     title: title(issue),
@@ -324,11 +449,12 @@ function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSp
     blocking: list("blocking", links.filter(([a, kind]) => kind === "blocks" && a === self).map(([, , b]) => b)),
     closedByPullRequestsReferences: closingPulls(self, [...at, "closedByPullRequestsReferences"]),
   };
+  return Object.fromEntries(Object.entries(node).filter(([name]) => new RegExp(`\\b${name}\\b`).test(asked)));
 }
 
-/** `gh api graphql`'s answer: it exits 1 when the body holds any error, and prints the first. */
-function answer(data: object, errors: GraphqlError[]): CliResult {
-  const body = { data, ...(errors.length > 0 ? { errors } : {}) };
+/** `gh api graphql`'s answer: it exits 1 when the body holds any error, and prints the first. A query the schema rejects has no data. */
+function answer(data: object, errors: GraphqlError[], withData: object | null = data): CliResult {
+  const body = { ...(withData ? { data: withData } : {}), ...(errors.length > 0 ? { errors } : {}) };
   return exited(errors.length > 0 ? 1 : 0, JSON.stringify(body), errors.length > 0 ? `gh: ${errors[0]!.message}\n` : "");
 }
 
