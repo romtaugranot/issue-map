@@ -2,6 +2,8 @@
 
 /** Titles are trimmed to a fixed length, since the client does the wrapping. */
 const TITLE = 60;
+/** Marks the Map's row among the status line's. */
+export const ROW = "◆";
 /** Marks an Outside Issue. */
 export const OUTSIDE = "↗";
 

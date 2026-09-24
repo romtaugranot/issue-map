@@ -158,18 +158,19 @@ function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): string[] {
     if (lines.length === TAKE_NEXT_LINES) break;
     const parent = pick.waiting.via;
     if (!parent) {
-      lines.push(pickLine(pick, snapshot, shows));
+      lines.push(`- ${pickLine(pick, snapshot, shows)}`);
       continue;
     }
     const shown = shownUnder.get(parent) ?? 0;
     shownUnder.set(parent, shown + 1);
-    if (shown < STAND_INS) lines.push(pickLine(pick, snapshot, shows));
+    if (shown < STAND_INS) lines.push(`- ${pickLine(pick, snapshot, shows)}`);
     else if (shown === STAND_INS) lines.push(`- … ${count(picks.filter((p) => p.waiting.via === parent).length - STAND_INS)} more under ${parent.ref}`);
   }
   return lines;
 }
 
-function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows): string {
+/** One line of Take next, less its `- `: the overview's and the status line's alike. */
+export function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows = () => {}): string {
   shows(issue);
   const waits = n === 0 ? "" : carried ? `▶${count(n)} via ${via!.ref}` : `▶${count(n)} wait on it`;
   const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
@@ -180,7 +181,7 @@ function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlo
     issue.planned ? `due ${issue.planned.slice(0, 10)}` : "",
     yours ? "yours" : "",
   ].filter(Boolean);
-  return `- ${issue.ref} ${trim(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
+  return `${issue.ref} ${trim(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
 }
 
 /**

@@ -619,6 +619,74 @@ describe("reading a Snapshot again in full (ADR 0006)", () => {
   });
 });
 
+describe("what the status line glances at (#40)", () => {
+  /** A line naming each Snapshot it's kept beside: how many Issues, the first one's title, and when it was read. */
+  const summarise = (s: { issues: OpenIssue[]; readAt: string }) => `${s.issues.length} open, first ${s.issues[0]?.title} · ${s.readAt}`;
+
+  test("finds nothing while no refresher keeps the Project warm, even with a Snapshot", async () => {
+    const store = snapshotStore(scratch(), clock(), { summarise });
+    await store.read(key, fakeTracker(5).tracker, project);
+    assert.deepEqual(await store.glance(key.tracker, key.project), { kind: "none" });
+  });
+
+  test("hands over the line kept beside the Snapshot of the login whose refresher keeps it warm, with its age", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time, { summarise });
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    await store.read({ ...key, login: "fixture-other" }, fakeTracker(7, { time, login: "fixture-other" }).tracker, project);
+    assert.ok(await store.claimRefresher(key));
+    time.advance(30_000);
+    assert.deepEqual(await store.glance(key.tracker, key.project), { kind: "ready", line: "5 open, first Issue 1 · 2026-09-23T10:00:00.000Z", ageMs: 32_000 });
+  });
+
+  test("keeps the line up to date with every save of the Snapshot: a refresh, an assignment and a Link", async () => {
+    const time = clock();
+    const lines: string[] = [];
+    const store = snapshotStore(scratch(), time, { summarise: (s) => `${s.readAt} ${s.issues.map((i) => `${i.ref}:${i.assignees.join("+")}:${i.links.length}`).join(" ")}` });
+    await store.read(key, fakeTracker(2, { time }).tracker, project);
+    assert.ok(await store.claimRefresher(key));
+    const glanced = async () => {
+      const glance = await store.glance(key.tracker, key.project);
+      lines.push(glance.kind === "ready" ? glance.line : glance.kind);
+    };
+    await glanced();
+    time.advance(121_000);
+    await store.refresh(key, fakeTracker(2, { time }).tracker, project);
+    await glanced();
+    await store.assigned(key, "I_1", ["fixture-viewer"]);
+    await glanced();
+    const end = { id: "I_2", readable: true, open: true, project: project.path, ref: `${project.path}#2`, title: "Issue 2", url: "" } as const;
+    await store.linked(key, [{ issue: "I_1", link: { role: "blocked", to: end } }]);
+    await glanced();
+    assert.deepEqual(lines, [
+      "2026-09-23T10:00:00.000Z #1::0 #2::0",
+      "2026-09-23T10:02:03.000Z #1::0 #2::0",
+      "2026-09-23T10:02:03.000Z #1:fixture-viewer:0 #2::0",
+      "2026-09-23T10:02:03.000Z #1:fixture-viewer:1 #2::0",
+    ]);
+  });
+
+  test("says how far a first read has got, before there's a Snapshot to glance at", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time, { summarise });
+    assert.ok(await store.claimRefresher(key));
+    let seen: unknown;
+    const { tracker } = fakeTracker(250, { time, onPage: async () => void (seen ??= await store.glance(key.tracker, key.project)) });
+    await store.read(key, tracker, project);
+    assert.deepEqual(seen, { kind: "reading", read: 0, total: 250 });
+  });
+
+  test("keeps no line once the Tracker refuses the login: it names an Issue", async () => {
+    const dir = scratch();
+    const store = snapshotStore(dir, clock(), { summarise });
+    await store.read(key, fakeTracker(5).tracker, project);
+    assert.ok(await store.claimRefresher(key));
+    await store.forget(key, "github.com refused this login");
+    assert.deepEqual(await store.glance(key.tracker, key.project), { kind: "none" });
+    assert.deepEqual(titlesIn(dir), []);
+  });
+});
+
 /** The files under `dir` that hold an Issue's title. */
 function titlesIn(dir: string): string[] {
   return walk(dir).filter((file) => statSync(file).isFile() && readFileSync(file, "utf8").includes("Issue 1"));
