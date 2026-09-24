@@ -1,8 +1,10 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1, 2, 3, 4, 6 and 7 including their "can't" answers, for a whole
- * Project, for only what changed in it, and for one Issue read for its card. Each adapter supplies
- * a Stage that stands a World up behind its own boundary.
+ * needs 1, 2, 3, 4, 5, 6 and 7 including their "can't" answers, for a whole
+ * Project, for only what changed in it, and for one Issue read for its card.
+ * Each adapter supplies a Stage that stands a World up behind its own
+ * boundary. Where kinds of Tracker differ in what they record, a Stage says
+ * so, and a test of what its kind can't record is skipped with the reason.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,6 +19,8 @@ export interface ProjectSpec {
   /** Paths the Project had before it was renamed or moved. */
   oldPaths?: string[];
   issues?: IssueSpec[];
+  /** Not a Project but a namespace above them, such as a GitLab group, holding Issues of its own such as epics. */
+  namespace?: boolean;
 }
 
 export interface IssueSpec {
@@ -29,7 +33,7 @@ export interface IssueSpec {
   planned?: string;
   /** Closed Issues are never listed, but a Link can reach one. */
   closed?: boolean;
-  /** How it closed; `completed` by default. */
+  /** How it closed; `completed` by default. One closed as a duplicate names the Issue it duplicates in `duplicateOf`. */
   closedAs?: "completed" | "not planned" | "duplicate";
   /** When it closed, as an ISO date; the day after it was created by default. */
   closedAt?: string;
@@ -41,6 +45,10 @@ export interface IssueSpec {
   updatedAt?: string;
   /** This login can't read it, though a Link to it is recorded. */
   hidden?: boolean;
+  /** At the Tracker's smallest level, such as a GitLab task; its Parent is set with a `parent` Link. */
+  taskLevel?: boolean;
+  /** Closed as a duplicate of this Issue, as the Tracker marks it. */
+  duplicateOf?: IssueAddress;
 }
 
 /** `"owner/name#12"`. */
@@ -58,10 +66,11 @@ export interface World {
   network?: "up" | "down";
   /**
    * `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the
-   * Parent of b". A fourth element is when the Link was made, as an ISO
-   * date; long ago by default.
+   * Parent of b"; `[a, "related", b]` reads "a is Related to b". A fourth
+   * element is when the Link was made, as an ISO date; long ago by default.
+   * A kind the Tracker can't record is left out of it.
    */
-  links?: [IssueAddress, "blocks" | "parent", IssueAddress, string?][];
+  links?: [IssueAddress, "blocks" | "parent" | "related", IssueAddress, string?][];
   /** Links someone removed, each with when, as an ISO date. */
   removedLinks?: [IssueAddress, "blocks" | "parent", IssueAddress, string][];
   /** The Tracker keeps no record of what changed before this ISO date. */
@@ -77,14 +86,56 @@ export interface World {
   readsClosingRequests?: boolean;
   /** `[a, b]` reads "a names b in its text". */
   mentions?: [IssueAddress, IssueAddress][];
+  /** `false` where the Project's tier can't record Blocks Links, such as GitLab Free. */
+  recordsBlocks?: boolean;
+  /** The host a token in the environment was issued for, set the way the CLI documents. */
+  envTokenFor?: string;
 }
 
 export interface Stage {
   product: string;
   /** A host this kind is known to run at by name alone. */
   wellKnownHost: string;
-  /** Builds the adapter against a World, counts requests that left the machine, and lists the hosts the CLI's login was sent to. */
-  arrange(world: World): { kind: TrackerKind; requests(): number; loginsSentTo(): string[] };
+  /** A version of this kind's self-hosted Tracker that the Map promises everything on. */
+  currentVersion: string;
+  /** What this kind records where kinds differ: `true`, or why it doesn't. */
+  records: {
+    related: true | string;
+    taskLevel: true | string;
+    /** More than one Parent Link to one Issue. */
+    multipleParents: true | string;
+    /** Issues that belong to a namespace above Projects rather than to a Project, such as a GitLab group's epics. */
+    namespaceIssues: true | string;
+    /** Projects whose tier can't record Blocks Links. */
+    projectsWithoutBlocks: true | string;
+    /** A record of changes, apart from the Issues' own update times, that can run out before a refresh reaches back. */
+    changeFeed: true | string;
+  };
+  /** Which of the World's ways of closing the Tracker says; the others read as not said. */
+  saysClosedAs: readonly ("completed" | "not planned" | "duplicate")[];
+  /** The reference users type for Closing Request `n` of the Project at `path`. */
+  requestRef(path: string, n: number): string;
+  /**
+   * Builds the adapter against a World, counts requests that left the
+   * machine, lists the hosts the CLI's login was sent to, and lists the
+   * hosts the environment's token was sent to.
+   */
+  arrange(world: World): { kind: TrackerKind; requests(): number; loginsSentTo(): string[]; tokenSentTo(): string[] };
+}
+
+/** A test's options: skipped, with why, where the Stage's kind doesn't record what it needs. */
+function skipUnless(record: true | string): { skip?: string } {
+  return record === true ? {} : { skip: record };
+}
+
+/** How a closed Issue closed, as the Stage's kind says it; `undefined` where it doesn't say. */
+function said(stage: Stage, way: "completed" | "not planned" | "duplicate"): string | undefined {
+  return stage.saysClosedAs.includes(way) ? way : undefined;
+}
+
+/** An Issue's URL on a Tracker, whichever of the paths the Tracker gives it. */
+function issueUrl(path: string, n: number): RegExp {
+  return new RegExp(`${path.replaceAll("/", "\\/")}\\/(-\\/)?(issues|work_items)\\/${n}$`);
 }
 
 /** The whole contract: every need an adapter answers. */
@@ -232,6 +283,24 @@ export function resolveContract(stage: Stage): void {
         assert.deepEqual(loginsSentTo(), []);
       });
 
+      test("a token in the environment goes only to the host it was issued for", async () => {
+        const selfHosted = { runs: "this-kind", version: stage.currentVersion } as const;
+        const servers = { "git.example.com": selfHosted, "git.example.org": selfHosted };
+        const readAt = async (world: World, hosts: string[]) => {
+          const { kind, tokenSentTo } = stage.arrange(world);
+          for (const host of hosts) {
+            const probed = (await kind.recognise(host)) ?? (await kind.probe(host));
+            const tracker = "kind" in probed ? (probed.kind === "identified" ? probed.tracker : null) : probed;
+            assert.ok(tracker, host);
+            assert.equal((await tracker.resolveProject("opentofu/opentofu")).kind, "project", host);
+          }
+          return [...new Set(tokenSentTo())].sort();
+        };
+        const loggedInTo = ["git.example.com", "git.example.org"];
+        assert.deepEqual(await readAt({ servers, loggedInTo, projects: [tofu], envTokenFor: wellKnownHost }, [wellKnownHost, ...loggedInTo]), [wellKnownHost]);
+        assert.deepEqual(await readAt({ servers, loggedInTo, projects: [tofu], envTokenFor: "git.example.com" }, [wellKnownHost, ...loggedInTo]), ["git.example.com"]);
+      });
+
       test("can't tell when the Tracker can't be reached, and names it", async () => {
         const answer = await (await trackerIn({ projects: [tofu], network: "down" })).resolveProject("opentofu/opentofu");
         assert.equal(answer.kind, "cant-tell");
@@ -342,7 +411,7 @@ export function readContract(stage: Stage): void {
         assert.equal(new Set(read.issues.map((i) => i.id)).size, 229, "each has its own identity");
         const five = byRef(read.issues, "#5");
         assert.equal(five.title, "Import state from S3");
-        assert.match(five.url, /fixture-org\/tools\/issues\/5$/);
+        assert.match(five.url, issueUrl(tools, 5));
         assert.equal(five.createdAt.slice(0, 10), "2026-01-05");
         assert.deepEqual(five.assignees, ["fixture-bot"]);
         assert.equal(five.planned?.slice(0, 10), "2026-10-01");
@@ -368,7 +437,7 @@ export function readContract(stage: Stage): void {
         assert.deepEqual(end.readable && [end.open, end.project, end.title], [true, tools, "Issue 2"]);
       });
 
-      test("an Issue can have more than one Parent", async () => {
+      test("an Issue can have more than one Parent", skipUnless(stage.records.multipleParents), async () => {
         const world: World = {
           projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }],
           links: [[`${tools}#1`, "parent", `${tools}#3`], [`${tools}#2`, "parent", `${tools}#3`]],
@@ -400,15 +469,15 @@ export function readContract(stage: Stage): void {
               path: tools,
               number: 1,
               open: 1,
-              issues: [{ number: 1 }, { number: 2, closed: true, closedAt: "2026-09-21T08:00:00Z" }, { number: 3, closed: true, closedAs: "duplicate", closedAt: "2026-09-22T08:00:00Z" }],
+              issues: [{ number: 1 }, { number: 2, closed: true, closedAt: "2026-09-21T08:00:00Z" }, { number: 3, closed: true, closedAs: "duplicate", duplicateOf: `${tools}#1`, closedAt: "2026-09-22T08:00:00Z" }],
             },
           ],
           links: [[`${tools}#2`, "blocks", `${tools}#1`], [`${tools}#3`, "blocks", `${tools}#1`]],
         };
         const one = byRef((await readAll(world, tools)).issues, "#1");
         const [two, three] = [linkTo(one, "blocker", `${tools}#2`), linkTo(one, "blocker", `${tools}#3`)];
-        assert.deepEqual(two.readable && [two.open, two.closedAt, two.closedAs], [false, "2026-09-21T08:00:00Z", "completed"]);
-        assert.deepEqual(three.readable && [three.open, three.closedAt, three.closedAs], [false, "2026-09-22T08:00:00Z", "duplicate"]);
+        assert.deepEqual(two.readable && [two.open, two.closedAt, two.closedAs], [false, "2026-09-21T08:00:00Z", said(stage, "completed")]);
+        assert.deepEqual(three.readable && [three.open, three.closedAt, three.closedAs], [false, "2026-09-22T08:00:00Z", said(stage, "duplicate")]);
       });
 
       test("a Link to an open Issue says no close date or way", async () => {
@@ -435,6 +504,63 @@ export function readContract(stage: Stage): void {
         assert.doesNotMatch(JSON.stringify(one), /Secret plan/);
       });
 
+      test("reads Related Links from both ends, with no direction", skipUnless(stage.records.related), async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }],
+          links: [[`${tools}#1`, "related", `${tools}#2`]],
+        };
+        const { issues } = await readAll(world, tools);
+        const [one, two] = [byRef(issues, "#1"), byRef(issues, "#2")];
+        assert.equal(linkTo(one, "related", `${tools}#2`).id, two.id);
+        assert.equal(linkTo(two, "related", `${tools}#1`).id, one.id);
+        assert.deepEqual(byRef(issues, "#3").links, []);
+      });
+
+      test("tells a task-level child from an ordinary child", skipUnless(stage.records.taskLevel), async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2, taskLevel: true }, { number: 3 }] }],
+          links: [[`${tools}#1`, "parent", `${tools}#2`], [`${tools}#1`, "parent", `${tools}#3`]],
+        };
+        const { issues } = await readAll(world, tools);
+        assert.deepEqual(issues.map((i) => [i.ref, i.taskLevel]), [["#1", false], ["#2", true], ["#3", false]]);
+        linkTo(byRef(issues, "#1"), "child", `${tools}#2`);
+        linkTo(byRef(issues, "#1"), "child", `${tools}#3`);
+        linkTo(byRef(issues, "#2"), "parent", `${tools}#1`);
+      });
+
+      test("a namespace's own Issue, such as a GitLab group's epic, is a far end outside the Project that the Issues it parents share", skipUnless(stage.records.namespaceIssues), async () => {
+        const world: World = {
+          projects: [
+            { path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] },
+            { path: "fixture-org", number: 2, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic" }] },
+          ],
+          links: [["fixture-org#12", "parent", `${tools}#1`], ["fixture-org#12", "parent", `${tools}#2`]],
+        };
+        const { issues } = await readAll(world, tools);
+        assert.deepEqual(issues.map((i) => i.ref), ["#1", "#2", "#3"], "the namespace's Issue isn't listed");
+        const ends = [byRef(issues, "#1"), byRef(issues, "#2")].map((i) => i.links.find((l) => l.role === "parent")?.to);
+        assert.equal(ends[0]?.id, ends[1]?.id, "both Links name the same Issue");
+        const epic = ends[0];
+        assert.deepEqual(epic?.readable && [epic.open, epic.project, epic.title], [true, "fixture-org", "Q3 importer epic"]);
+        assert.match(epic?.readable ? epic.ref : "", /^fixture-org[#&]12$/);
+      });
+
+      test("need 5: a Project whose tier can't record Blocks Links says so", skipUnless(stage.records.projectsWithoutBlocks), async () => {
+        const world: World = { projects: [{ path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2 }] }], recordsBlocks: false };
+        const { issues, unread } = await readAll(world, tools);
+        assert.equal(issues.length, 2);
+        assert.match(unread.blocks ?? "", /Blocks/);
+        const recorded = await readAll({ ...world, recordsBlocks: true }, tools);
+        assert.equal(recorded.unread.blocks, undefined);
+      });
+
+      test("an Issue closed as a duplicate has no Link to the Issue it duplicates", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }, { number: 2, closed: true, closedAs: "duplicate", duplicateOf: `${tools}#1` }] }],
+        };
+        assert.deepEqual(byRef((await readAll(world, tools)).issues, "#1").links, []);
+      });
+
       test("need 7: reads each Issue's open Closing Requests with their authors, drafts included", async () => {
         const world: World = {
           projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }],
@@ -448,9 +574,9 @@ export function readContract(stage: Stage): void {
         const { issues, unread } = await readAll(world, tools);
         assert.deepEqual(
           byRef(issues, "#1").closingRequests.map((r) => [r.ref, r.draft, r.author]),
-          [[`${tools}#40`, false, "fixture-bot"], [`${tools}#41`, true, "fixture-viewer"]],
+          [[stage.requestRef(tools, 40), false, "fixture-bot"], [stage.requestRef(tools, 41), true, "fixture-viewer"]],
         );
-        assert.match(byRef(issues, "#1").closingRequests[0]!.url, /fixture-org\/tools\/(pull|merge_requests)\/40$/);
+        assert.match(byRef(issues, "#1").closingRequests[0]!.url, /fixture-org\/tools\/(-\/)?(pull|merge_requests)\/40$/);
         assert.deepEqual(byRef(issues, "#2").closingRequests, [], "closed and merged ones aren't open");
         assert.deepEqual(byRef(issues, "#3").closingRequests, []);
         assert.equal(unread.closingRequests, undefined);
@@ -527,7 +653,7 @@ export function changesContract(stage: Stage): void {
         issues[2] = { number: 3, closed: true, closedAs: "not planned", closedAt: after };
         const read = await changes({ projects: [{ path: tools, number: 1, open: 5, issues }] });
         assert.deepEqual(read.open.map((i) => [i.ref, i.title]), [["#2", "Import state from S3"]]);
-        assert.deepEqual(read.ends.map((e) => e.readable && [e.ref, e.open, e.closedAs, e.closedAt]), [[`${tools}#3`, false, "not planned", after]]);
+        assert.deepEqual(read.ends.map((e) => e.readable && [e.ref, e.open, e.closedAs, e.closedAt]), [[`${tools}#3`, false, said(stage, "not planned"), after]]);
         assert.equal(read.caughtUp, true);
         assert.deepEqual(read.unread, {});
       });
@@ -556,8 +682,8 @@ export function changesContract(stage: Stage): void {
         };
         const { open, requests } = await changes(world);
         assert.deepEqual(refs(open), ["#4", "#5"]);
-        assert.deepEqual([...requests].sort(), [`${tools}#40`, `${tools}#41`], "so an Issue a request no longer closes can be told apart");
-        assert.deepEqual(open.find((i) => i.ref === "#4")!.closingRequests.map((r) => [r.ref, r.author]), [[`${tools}#40`, "fixture-bot"]]);
+        assert.deepEqual([...requests].sort(), [stage.requestRef(tools, 40), stage.requestRef(tools, 41)], "so an Issue a request no longer closes can be told apart");
+        assert.deepEqual(open.find((i) => i.ref === "#4")!.closingRequests.map((r) => [r.ref, r.author]), [[stage.requestRef(tools, 40), "fixture-bot"]]);
         assert.deepEqual(open.find((i) => i.ref === "#5")!.closingRequests, []);
       });
 
@@ -577,9 +703,15 @@ export function changesContract(stage: Stage): void {
         assert.deepEqual(byId.get(eight), { id: eight, readable: false });
       });
 
-      test("says so when its record of what changed doesn't reach back far enough", async () => {
+      test("says so when its record of what changed doesn't reach back far enough", skipUnless(stage.records.changeFeed), async () => {
         const world: World = { projects: [{ path: tools, number: 1, open: 6, issues: six }], changesKeptFrom: "2026-09-22T00:00:00Z" };
         assert.equal((await changes(world)).caughtUp, false);
+      });
+
+      test("says so when more changed since than one refresh reads", async () => {
+        const many: IssueSpec[] = Array.from({ length: 1001 }, (_, i) => ({ number: i + 1, updatedAt: after }));
+        const read = await changes({ projects: [{ path: tools, number: 1, open: 1001, issues: many }] });
+        assert.equal(read.caughtUp, false);
       });
 
       test("a login that can't read Closing Requests still reads what changed, and says why none are given", async () => {
@@ -649,15 +781,34 @@ export function cardContract(stage: Stage): void {
         const two = await issue(world, `${tools}#2`);
         const ids = await listedIds(world, tools);
         assert.deepEqual([two.id, two.project, two.ref, two.title, two.open, two.closedAs], [ids.get(`${tools}#2`), tools, `${tools}#2`, "Import state from S3", true, null]);
-        assert.match(two.url, /fixture-org\/tools\/issues\/2$/);
+        assert.match(two.url, issueUrl(tools, 2));
         const links = two.links.map((l) => [l.role, l.to.readable && l.to.ref]).sort();
         assert.deepEqual(links, [["blocked", `${tools}#3`], ["blocker", `${tools}#1`], ["child", `${tools}#4`], ["parent", `${plans}#7`]]);
         const names = new Map(two.links.map((l) => [l.role, l.name]));
         assert.equal(new Set(names.values()).size, 4, `a name for each kind: ${JSON.stringify([...names])}`);
         assert.ok([...names.values()].every((name) => name.length > 0));
-        assert.deepEqual(two.closingRequests.map((r) => [r.ref, r.draft, r.author]), [[`${tools}#40`, true, "fixture-bot"]]);
+        assert.deepEqual(two.closingRequests.map((r) => [r.ref, r.draft, r.author]), [[stage.requestRef(tools, 40), true, "fixture-bot"]]);
         assert.deepEqual([...two.mentionedBy].sort(), [ids.get(`${tools}#3`), ids.get(`${tools}#4`)].sort(), "Issues naming it, not the ones it names");
         assert.deepEqual(two.unread, {});
+      });
+
+      test("names a Related Link the way the Tracker does, apart from the other kinds", skipUnless(stage.records.related), async () => {
+        const two = await issue({ ...world, links: [...world.links!, [`${tools}#3`, "related", `${tools}#2`]] }, `${tools}#2`);
+        const related = two.links.filter((l) => l.role === "related");
+        assert.deepEqual(related.map((l) => l.to.readable && l.to.ref), [`${tools}#3`]);
+        assert.ok(related[0]!.name.length > 0 && two.links.every((l) => l.role === "related" || l.name !== related[0]!.name));
+      });
+
+      test("need 5: says so when the Issue's Project can't record Blocks Links", skipUnless(stage.records.projectsWithoutBlocks), async () => {
+        const two = await issue({ ...world, recordsBlocks: false }, `${tools}#2`);
+        assert.match(two.unread.blocks ?? "", /Blocks/);
+      });
+
+      test("reads a namespace's own Issue, such as a GitLab group's epic", skipUnless(stage.records.namespaceIssues), async () => {
+        const grouped: World = { ...world, projects: [...world.projects!, { path: "fixture-org", number: 3, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic" }] }] };
+        const epic = await issue(grouped, "fixture-org#12");
+        assert.deepEqual([epic.project, epic.title, epic.open], ["fixture-org", "Q3 importer epic", true]);
+        assert.equal((await issue(grouped, epic.url)).id, epic.id);
       });
 
       test("reads the same Issue by its URL", async () => {
@@ -668,7 +819,7 @@ export function cardContract(stage: Stage): void {
 
       test("reads a closed Issue and says how it closed", async () => {
         const five = await issue(world, `${tools}#5`);
-        assert.deepEqual([five.open, five.closedAs], [false, "not planned"]);
+        assert.deepEqual([five.open, five.closedAs], [false, said(stage, "not planned") ?? null]);
       });
 
       test("reads an Issue in another Project on the same Tracker", async () => {

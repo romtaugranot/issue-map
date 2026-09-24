@@ -1,7 +1,7 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1, 2, 3, 4, 6 and 7 so far, and
+ * This file holds needs 1 to 7 so far — need 5 as what a read couldn't give — and
  * reading only what changed for needs 3, 4 and 7.
  */
 
@@ -207,7 +207,7 @@ export type FarEnd =
       open: boolean;
       /** The path of the Project it is in. */
       project: string;
-      /** The reference users type from anywhere, such as `owner/name#123` or `group&12`. */
+      /** The reference users type from anywhere, such as `owner/name#123`, or `group#12` for a GitLab epic. */
       ref: string;
       title: string;
       url: string;
