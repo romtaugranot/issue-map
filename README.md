@@ -19,3 +19,7 @@ The Map puts every Project in a band from what its Tracker shows there ([ADR 000
 | GitLab before 13.4 | Refused | The Map can read no Link kind there |
 
 The floors come from the adapters, which the matrix and the schema checks read them from; a test fails when this table disagrees. A release is tagged only from a commit where every tier passed: run the Release workflow with the version to release. [docs/fixtures.md](docs/fixtures.md) says how the fixture Projects are set up.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
