@@ -12,7 +12,7 @@ import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/stor
 import type { CantAnswer, Project, Tracker } from "../tracker/tracker.ts";
 import { bandOf, refusal } from "./band.ts";
 import { drawCard, type Card } from "./card.ts";
-import { draw, drawProgress, type Command } from "./draw.ts";
+import { draw, drawProgress, type Command, type Drawing } from "./draw.ts";
 import { OUTSIDE } from "./text.ts";
 
 export interface ShowDeps {
@@ -29,30 +29,39 @@ export interface ShowDeps {
 const WAIT_MS = 5000;
 const POLL_MS = 250;
 
-export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: Command): Promise<string> {
+/** What a draw showed: a Map, a first read's progress, or no Map and why. */
+export interface Shown extends Drawing {
+  drew: "map" | "progress" | "nothing";
+}
+
+/** `home` names the Home Project while the Project drawn isn't it. */
+export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: Command, { home }: { home?: string } = {}): Promise<Shown> {
+  const nothing = (text: string): Shown => ({ text, drew: "nothing" });
+  const map = (text: string): Shown => ({ text, drew: "map" });
   // With no Tracker to say who the viewer is, the login the CLI holds reads its own Snapshot, and no other.
   const viewer = await tracker.viewer();
   const { login } = viewer;
-  if (login === undefined) return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer as CantAnswer)}`;
+  if (login === undefined) return nothing(`No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer as CantAnswer)}`);
   const key: SnapshotKey = { tracker: tracker.host, project: project.id, login };
   if (viewer.kind === "refused") {
     await deps.store.forget(key, viewer.reason);
-    return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`;
+    return nothing(`No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`);
   }
   if (viewer.kind === "viewer") await deps.startRefresher(key);
   const drawable = await deps.store.forDraw(key, tracker, project);
-  if (drawable.kind === "refused") return `No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`;
+  if (drawable.kind === "refused") return nothing(`No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`);
   if (drawable.kind === "ready") {
     const { snapshot, ageMs, stale, readAgain } = drawable;
     // Minutes on a large Project, so it never holds up the draw: this Snapshot is drawn meanwhile.
     if (readAgain) deps.startRead();
-    return draw(snapshot, command, stale === undefined ? undefined : { ageMs, reason: stale }).text;
+    const drawing = draw(snapshot, command, { ...(stale === undefined ? {} : { stale: { ageMs, reason: stale } }), ...(home === undefined ? {} : { home }) });
+    return bandOf(snapshot.support).kind === "refused" ? nothing(drawing.text) : map(drawing.text);
   }
   if (drawable.kind === "none") {
     // Minutes of reading would draw nothing on a Project that's Refused, so it's asked first; a Tracker that can't say is left to the read.
     const said = await tracker.capabilities(project);
     const band = said.kind === "capabilities" ? bandOf({ untested: tracker.untested, links: said.links }) : null;
-    if (band?.kind === "refused") return refusal(`${project.host}/${project.path}`, band);
+    if (band?.kind === "refused") return nothing(refusal(`${project.host}/${project.path}`, band));
   }
   let state: SnapshotState = drawable;
   if (!(state.kind === "reading" && state.running)) deps.startRead();
@@ -60,8 +69,11 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     await deps.sleep(POLL_MS);
     state = await deps.store.state(key);
   }
-  if (state.kind === "ready") return draw(state.snapshot, command).text;
-  return drawProgress(project.path, progress(state, project)).text;
+  if (state.kind === "ready") {
+    const text = draw(state.snapshot, command, home === undefined ? {} : { home }).text;
+    return bandOf(state.snapshot.support).kind === "refused" ? nothing(text) : map(text);
+  }
+  return { text: drawProgress(project.path, progress(state, project)).text, drew: "progress" };
 }
 
 function progress(state: Exclude<SnapshotState, { kind: "ready" }>, project: Project) {
@@ -75,13 +87,22 @@ function progress(state: Exclude<SnapshotState, { kind: "ready" }>, project: Pro
  * as `#12`, one from anywhere such as `owner/name#12`, or its URL. A card
  * that can't open says why and offers nothing to follow.
  */
-export async function showCard(tracker: Tracker, project: Project, typed: string, page = 1): Promise<Card> {
+export async function showCard(tracker: Tracker, project: Project, typed: string, page = 1): Promise<ShownCard> {
   const ref = typed.trim().replace(new RegExp(`^${OUTSIDE}\\s*`), "");
   const answer = await tracker.issue(ref.startsWith("#") ? `${project.path}${ref}` : ref);
-  if (answer.kind === "issue") return drawCard(answer.issue, project.path, page);
+  if (answer.kind === "issue") return { ...drawCard(answer.issue, project.path, page), opened: true };
   const why = answer.kind === "not-found" ? answer.reason : cantAnswer(tracker, answer);
-  return { text: `No card for ${ref}: ${why}.`, choices: [] };
+  const card: ShownCard = { text: `No card for ${ref}: ${why}.`, choices: [], opened: false };
+  // The Issue may be hidden from this login while its Project isn't, as a confidential Issue is.
+  const elsewhere = /^(.+)#\d+$/.exec(ref)?.[1];
+  if (elsewhere && elsewhere !== project.path) {
+    card.move = { label: `Open ${elsewhere}'s Map`, description: "its overview, since this Issue couldn't be read", target: `${tracker.host}/${elsewhere}` };
+  }
+  return card;
 }
+
+/** A card, and whether it opened: one that couldn't says why instead. */
+export type ShownCard = Card & { opened: boolean };
 
 function cantAnswer(tracker: Tracker, answer: CantAnswer): string {
   return `${tracker.product} ${answer.kind === "refused" ? "refused" : "can't tell"}: ${answer.reason}`;

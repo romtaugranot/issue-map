@@ -41,18 +41,25 @@ export interface Stale {
   reason: string;
 }
 
-/** `stale` opens the drawing with a line saying how old its Snapshot is and why; a fresh one shows no age. */
-export function draw(snapshot: Snapshot, command: Command, stale?: Stale): Drawing {
-  const text = drawn(snapshot, command);
+/** Where a drawing stands beyond its Snapshot. */
+export interface Context {
+  /** Opens the drawing with a line saying how old its Snapshot is and why; a fresh one shows no age. */
+  stale?: Stale;
+  /** The Home Project's path, while the Project drawn isn't it: the overview's header names it and how to return. */
+  home?: string;
+}
+
+export function draw(snapshot: Snapshot, command: Command, { stale, home }: Context = {}): Drawing {
+  const text = drawn(snapshot, command, home);
   return { text: stale ? `⚠ read ${age(stale.ageMs)} ago — couldn't refresh it: ${stale.reason}\n${text}` : text };
 }
 
-function drawn(snapshot: Snapshot, command: Command): string {
+function drawn(snapshot: Snapshot, command: Command, home: string | undefined): string {
   const band = bandOf(snapshot.support);
   if (band.kind === "refused") return refusal(`${snapshot.tracker}/${snapshot.project.path}`, band);
   switch (command.kind) {
     case "overview":
-      return overview(snapshot);
+      return overview(snapshot, home);
     case "unlinked":
       return unlinkedPage(snapshot, layout(snapshot).unlinked, command.page).join("\n");
     case "group":
@@ -93,12 +100,13 @@ function timeLeft(ms: number): string {
   return seconds > 90 ? `about ${Math.round(seconds / 60)} min left` : `about ${Math.round(seconds)}s left`;
 }
 
-function overview(snapshot: Snapshot): string {
+function overview(snapshot: Snapshot, home: string | undefined): string {
   const laidOut = layout(snapshot);
   const { onMap, unlinked, groups } = laidOut;
   const said = notes(snapshot.support);
   const header = [
     `**${snapshot.project.path}** · ${count(snapshot.issues.length)} open · ${count(onMap.length)} on the Map · ${count(unlinked.length)} Unlinked · ${bandName(bandOf(snapshot.support))}`,
+    ...(home === undefined ? [] : [`⌂ Home: ${home} — \`home\` to return`]),
     ...(said.length > 0 ? [`⚠ ${said.join(" · ")}`] : []),
   ].join("\n");
   const unlinkedLine = `**Unlinked: ${count(unlinked.length)}** — no Link to another open Issue. Ask to list them.`;
@@ -126,7 +134,6 @@ function overview(snapshot: Snapshot): string {
   lines.push("", unlinkedLine);
   return lines.join("\n");
 }
-
 
 function takeNextSection(snapshot: Snapshot, next: TakeNext): string[] {
   if (next.kind === "blocks-unread") {

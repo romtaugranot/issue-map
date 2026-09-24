@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveHome, type LastHome } from "../src/home/home.ts";
+import { likelyHome, resolveHome, type LastHome } from "../src/home/home.ts";
 import { gitCheckout } from "../src/home/checkout.ts";
 import type { Project, Trackers } from "../src/tracker/tracker.ts";
 import { fakeTrackers, type FakeProject } from "./fakes/fake-trackers.ts";
@@ -111,6 +111,25 @@ test("a genuine tie asks once, and re-running after the pick does not ask again"
   const again = await home(dir, trackers);
   assert.equal(again.text, "Home Project: github.com/fixture-user/cli — 12 open Issues");
   assert.deepEqual(again.choices, []);
+});
+
+test("names the checkout's other Projects with open Issues beside the Home Project, for moving to and re-picking", async () => {
+  const dir = checkout({ origin: "https://github.com/fixture-user/cli.git" });
+  const fork: FakeProject = { path: "fixture-user/cli", open: 12, parent: cli };
+  const trackers = fakeTrackers({ "github.com": { product: "GitHub", projects: [fork, cli] } });
+  const picked = await home(dir, trackers, { pick: "https://github.com/fixture-user/cli" });
+  assert.deepEqual(picked.others, [{ label: "github.com/cli/cli", description: "1,028 open Issues · parent of origin", url: "https://github.com/cli/cli" }]);
+  const alone = await home(checkout({ origin: "git@github.com:opentofu/opentofu.git" }), fakeTrackers({ "github.com": { product: "GitHub", projects: [tofu] } }));
+  assert.deepEqual(alone.others, []);
+});
+
+test("the Project a checkout likely opens on is its saved pick, or else where its top-ranked remote leads, found without a Tracker read", async () => {
+  const guess = (dir: string) => likelyHome(gitCheckout(dir), async (alias) => (alias === "gh-work" ? "github.com" : alias));
+  assert.deepEqual(await guess(checkout({ origin: "gh-work:fixture-user/cli.git", upstream: "https://github.com/cli/cli.git" })), { host: "github.com", path: "cli/cli" });
+  assert.deepEqual(await guess(checkout({ origin: "gh-work:fixture-user/cli.git" })), { host: "github.com", path: "fixture-user/cli" });
+  const picked = checkout({ origin: "gh-work:fixture-user/cli.git", upstream: "https://github.com/cli/cli.git" }, { "issue-map.home": "https://github.com/fixture-user/cli" });
+  assert.deepEqual(await guess(picked), { host: "github.com", path: "fixture-user/cli" });
+  assert.equal(await guess(checkout({})), null);
 });
 
 test("the pick is saved in the checkout's local git config under the plugin's own key", async () => {

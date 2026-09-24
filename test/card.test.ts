@@ -188,6 +188,11 @@ describe("a reduced card", () => {
         "Open · an Outside Issue, in fixture-org/plans. The Map hasn't read that Project, so this card shows none of its Links.",
       ].join("\n"),
       choices: [],
+      move: {
+        label: "Open fixture-org/plans's Map",
+        description: "on this Issue's card there, which shows its Links",
+        target: "https://github.com/fixture-org/plans/issues/7",
+      },
     });
   });
 

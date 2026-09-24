@@ -34,6 +34,8 @@ export interface HomeAnswer {
   text: string;
   /** Non-empty when the user has to pick; the best guess comes first. */
   choices: Choice[];
+  /** Once there is a Home Project, the checkout's other Projects with open Issues, best guess first: where `go` looks first, and what re-picking offers. */
+  others: Choice[];
   /** The Home Project and the Tracker it is on, when there is one to draw. */
   home?: { tracker: Tracker; project: Project };
 }
@@ -70,23 +72,25 @@ async function resolve(deps: HomeDeps, request: { pick?: string }): Promise<Home
   }
   const distinct = unique(candidates);
   if (distinct.length === 0) {
-    if (!leadsToHosts) return { text: "No Home Project: this checkout has no remote that leads to a Tracker.", choices: [] };
+    if (!leadsToHosts) return { text: "No Home Project: this checkout has no remote that leads to a Tracker.", choices: [], others: [] };
     const last = await lastHome(deps, unreadable);
     if (last) return last;
     const lines = unreadable.map(({ remote, address, why }) => `  ${remote.name} → ${address.host}/${address.path}: ${why}`);
-    return { text: ["No Home Project: no remote of this checkout leads to a Project the Map can read.", ...lines].join("\n"), choices: [] };
+    return { text: ["No Home Project: no remote of this checkout leads to a Project the Map can read.", ...lines].join("\n"), choices: [], others: [] };
   }
+  const withOpenIssues = distinct.filter(hasOpenIssues);
   const alsoHere = unreadable.map(({ address, why }) => `Also here: ${address.host}/${address.path} — ${why}`);
   const found = ({ tracker, project }: Candidate): HomeAnswer => ({
     text: [`Home Project: ${name(project)} — ${issueCount(project)}`, ...alsoHere].join("\n"),
     choices: [],
+    others: choices(withOpenIssues.filter((c) => c.project.id !== project.id)),
     home: { tracker, project },
   });
   const ask = (tied: Candidate[], before = ""): HomeAnswer => ({
     text: [before + askText(tied), ...alsoHere].join("\n"),
     choices: choices(tied),
+    others: [],
   });
-  const withOpenIssues = distinct.filter(hasOpenIssues);
   const tied = withOpenIssues.length > 1 ? withOpenIssues : [];
 
   if (request.pick !== undefined) {
@@ -117,7 +121,7 @@ async function resolve(deps: HomeDeps, request: { pick?: string }): Promise<Home
       return found(byId);
     }
     if (address && resolved?.kind === "unreadable" && !resolved.lasting) {
-      return { text: [`Home Project: ${address.host}/${address.path} — ${resolved.why}`, ...alsoHere].join("\n"), choices: [] };
+      return { text: [`Home Project: ${address.host}/${address.path} — ${resolved.why}`, ...alsoHere].join("\n"), choices: [], others: [] };
     }
     await deps.checkout.unset(HOME_KEY);
   }
@@ -138,6 +142,24 @@ async function resolve(deps: HomeDeps, request: { pick?: string }): Promise<Home
 
   if (tied.length > 0) return ask(tied);
   return found((withOpenIssues[0] ?? distinct[0])!);
+}
+
+/**
+ * Where a checkout likely opens, without reading any Tracker: its saved
+ * pick, or else where its top-ranked remote leads. `null` when no remote
+ * leads to a host.
+ */
+export async function likelyHome(checkout: Checkout, sshHostname: (alias: string) => Promise<string>): Promise<Address | null> {
+  const saved = await checkout.get(HOME_KEY);
+  const pick = saved === undefined ? null : remoteAddress(saved, (alias) => alias);
+  if (pick) return pick;
+  for (const remote of rankRemotes(await checkout.remotes())) {
+    const aliases = new Map<string, string>();
+    for (const alias of sshHosts(remote.url)) aliases.set(alias, await sshHostname(alias));
+    const address = remoteAddress(remote.url, (alias) => aliases.get(alias) ?? alias);
+    if (address) return address;
+  }
+  return null;
 }
 
 function envDefaults(env: Record<string, string | undefined>): Address[] {
@@ -191,7 +213,7 @@ async function lastHome(deps: HomeDeps, unreadable: { address: Address; why: str
   if (!project || why === undefined) return undefined;
   const identified = await deps.trackers.at(project.host);
   if (identified.kind !== "identified") return undefined;
-  return { text: `Home Project: ${name(project)}, as last resolved — ${why}`, choices: [], home: { tracker: identified.tracker, project } };
+  return { text: `Home Project: ${name(project)}, as last resolved — ${why}`, choices: [], others: [], home: { tracker: identified.tracker, project } };
 }
 
 type Read =
@@ -283,7 +305,8 @@ function name(project: Project): string {
   return `${project.host}/${project.path}`;
 }
 
-function issueCount(project: Project): string {
+/** A Project's open Issues, such as `1,028 open Issues`, or that it has them turned off. */
+export function issueCount(project: Project): string {
   if (project.issues === "off") return "Issues are turned off";
   const { open } = project.issues;
   return `${open.toLocaleString("en-US")} open Issue${open === 1 ? "" : "s"}`;

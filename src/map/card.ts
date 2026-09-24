@@ -16,6 +16,12 @@ export interface Choice {
 export interface Card extends Drawing {
   /** The card's Links that can be followed, in the order it shows them. */
   choices: Choice[];
+  /** A move to the Map of the Project an Outside Issue is in; `target` is what `go` takes to make it. */
+  move?: Move;
+}
+
+export interface Move extends Choice {
+  target: string;
 }
 
 /** Where a Link's kind comes on the card: up the tree and what holds it back first, then what it holds. */
@@ -36,7 +42,10 @@ export function drawCard(issue: IssueRead, project: string, page = 1): Card {
     const why = outside
       ? ` · an Outside Issue, in ${issue.project}. The Map hasn't read that Project, so this card shows none of its Links.`
       : ". A closed Issue isn't on the Map, so this card shows none of its Links.";
-    return { text: [...head, `${state}${why}`].join("\n"), choices: [] };
+    const text = [...head, `${state}${why}`].join("\n");
+    if (!outside) return { text, choices: [] };
+    // Its own Project's Map reads its Links, so the move lands on its card there.
+    return { text, choices: [], move: { label: `Open ${issue.project}'s Map`, description: "on this Issue's card there, which shows its Links", target: issue.url } };
   }
   const lines = [...head, blocked(issue)];
   const choices: Choice[] = [];
