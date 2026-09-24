@@ -146,6 +146,45 @@ jobs:
       - if: failure()
         run: docker logs --tail 300 gitlab
 
+  # The EE schemas a run recorded arrive through a pull request, as GHES's do, for the contract tier to check the GitLab adapter's queries against.
+  schemas:
+    needs: gitlab
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: gitlab-*-ee-schema
+          path: recorded
+      - id: record
+        run: |
+          mkdir -p recorded
+          {
+            echo "changed<<EOF"
+            node scripts/ci/schemas.ts gitlab recorded
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          rm -rf recorded
+      - uses: peter-evans/create-pull-request@v8
+        with:
+          branch: ci/gitlab-schemas
+          commit-message: Record the GitLab matrix's EE GraphQL schemas
+          title: Record the GitLab matrix's EE GraphQL schemas
+          body: |
+            The GitLab version matrix recorded EE schemas the Map's schema checks don't hold yet (ADR 0004):
+
+            ${{ steps.record.outputs.changed }}
+
+            The contract tier checks every query the GitLab adapter sends a promised GitLab against them.
+
   drift:
     needs: gitlab
     if: failure() && github.event_name == 'schedule'

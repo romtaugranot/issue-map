@@ -77,6 +77,12 @@ const SINCE = {
   forkedFrom: "18.0",
   /** `availableFeatures { hasBlockedIssuesFeature }`; before it, REST's `weight` key stands in (ADR 0003). */
   availableFeatures: "18.3",
+  /**
+   * Discussions sorted newest first. They page forward only, on every
+   * version, so the latest comments can be asked for only from here on;
+   * before it, REST gives them.
+   */
+  discussionsSort: "18.4",
 };
 
 /** Whether this GitLab gives each thing in `SINCE` through GraphQL. */
@@ -600,7 +606,7 @@ async function workItemIn<T>(ctx: Ctx, path: string, inGroup: boolean, within: (
 
 /**
  * Need 8: one Issue's description and latest comments, from the work-item
- * GraphQL; before 16.0, or for an epic before it was a work item, from REST.
+ * GraphQL; before 18.4, which can't ask for the latest first, from REST.
  * A comment's replies are comments too; the notes GitLab makes by itself,
  * such as a Mention, aren't.
  */
@@ -608,8 +614,8 @@ async function thread(ctx: Ctx, locator: string): Promise<ThreadAnswer> {
   const at = itemAt(ctx, locator);
   if ("kind" in at) return at;
   const { path, iid, inGroup } = at;
-  if (inGroup && !ctx.has.epicWorkItems) return threadFromRest(ctx, `groups/${encodeURIComponent(path)}/epics/${iid}`, path, locator);
-  if (!ctx.has.workItems) return threadFromRest(ctx, `projects/${encodeURIComponent(path)}/issues/${iid}`, path, locator);
+  if (inGroup && !ctx.has.discussionsSort) return threadFromRest(ctx, `groups/${encodeURIComponent(path)}/epics/${iid}`, path, locator);
+  if (!ctx.has.discussionsSort) return threadFromRest(ctx, `projects/${encodeURIComponent(path)}/issues/${iid}`, path, locator);
   const within = (container: string) => `query($path: ID!) {
   currentUser { username }
   ${container}(fullPath: $path) {
@@ -618,7 +624,7 @@ async function thread(ctx: Ctx, locator: string): Promise<ThreadAnswer> {
         reference(full: true) title webUrl state
         widgets {
           ... on WorkItemWidgetDescription { description }
-          ... on WorkItemWidgetNotes { discussions(filter: ONLY_COMMENTS, last: ${THREAD_COMMENTS}) { pageInfo { hasPreviousPage } nodes { notes { nodes { body createdAt author { username } } } } } }
+          ... on WorkItemWidgetNotes { discussions(filter: ONLY_COMMENTS, sort: CREATED_DESC, first: ${THREAD_COMMENTS}) { pageInfo { hasNextPage } nodes { notes { nodes { body createdAt author { username } } } } } }
         }
       }
     }
@@ -639,7 +645,7 @@ async function thread(ctx: Ctx, locator: string): Promise<ThreadAnswer> {
       open: node.state === "OPEN",
       body: widgets.description ?? "",
       comments: notes.slice(-THREAD_COMMENTS).map((n) => ({ author: n.author?.username ?? null, at: n.createdAt, body: n.body })),
-      earlier: (widgets.discussions?.pageInfo.hasPreviousPage ?? false) || notes.length > THREAD_COMMENTS,
+      earlier: (widgets.discussions?.pageInfo.hasNextPage ?? false) || notes.length > THREAD_COMMENTS,
     },
   };
 }
@@ -676,7 +682,7 @@ interface ThreadNode {
 
 interface ThreadWidgets {
   description?: string | null;
-  discussions?: { pageInfo: { hasPreviousPage: boolean }; nodes: { notes: { nodes: { body: string; createdAt: string; author: { username: string } | null }[] } }[] };
+  discussions?: { pageInfo: { hasNextPage: boolean }; nodes: { notes: { nodes: { body: string; createdAt: string; author: { username: string } | null }[] } }[] };
 }
 
 function card(node: ItemNode, mentionedBy: Mention[], unread: Unread): IssueAnswer {
