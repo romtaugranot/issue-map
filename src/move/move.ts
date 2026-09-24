@@ -13,10 +13,10 @@ import { resolve } from "node:path";
 import { checkoutRoot, gitCheckout } from "../home/checkout.ts";
 import { issueCount, likelyHome, resolveHome, type Choice as HomeChoice, type HomeAnswer, type HomeDeps } from "../home/home.ts";
 import { remoteAddress, type Address } from "../home/remote-address.ts";
-import { drawCard, type Card, type Choice as LinkChoice } from "../map/card.ts";
+import type { Card, Choice as LinkChoice } from "../map/card.ts";
 import type { Command } from "../map/draw.ts";
-import type { Shown, ShownCard } from "../map/show.ts";
-import { ago, OUTSIDE, plural, short } from "../map/text.ts";
+import { typedRef, type Shown, type ShownCard } from "../map/show.ts";
+import { ago, plural, short } from "../map/text.ts";
 import type { IssueRead, Project, Tracker, Trackers } from "../tracker/tracker.ts";
 
 /** What is on screen: one of a Map's drawings, or an Issue card read live. */
@@ -67,7 +67,10 @@ export interface MoveDeps {
   now(): number;
   /** Draws a Project's Map. `home` is true only for the Home Project, the only one kept warm; `away` names the Home Project otherwise. */
   showMap(tracker: Tracker, project: Project, command: Command, at: { home: boolean; away?: string }): Promise<Shown>;
-  showCard(tracker: Tracker, project: Project, ref: string, page: number): Promise<ShownCard>;
+  /** `read` is the Issue when it was just read live. */
+  showCard(tracker: Tracker, project: Project, ref: string, page: number, read?: IssueRead): Promise<ShownCard>;
+  /** Assigns the Issue `ref` names to the viewer, and shows its card; one that can't be says why. */
+  assign(tracker: Tracker, project: Project, ref: string): Promise<ShownCard>;
 }
 
 export type Request =
@@ -76,6 +79,8 @@ export type Request =
   /** `go`: a picker of nearby Projects, or a move to `target`. `dirs` are the directories added to the session; `pickThere` picks among the Projects a typed local path leads to. */
   | { kind: "go"; target?: string; dirs?: string[]; pickThere?: string }
   | { kind: "back" }
+  /** Assigns the Issue `ref` names in the Project on screen to the viewer. */
+  | { kind: "assign"; ref: string }
   /** `picked` when the Home Project was just picked, so `home` goes there rather than re-pick. */
   | { kind: "home"; picked?: boolean };
 
@@ -149,6 +154,15 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
       return shown.answer;
     }
 
+    case "assign": {
+      if (!here) return say(deps.home.text);
+      const found = await trackerAt(deps, here.project.host);
+      if ("why" in found) return say(`Not assigned: ${found.why}.`);
+      const card = await deps.assign(found.tracker, here.project, request.ref);
+      if (card.opened) await land({ project: here.project, view: { kind: "card", ref: request.ref.trim(), page: 1 } }, false);
+      return cardAnswer(card);
+    }
+
     case "back": {
       if (trail.length < 2) return say("Nothing to go back to: this is where this session's trail starts.");
       const back = trail.slice(0, -1);
@@ -181,9 +195,9 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
         return say(`Can't move to ${target}: ${found.why}.${stillHere ? ` ${stillHere}` : ""}`);
       }
       if (found.kind === "issue") {
-        const at: Position = { project: found.project, view: { kind: "card", ref: short(found.issue.ref, found.project.path), page: 1 } };
-        await land(at, false);
-        return cardAnswer(drawCard(found.issue, found.project.path));
+        const ref = short(found.issue.ref, found.project.path);
+        await land({ project: found.project, view: { kind: "card", ref, page: 1 } }, false);
+        return cardAnswer(await deps.showCard(found.tracker, found.project, ref, 1, found.issue));
       }
       const at: Position = { project: found.project, view: { kind: "overview" } };
       const shown = await show(at);
@@ -199,7 +213,9 @@ function say(text: string): Answer {
 }
 
 function cardAnswer(card: Card): Answer {
-  const choices = card.move ? [{ label: card.move.label, description: card.move.description, run: `issue-map go ${quote(card.move.target)}` }] : [];
+  const choices: MoveChoice[] = [];
+  if (card.assign) choices.push({ label: card.assign.label, description: card.assign.description, run: `issue-map assign ${quote(card.assign.ref)}` });
+  if (card.move) choices.push({ label: card.move.label, description: card.move.description, run: `issue-map go ${quote(card.move.target)}` });
   return { text: card.text, links: card.choices, choices };
 }
 
@@ -266,7 +282,7 @@ type Cant = Extract<Found, { kind: "cant" }>;
 
 /** The Project or Issue `target` names; a local path, a URL, a reference in the Project on screen such as `#12`, or a short name. */
 async function find(deps: MoveDeps, typed: string, here: Position | undefined, pickThere: string | undefined): Promise<Found> {
-  const target = typed.replace(new RegExp(`^${OUTSIDE}\\s*`), "");
+  const target = typedRef(typed);
   if (/^[/~.]/.test(target) || (!target.includes("://") && !target.includes("#") && (await deps.checkouts.dir(target)))) {
     return atPath(deps, target, pickThere);
   }

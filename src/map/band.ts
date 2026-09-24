@@ -2,7 +2,7 @@
  * The band a Project is in (ADR 0003). Pure: it comes from what the Tracker
  * said of its version and of the Project, never from which Tracker it is.
  */
-import type { LinkKind, Support } from "../tracker/tracker.ts";
+import type { LinkKind, Support, WriteAnswer } from "../tracker/tracker.ts";
 
 export type Band =
   /** Tested here, and writes allowed. */
@@ -57,4 +57,15 @@ export function notes(support: Support): string[] {
     return band.kind === "best-effort" ? [`${name} Links can't be recorded here: ${answer.reason}`] : [];
   });
   return [...untested, ...kinds];
+}
+
+/**
+ * Why the Map won't write here, or `null` where it will: only on a Promised
+ * Project, and not for a login the Tracker says can't. Where the Tracker
+ * can't say, it writes, and stops at the first refusal (ADR 0003).
+ */
+export function wontWrite(band: Band, write: WriteAnswer): string | null {
+  if (band.kind === "best-effort") return `Best effort: ${band.untested} — the Map writes nothing here`;
+  if (band.kind === "refused") return band.reason;
+  return write.kind === "cant" ? write.reason : null;
 }

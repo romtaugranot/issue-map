@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { move, localCheckouts, type Answer, type MoveDeps, type Position, type Recent, type Request } from "../src/move/move.ts";
 import { showCard } from "../src/map/show.ts";
+import { assignToViewer } from "../src/map/assign.ts";
+import { snapshotStore } from "../src/snapshot/store.ts";
 import type { HomeAnswer } from "../src/home/home.ts";
 import type { Command } from "../src/map/draw.ts";
 import type { FarEnd, IssueRead, NamedLink, Project, Tracker } from "../src/tracker/tracker.ts";
@@ -28,7 +30,7 @@ function end(project: string, n: number, host = "github.com"): FarEnd {
 }
 
 function read(project: string, n: number, links: NamedLink[] = []): IssueRead {
-  return { id: `${project}#${n}`, project, ref: `${project}#${n}`, title: `Issue ${n}`, url: `https://github.com/${project}/issues/${n}`, open: true, closedAs: null, links, closingRequests: [], mentionedBy: [], unread: {} };
+  return { id: `${project}#${n}`, project, ref: `${project}#${n}`, title: `Issue ${n}`, url: `https://github.com/${project}/issues/${n}`, open: true, assignees: [], closedAs: null, links, closingRequests: [], mentionedBy: [], unread: {} };
 }
 
 /** #12 in the Home Project has a Parent outside it, plans#7, whose own Links the Home Project's Map never reads. */
@@ -88,6 +90,7 @@ async function world(options: { others?: HomeAnswer["others"]; trail?: Position[
       return { text: `MAP ${line}`, drew: "map" };
     },
     showCard,
+    assign: (tracker, project, ref) => assignToViewer({ store: snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-move-")), { now: () => NOW }) }, tracker, project, ref),
   };
   return {
     deps,
@@ -244,6 +247,35 @@ describe("an Outside Issue's card", () => {
     const moved = await w.go({ kind: "go", target: `https://github.com/${PLANS}/issues/7` });
     assert.match(moved.text, /^\*\*Sub-issues: 2\*\*$/m);
     assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} ↗${PLANS}#7`, `${PLANS} #7`]);
+  });
+});
+
+describe("assigning an Issue to yourself from its card", () => {
+  const withViewer: Record<string, FakeHost> = { ...hosts, "github.com": { ...hosts["github.com"]!, viewer: "fixture-viewer" } };
+
+  test("the card's offer is a choice whose command assigns it, and assigning lands on its card in the Project on screen", async () => {
+    const w = await world({ hosts: withViewer });
+    const card = await w.go({ kind: "view", view: { kind: "card", ref: "#12", page: 1 } });
+    assert.deepEqual(card.choices, [{ label: "Assign #12 to me", description: "writes to GitHub: assigns #12 to fixture-viewer", run: "issue-map assign '#12'" }]);
+    const assigned = await w.go({ kind: "assign", ref: "#12" });
+    assert.match(assigned.text, /^Assigned #12 to you on GitHub\.\n\n\*\*#12 Issue 12\*\*$/m);
+    assert.match(assigned.text, /^Not Blocked · assigned to you$/m);
+    assert.deepEqual(assigned.choices, []);
+    assert.deepEqual(assigned.links.map((l) => l.label), [`${PLANS}#7`]);
+    assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} #12`]);
+  });
+
+  test("an Issue moved to by its URL offers it too", async () => {
+    const w = await world({ hosts: withViewer });
+    const card = await w.go({ kind: "go", target: `https://github.com/${HOME}/issues/12` });
+    assert.deepEqual(card.choices.map((c) => c.run), ["issue-map assign '#12'"]);
+  });
+
+  test("an Issue that can't be assigned leaves the user where they are, and says why", async () => {
+    const w = await world({ hosts: withViewer });
+    const answer = await w.go({ kind: "assign", ref: "#99" });
+    assert.equal(answer.text, `Not assigned: no Issue ${HOME}#99 on github.com that this login can read.`);
+    assert.deepEqual(where(w), []);
   });
 });
 

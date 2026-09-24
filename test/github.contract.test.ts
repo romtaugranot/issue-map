@@ -24,7 +24,9 @@ trackerContract({
   },
   saysClosedAs: ["completed", "not planned", "duplicate"],
   requestRef: (path, n) => `${path}#${n}`,
-  arrange(world) {
+  arrange(given) {
+    // A write changes the World, so each Tracker gets its own.
+    const world = structuredClone(given);
     let requests = 0;
     const loginsSentTo: string[] = [];
     const tokenSentTo: string[] = [];
@@ -159,7 +161,7 @@ function ghApi(world: World, args: string[]): CliResult {
   const field = (name: string) => args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
   const list = (name: string) => args.filter((a) => a.startsWith(`${name}[]=`)).map((a) => a.slice(name.length + 3));
   const rest = args.find((a) => a.startsWith("repos/"));
-  if (rest) return restApi(world, rest);
+  if (rest) return args.includes("POST") ? assignees(world, rest, list("assignees")) : restApi(world, rest);
   const query = field("query") ?? "";
   const server = world.servers?.[host];
   // The schema's own account of an Issue's fields, as its release publishes it.
@@ -358,6 +360,23 @@ function restApi(world: World, rest: string): CliResult {
   const page = Number(url.searchParams.get("page") ?? 1);
   const size = Number(url.searchParams.get("per_page") ?? 30);
   return exited(0, JSON.stringify(events.slice((page - 1) * size, page * size)));
+}
+
+/**
+ * `POST repos/{owner}/{name}/issues/{n}/assignees`: adds the logins and
+ * answers with the Issue. A login without the triage role is ignored, not
+ * refused; a token that may only read is refused.
+ */
+function assignees(world: World, rest: string, logins: string[]): CliResult {
+  const [, owner, name, , n, what] = rest.split("/");
+  const issue = world.projects?.find((p) => p.path === `${owner}/${name}`)?.issues?.find((i) => i.number === Number(n));
+  if (!issue || issue.hidden || what !== "assignees") return exited(1, JSON.stringify({ message: "Not Found", status: "404" }), "gh: Not Found (HTTP 404)\n");
+  if (world.token === "reads") {
+    const message = "Resource not accessible by personal access token";
+    return exited(1, JSON.stringify({ message, documentation_url: "https://docs.github.com/rest/issues/assignees", status: "403" }), `gh: ${message} (HTTP 403)\n`);
+  }
+  if (world.role !== "reader") issue.assignees = [...new Set([...(issue.assignees ?? []), ...logins])];
+  return exited(0, JSON.stringify({ number: issue.number, assignees: (issue.assignees ?? []).map((login) => ({ login })) }));
 }
 
 /** An Issue read whole, open or closed, as a refresh reads it again. */

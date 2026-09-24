@@ -86,6 +86,14 @@ export interface SnapshotStore {
   refresh(key: SnapshotKey, tracker: Tracker, project: Project): Promise<RefreshOutcome>;
   /** The Snapshot to draw: refreshed first when it's more than two minutes old, or, when it can't be, as it is and why. */
   forDraw(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ForDraw>;
+  /**
+   * Takes in a write the Map made, so the next draw shows it without waiting
+   * for a refresh: the Issue `issue` names is assigned to `assignees` now.
+   * The Snapshot keeps its age, and the next refresh reads the Issue again
+   * from where it would have. A first read running meanwhile shows the
+   * write once a refresh has read it.
+   */
+  assigned(key: SnapshotKey, issue: string, assignees: string[]): Promise<void>;
   /** Deletes what's kept for a login the Tracker refused, keeping only why. */
   forget(key: SnapshotKey, reason: string): Promise<Refused>;
   /**
@@ -314,6 +322,16 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       const after = await this.state(key);
       if (outcome.kind === "done" || after.kind !== "ready") return after;
       return { ...after, stale: outcome.kind === "failed" ? outcome.reason : "another refresh of it is running" };
+    },
+
+    async assigned(key, issue, assignees) {
+      const at = paths(key);
+      if (!current(await readJson<Snapshot>(at.snapshot))) return;
+      await locked(at.lock, async () => {
+        const snapshot = current(await readJson<Snapshot>(at.snapshot));
+        if (!snapshot?.issues.some((held) => held.id === issue)) return;
+        await save(at.snapshot, { ...snapshot, issues: snapshot.issues.map((held) => (held.id === issue ? { ...held, assignees } : held)) });
+      });
     },
 
     async forget(key, reason) {

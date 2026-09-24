@@ -9,9 +9,9 @@
  * so it opens even during a first read (ADR 0006).
  */
 import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/store.ts";
-import type { CantAnswer, Project, Tracker } from "../tracker/tracker.ts";
+import type { CantAnswer, IssueRead, Project, Tracker } from "../tracker/tracker.ts";
 import { bandOf, refusal } from "./band.ts";
-import { drawCard, type Card } from "./card.ts";
+import { drawCard, type Card, type CardContext } from "./card.ts";
 import { draw, drawProgress, type Command, type Drawing } from "./draw.ts";
 import { OUTSIDE } from "./text.ts";
 
@@ -85,14 +85,14 @@ function progress(state: Exclude<SnapshotState, { kind: "ready" }>, project: Pro
 /**
  * The card of the Issue `typed` names: a reference inside the Project such
  * as `#12`, one from anywhere such as `owner/name#12`, or its URL. A card
- * that can't open says why and offers nothing to follow.
+ * that can't open says why and offers nothing to follow. `read` is the
+ * Issue when it was just read live, so it isn't read again.
  */
-export async function showCard(tracker: Tracker, project: Project, typed: string, page = 1): Promise<ShownCard> {
-  const ref = typed.trim().replace(new RegExp(`^${OUTSIDE}\\s*`), "");
-  const answer = await tracker.issue(ref.startsWith("#") ? `${project.path}${ref}` : ref);
-  if (answer.kind === "issue") return { ...drawCard(answer.issue, project.path, page), opened: true };
-  const why = answer.kind === "not-found" ? answer.reason : cantAnswer(tracker, answer);
-  const card: ShownCard = { text: `No card for ${ref}: ${why}.`, choices: [], opened: false };
+export async function showCard(tracker: Tracker, project: Project, typed: string, page = 1, read?: IssueRead): Promise<ShownCard> {
+  const ref = typedRef(typed);
+  const answer = read ? { kind: "issue" as const, issue: read } : await tracker.issue(issueLocator(project, ref));
+  if (answer.kind === "issue") return { ...drawCard(answer.issue, project.path, page, await cardContext(tracker, project, answer.issue)), opened: true };
+  const card: ShownCard = { text: `No card for ${ref}: ${why(tracker, answer)}.`, choices: [], opened: false };
   // The Issue may be hidden from this login while its Project isn't, as a confidential Issue is.
   const elsewhere = /^(.+)#\d+$/.exec(ref)?.[1];
   if (elsewhere && elsewhere !== project.path) {
@@ -101,9 +101,39 @@ export async function showCard(tracker: Tracker, project: Project, typed: string
   return card;
 }
 
+/** An Issue's reference as the user typed it, less the `↗` the Map marks an Outside Issue with. */
+export function typedRef(typed: string): string {
+  return typed.trim().replace(new RegExp(`^${OUTSIDE}\\s*`), "");
+}
+
+/** What `issue` takes for what the user typed: `#12` is in the Project on screen. */
+export function issueLocator(project: Project, ref: string): string {
+  return ref.startsWith("#") ? `${project.path}${ref}` : ref;
+}
+
+/**
+ * Who the viewer is, for an open Issue of the Project; and, where it's
+ * unassigned, whether the Map may assign it to them: the Project's band,
+ * and whether this login can write, both asked live.
+ */
+export async function cardContext(tracker: Tracker, project: Project, issue: IssueRead): Promise<CardContext> {
+  if (!issue.open || issue.project !== project.path) return {};
+  const viewer = await tracker.viewer();
+  if (viewer.kind !== "viewer") return {};
+  if (issue.assignees.length > 0) return { viewer: viewer.login };
+  const said = await tracker.capabilities(project);
+  if (said.kind !== "capabilities") return { viewer: viewer.login };
+  return { viewer: viewer.login, writes: { product: tracker.product, band: bandOf({ untested: tracker.untested, links: said.links }), write: said.write } };
+}
+
 /** A card, and whether it opened: one that couldn't says why instead. */
 export type ShownCard = Card & { opened: boolean };
 
 function cantAnswer(tracker: Tracker, answer: CantAnswer): string {
   return `${tracker.product} ${answer.kind === "refused" ? "refused" : "can't tell"}: ${answer.reason}`;
+}
+
+/** Why a Tracker gave no answer: what it said of a thing it can't find, or why it couldn't say. */
+export function why(tracker: Tracker, answer: CantAnswer | { kind: "not-found"; reason: string }): string {
+  return answer.kind === "not-found" ? answer.reason : cantAnswer(tracker, answer);
 }

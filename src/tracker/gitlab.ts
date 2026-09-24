@@ -6,7 +6,7 @@
  * its REST API fills in.
  */
 import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
-import type { CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkKind, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
+import type { AssignAnswer, CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkKind, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitLab";
 
@@ -199,6 +199,7 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
       changes: async (project, since, outside) => (loginIsFor ? changes(ctx, project, since, outside) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? issue(ctx, locator) : noLogin(host)),
       capabilities: async (project) => (loginIsFor ? capabilities(ctx, project) : noLogin(host)),
+      assign: async (locator, viewer) => (loginIsFor ? assign(ctx, locator, viewer) : noLogin(host)),
     };
   };
 
@@ -584,6 +585,7 @@ function card(node: ItemNode, mentionedBy: string[], unread: Unread): IssueAnswe
       title: node.title,
       url: node.webUrl,
       open: node.state === "OPEN",
+      assignees: (widgetsOf(node).assignees?.nodes ?? []).map((a) => a.username),
       closedAs: node.state === "CLOSED" ? (closedAs(node) ?? null) : null,
       links: linksOf(node),
       closingRequests: closingRequests(node),
@@ -591,6 +593,47 @@ function card(node: ItemNode, mentionedBy: string[], unread: Unread): IssueAnswe
       unread,
     },
   };
+}
+
+/**
+ * Need 11, from GraphQL, which adds the viewer to the Issue's assignees by
+ * name and answers with them all. GitLab refuses an Issue that doesn't
+ * exist and a write this login may not make in the same words, so a read
+ * then tells them apart. An epic isn't assigned.
+ */
+async function assign(ctx: Ctx, locator: string, viewer: string): Promise<AssignAnswer> {
+  const escaped = ctx.host.replaceAll(".", "\\.");
+  const found = new RegExp(`^https://${escaped}/(?!groups/)(.+?)/-/(?:issues|work_items)/(\\d+)/?(?:[?#].*)?$`).exec(locator) ?? /^([\w.-]+(?:\/[\w.-]+)+)#(\d+)$/.exec(locator);
+  if (!found) return { kind: "not-found", reason: `${locator} isn't a GitLab Issue's reference or URL in a Project on ${ctx.host}` };
+  const [, path = "", iid = ""] = found;
+  const ref = `${path}#${iid}`;
+  const mutation = `mutation($path: ID!, $iid: String!, $viewer: String!) {
+  issueSetAssignees(input: {projectPath: $path, iid: $iid, assigneeUsernames: [$viewer], operationMode: APPEND}) {
+    issue { assignees { nodes { username } } }
+    errors
+  }
+}`;
+  const answer = await ctx.cli("glab", ["api", "--hostname", ctx.host, "graphql", "-f", `query=${mutation}`, "-f", `path=${path}`, "-f", `iid=${iid}`, "-f", `viewer=${viewer}`]);
+  if (answer.kind === "missing") return glabMissing(ctx.host);
+  // A token that may only read is refused every mutation, before GitLab looks at the Issue.
+  if (/insufficient_scope/.test(`${answer.stdout}\n${answer.stderr}`)) {
+    return { kind: "not-allowed", reason: `this login's token can't write: it has no \`api\` scope — run \`glab auth login --hostname ${ctx.host}\` with a token that has it` };
+  }
+  const body = parse(answer.stdout);
+  const set = (body?.data as { issueSetAssignees?: { issue: { assignees: { nodes: { username: string }[] } } | null; errors: string[] } | null } | null | undefined)?.issueSetAssignees;
+  if (set?.errors.length) return { kind: "not-allowed", reason: `GitLab refused to assign ${ref}: ${set.errors.join("; ")}` };
+  if (set?.issue) {
+    const assignees = set.issue.assignees.nodes.map((a) => a.username);
+    if (assignees.includes(viewer)) return { kind: "assigned", assignees };
+    return { kind: "not-allowed", reason: `GitLab didn't assign ${ref} to ${viewer}` };
+  }
+  const errors = (body?.errors ?? []) as GraphqlError[];
+  if (!body?.data || !errors.some((e) => e.path?.[0] === "issueSetAssignees")) return failure(ctx, answer, body, path);
+  const read = await graphql(ctx, `query($path: ID!) {\n  currentUser { username }\n  project(fullPath: $path) { issue(iid: ${JSON.stringify(iid)}) { id } }\n}`, { path }, path);
+  const gone: AssignAnswer = { kind: "not-found", reason: `no Issue ${ref} on ${ctx.host} that this login can read` };
+  if ("kind" in read) return read.kind === "not-found" ? gone : read;
+  if (!(read.data.project as { issue: { id: string } | null } | null)?.issue) return gone;
+  return { kind: "not-allowed", reason: `GitLab refused to let this login assign ${ref}: assigning in ${path} takes at least the Reporter role` };
 }
 
 function notFound(answer: Failure, ctx: Ctx, locator: string): IssueAnswer {
@@ -829,6 +872,8 @@ async function legacyEpicCard(ctx: Ctx, group: string, iid: string, locator: str
       title: epic.title,
       url: epic.webUrl,
       open: epic.state === "OPEN",
+      // A legacy epic has no assignees.
+      assignees: [],
       closedAs: null,
       links: (children.json as RestIssue[]).map((child): NamedLink => ({ role: "child", name: "Child items", to: farEnd(restEnd(child)) })),
       closingRequests: [],

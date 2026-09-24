@@ -77,6 +77,7 @@ function fakeTracker(
     },
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
+    assign: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => ({ kind: "viewer", login: options.login ?? key.login }),
     async changes(_, since, outside) {
       refreshes.push({ since, outside });
@@ -477,6 +478,34 @@ describe("refreshing a Snapshot for a draw (ADR 0006)", () => {
       assert.notEqual((await store.state(key)).kind, "ready");
       assert.deepEqual(titlesIn(dir), [], answer.kind);
     }
+  });
+});
+
+describe("a write the Map made (ADR 0006)", () => {
+  test("an Issue assigned shows its new assignees in the Snapshot at once, which keeps its age and reads what changed from where it did", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time);
+    const { tracker } = fakeTracker(3, { time });
+    await store.read(key, tracker, project);
+    const before = await store.state(key);
+    time.advance(30_000);
+    await store.assigned(key, "I_2", ["fixture-dev", "fixture-viewer"]);
+    const after = await store.state(key);
+    assert.ok(before.kind === "ready" && after.kind === "ready");
+    assert.deepEqual(after.snapshot.issues.map((i) => i.assignees), [[], ["fixture-dev", "fixture-viewer"], []]);
+    assert.deepEqual([after.snapshot.readAt, after.snapshot.changesSince], [before.snapshot.readAt, before.snapshot.changesSince]);
+  });
+
+  test("an Issue the Snapshot doesn't hold, or a Project with no Snapshot, keeps nothing", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time);
+    await store.assigned(key, "I_2", ["fixture-viewer"]);
+    assert.deepEqual(await store.state(key), { kind: "none" });
+    const { tracker } = fakeTracker(3, { time });
+    await store.read(key, tracker, project);
+    await store.assigned(key, "I_9", ["fixture-viewer"]);
+    const state = await store.state(key);
+    assert.deepEqual(state.kind === "ready" && state.snapshot.issues.map((i) => i.id), ["I_1", "I_2", "I_3"]);
   });
 });
 

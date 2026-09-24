@@ -1,7 +1,7 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
 import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
+import type { AssignAnswer, CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
 
@@ -288,6 +288,7 @@ export function github(deps: AdapterDeps): TrackerKind {
       changes: async (project, since, outside) => (loginIsFor ? withSchema((ctx) => changes(ctx, project, since, outside)) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? withSchema((ctx) => issue(ctx, locator)) : noLogin(host)),
       capabilities: async (project) => (loginIsFor ? withSchema((ctx) => capabilities(ctx, project)) : noLogin(host)),
+      assign: async (locator, viewer) => (loginIsFor ? assign(cliHere, host, locator, viewer) : noLogin(host)),
     };
   };
 
@@ -684,14 +685,22 @@ function closedAs(reason: StateReason | null): string | null {
   return reason && reason !== "REOPENED" ? CLOSED_AS[reason] : null;
 }
 
-/** One Issue by its reference, `owner/name#123`, or its URL on this host. */
-async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
-  const { cli, host } = ctx;
+/** The repository and number of the Issue `locator` names: its reference, `owner/name#123`, or its URL on this host. */
+function issueAt(host: string, locator: string): { owner: string; name: string; number: string } | { kind: "not-found"; reason: string } {
   const escaped = host.replaceAll(".", "\\.");
   const found =
     /^([\w.-]+)\/([\w.-]+)#(\d+)$/.exec(locator) ?? new RegExp(`^https://${escaped}/([\\w.-]+)/([\\w.-]+)/issues/(\\d+)/?(?:[?#].*)?$`).exec(locator);
   if (!found) return { kind: "not-found", reason: `${locator} isn't a GitHub Issue's reference or URL on ${host}` };
   const [, owner = "", name = "", number = ""] = found;
+  return { owner, name, number };
+}
+
+/** One Issue by its reference, `owner/name#123`, or its URL on this host. */
+async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
+  const { cli, host } = ctx;
+  const at = issueAt(host, locator);
+  if ("kind" in at) return at;
+  const { owner, name, number } = at;
   const answer = await graphql(cli, host, issueQuery(ctx), { owner, name, number });
   if (answer.kind === "missing") return ghMissing(host);
   const body = parse(answer.stdout);
@@ -718,6 +727,7 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
       title: node.title,
       url: node.url,
       open: node.state === "OPEN",
+      assignees: node.assignees.nodes.map((a) => a.login),
       closedAs: node.state === "CLOSED" ? closedAs(node.stateReason) : null,
       links: linksOf(node, hiddenParent),
       closingRequests: closingRequests(node),
@@ -725,6 +735,32 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
       unread,
     },
   };
+}
+
+/**
+ * Need 11, through REST, which adds the viewer to the Issue's assignees and
+ * answers with them all. GitHub ignores a login that may not assign rather
+ * than refusing it, so the answer is checked for the viewer.
+ */
+async function assign(cli: Cli, host: string, locator: string, viewer: string): Promise<AssignAnswer> {
+  const at = issueAt(host, locator);
+  if ("kind" in at) return at;
+  const ref = `${at.owner}/${at.name}#${at.number}`;
+  const answer = await cli("gh", ["api", "--hostname", host, "--method", "POST", `repos/${at.owner}/${at.name}/issues/${at.number}/assignees`, "-f", `assignees[]=${viewer}`]);
+  if (answer.kind === "missing") return ghMissing(host);
+  const body = parse(answer.stdout);
+  if (answer.code === 0) {
+    const assignees = ((body?.assignees ?? []) as { login: string }[]).map((a) => a.login);
+    if (assignees.includes(viewer)) return { kind: "assigned", assignees };
+    return { kind: "not-allowed", reason: `GitHub didn't assign ${ref} to ${viewer}: assigning in ${at.owner}/${at.name} takes the triage role, and GitHub ignores a login without it rather than refusing it` };
+  }
+  const status = String(body?.status ?? "");
+  if (status === "404") return { kind: "not-found", reason: `no Issue ${ref} on ${host} that this login can read and write` };
+  // A 403 here refuses the write, not the login, unless it's the rate limit.
+  if (status === "403" && !/rate limit/i.test(String(body?.message))) {
+    return { kind: "not-allowed", reason: `${host} refused to let this login assign ${ref}: ${String(body?.message)} — it takes the triage role in ${at.owner}/${at.name} and a token that may write Issues` };
+  }
+  return failure(answer, body, host, `${at.owner}/${at.name}`);
 }
 
 /** A list is passed as one field per item, and an empty one as `key[]`. */

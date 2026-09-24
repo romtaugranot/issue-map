@@ -1,6 +1,6 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
- * needs 1 to 7 and 9 including their "can't" answers, for a whole Project,
+ * needs 1 to 7, 9 and 11 including their "can't" answers, for a whole Project,
  * for only what changed in it, and for one Issue read for its card.
  * Each adapter supplies a Stage that stands a World up behind its own
  * boundary. Where kinds of Tracker differ in what they record, a Stage says
@@ -157,6 +157,7 @@ export function trackerContract(stage: Stage): void {
   changesContract(stage);
   cardContract(stage);
   capabilitiesContract(stage);
+  assignContract(stage);
 }
 
 export function identifyContract(stage: Stage): void {
@@ -781,7 +782,7 @@ export function cardContract(stage: Stage): void {
     describe("needs 3, 4 and 7 for one Issue, read live for its card", () => {
       const world: World = {
         projects: [
-          { path: tools, number: 1, open: 4, issues: [{ number: 1 }, { number: 2, title: "Import state from S3" }, { number: 3 }, { number: 4 }, { number: 5, closed: true, closedAs: "not planned" }] },
+          { path: tools, number: 1, open: 4, issues: [{ number: 1 }, { number: 2, title: "Import state from S3", assignees: ["fixture-dev"] }, { number: 3 }, { number: 4 }, { number: 5, closed: true, closedAs: "not planned" }] },
           { path: plans, number: 2, open: 1, issues: [{ number: 7, title: "Q3 importer epic" }] },
         ],
         links: [[`${tools}#1`, "blocks", `${tools}#2`], [`${tools}#2`, "blocks", `${tools}#3`], [`${plans}#7`, "parent", `${tools}#2`], [`${tools}#2`, "parent", `${tools}#4`]],
@@ -789,10 +790,11 @@ export function cardContract(stage: Stage): void {
         mentions: [[`${tools}#3`, `${tools}#2`], [`${tools}#4`, `${tools}#2`], [`${tools}#2`, `${tools}#1`]],
       };
 
-      test("reads an Issue by its reference: its name, URL, state, Links with the Tracker's name for each kind, Closing Requests and Mentions", async () => {
+      test("reads an Issue by its reference: its name, URL, state, assignees, Links with the Tracker's name for each kind, Closing Requests and Mentions", async () => {
         const two = await issue(world, `${tools}#2`);
         const ids = await listedIds(world, tools);
-        assert.deepEqual([two.id, two.project, two.ref, two.title, two.open, two.closedAs], [ids.get(`${tools}#2`), tools, `${tools}#2`, "Import state from S3", true, null]);
+        assert.deepEqual([two.id, two.project, two.ref, two.title, two.open, two.closedAs, two.assignees], [ids.get(`${tools}#2`), tools, `${tools}#2`, "Import state from S3", true, null, ["fixture-dev"]]);
+        assert.deepEqual((await issue(world, `${tools}#3`)).assignees, []);
         assert.match(two.url, issueUrl(tools, 2));
         const links = two.links.map((l) => [l.role, l.to.readable && l.to.ref]).sort();
         assert.deepEqual(links, [["blocked", `${tools}#3`], ["blocker", `${tools}#1`], ["child", `${tools}#4`], ["parent", `${plans}#7`]]);
@@ -950,6 +952,76 @@ export function capabilitiesContract(stage: Stage): void {
       }
       const resolved = (await (await trackerIn({ projects: [project] })).resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
       assert.equal((await (await trackerIn({ projects: [project] })).capabilities({ ...resolved.project, path: "fixture-org/gone" })).kind, "not-found");
+    });
+  });
+}
+
+export function assignContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+  const tools = "fixture-org/tools";
+  const world: World = {
+    projects: [{ path: tools, number: 1, open: 3, issues: [{ number: 1 }, { number: 2, assignees: ["fixture-dev"] }, { number: 3, taskLevel: stage.records.taskLevel === true }, { number: 9, hidden: true }] }],
+  };
+
+  async function trackerIn(more: World = {}): Promise<Tracker> {
+    const tracker = await stage.arrange({ ...world, ...more }).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    return tracker;
+  }
+
+  async function assigneesOf(tracker: Tracker, locator: string): Promise<string[]> {
+    const answer = await tracker.issue(locator);
+    assert.equal(answer.kind, "issue", JSON.stringify(answer));
+    return (answer as Extract<IssueAnswer, { kind: "issue" }>).issue.assignees;
+  }
+
+  describe(`${product} Tracker contract`, () => {
+    describe("need 11: assign an Issue to the viewer", () => {
+      test("assigns an unassigned Issue to the viewer, and the Issue read again says so", async () => {
+        const tracker = await trackerIn();
+        assert.deepEqual(await tracker.assign(`${tools}#1`, "fixture-viewer"), { kind: "assigned", assignees: ["fixture-viewer"] });
+        assert.deepEqual(await assigneesOf(tracker, `${tools}#1`), ["fixture-viewer"]);
+      });
+
+      test("assigns a task-level child like any other Issue", skipUnless(stage.records.taskLevel), async () => {
+        const tracker = await trackerIn();
+        assert.deepEqual(await tracker.assign(`${tools}#3`, "fixture-viewer"), { kind: "assigned", assignees: ["fixture-viewer"] });
+      });
+
+      test("keeps whoever else it's assigned to", async () => {
+        const tracker = await trackerIn();
+        const answer = await tracker.assign(`${tools}#2`, "fixture-viewer");
+        assert.equal(answer.kind, "assigned", JSON.stringify(answer));
+        assert.deepEqual([...(answer as Extract<typeof answer, { kind: "assigned" }>).assignees].sort(), ["fixture-dev", "fixture-viewer"]);
+      });
+
+      test("a login whose role may only read is refused the write, says why, and the Issue stays as it was", async () => {
+        const tracker = await trackerIn({ role: "reader" });
+        const answer = await tracker.assign(`${tools}#1`, "fixture-viewer");
+        assert.equal(answer.kind, "not-allowed", JSON.stringify(answer));
+        assert.match((answer as { reason: string }).reason, /fixture-org\/tools/);
+        assert.deepEqual(await assigneesOf(tracker, `${tools}#1`), []);
+      });
+
+      test("a login whose token may only read is refused the write, says why, and the Issue stays as it was", async () => {
+        const tracker = await trackerIn({ token: "reads" });
+        const answer = await tracker.assign(`${tools}#1`, "fixture-viewer");
+        assert.equal(answer.kind, "not-allowed", JSON.stringify(answer));
+        assert.match((answer as { reason: string }).reason, /token/);
+        assert.deepEqual(await assigneesOf(tracker, `${tools}#1`), []);
+      });
+
+      test("says there's no such Issue when it doesn't exist, this login can't read it, or the locator names none", async () => {
+        for (const locator of [`${tools}#99`, `${tools}#9`, "not a reference"]) {
+          assert.equal((await (await trackerIn()).assign(locator, "fixture-viewer")).kind, "not-found", locator);
+        }
+      });
+
+      test("refuses when the Tracker rejects the login, and can't tell when it can't be reached", async () => {
+        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
+          assert.equal((await (await trackerIn(trouble)).assign(`${tools}#1`, "fixture-viewer")).kind, kind, JSON.stringify(trouble));
+        }
+      });
     });
   });
 }
