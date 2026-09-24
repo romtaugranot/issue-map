@@ -295,7 +295,17 @@ async function viewer(cli: Cli, host: string): Promise<ViewerAnswer> {
   const login = (body?.data as { viewer?: { login?: string } } | undefined)?.viewer?.login;
   if (answer.code === 0 && login) return { kind: "viewer", login };
   const failed = failure(answer, body, host, "the viewer");
-  return failed.kind === "not-found" ? { kind: "cant-tell", reason: failed.reason } : failed;
+  const cant: CantAnswer = failed.kind === "not-found" ? { kind: "cant-tell", reason: failed.reason } : failed;
+  const held = await heldLogin(cli, host);
+  return held ? { ...cant, login: held } : cant;
+}
+
+/** The login `gh` holds for a host, from its own config, without the network. */
+async function heldLogin(cli: Cli, host: string): Promise<string | null> {
+  const answer = await cli("gh", ["auth", "status", "--active", "--hostname", host, "--json", "hosts"]);
+  if (answer.kind !== "exited") return null;
+  const hosts = parse(answer.stdout)?.hosts as Record<string, { login?: string; active?: boolean }[]> | undefined;
+  return hosts?.[host]?.find((entry) => entry.active)?.login ?? null;
 }
 
 async function openIssues(cli: Cli, host: string, { path }: Project, after: string | null): Promise<IssuePage> {

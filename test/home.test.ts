@@ -4,9 +4,9 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveHome } from "../src/home/home.ts";
+import { resolveHome, type LastHome } from "../src/home/home.ts";
 import { gitCheckout } from "../src/home/checkout.ts";
-import type { Trackers } from "../src/tracker/tracker.ts";
+import type { Project, Trackers } from "../src/tracker/tracker.ts";
 import { fakeTrackers, type FakeProject } from "./fakes/fake-trackers.ts";
 
 /** A real git checkout with these remotes, in this order, and this local config. */
@@ -26,11 +26,17 @@ function localConfig(dir: string): string {
   return git(dir, "config", "--local", "--list");
 }
 
-function home(dir: string, trackers: Trackers, options: { pick?: string; env?: Record<string, string> } = {}) {
+function home(dir: string, trackers: Trackers, options: { pick?: string; env?: Record<string, string>; lastHome?: LastHome } = {}) {
   return resolveHome(
-    { checkout: gitCheckout(dir), trackers, env: options.env ?? {}, sshHostname: async (alias) => alias },
+    { checkout: gitCheckout(dir), trackers, env: options.env ?? {}, sshHostname: async (alias) => alias, ...(options.lastHome ? { lastHome: options.lastHome } : {}) },
     { pick: options.pick },
   );
+}
+
+/** Where the Home Project last resolved is kept, in memory. */
+function lastHome(): LastHome & { kept: () => Project | undefined } {
+  let kept: Project | undefined;
+  return { get: async () => kept, set: async (project) => void (kept = project), kept: () => kept };
 }
 
 const tofu: FakeProject = { path: "opentofu/opentofu", open: 274 };
@@ -279,4 +285,29 @@ test("a default naming a Project no remote leads to is passed over", async () =>
   const trackers = fakeTrackers({ "github.com": { product: "GitHub", projects: [forkWithIssues, cli, tofu] } });
   const answer = await home(dir, trackers, { env: { GH_REPO: "opentofu/opentofu", GITLAB_REPO: "fixture-org/tool" } });
   assert.deepEqual(answer.choices.map((c) => c.label), ["github.com/cli/cli", "github.com/fixture-user/cli"]);
+});
+
+test("while its Tracker can't be read, the Home Project last resolved still opens, so its Snapshot can be drawn", async () => {
+  const dir = checkout({ origin: "https://github.com/fixture-user/cli.git" });
+  const fork: FakeProject = { path: "fixture-user/cli", open: "off", parent: cli };
+  const last = lastHome();
+  await home(dir, fakeTrackers({ "github.com": { product: "GitHub", projects: [fork, cli] } }), { lastHome: last });
+  assert.equal(last.kept()?.path, "cli/cli");
+  for (const trouble of [{ unreachable: "couldn't reach github.com" }, { refuse: "github.com refused this login: Bad credentials" }]) {
+    const answer = await home(dir, fakeTrackers({ "github.com": { product: "GitHub", ...trouble } }), { lastHome: last });
+    assert.equal(answer.home?.project.path, "cli/cli", JSON.stringify(trouble));
+    assert.equal(answer.home?.tracker.host, "github.com");
+    assert.match(answer.text, /^Home Project: github\.com\/cli\/cli, as last resolved — GitHub (can't tell|refused): /);
+  }
+});
+
+test("a Home Project last resolved isn't opened once no remote leads to its Tracker, or its Project is gone", async () => {
+  const last = lastHome();
+  await last.set({ id: "github.com#cli/cli", host: "github.com", path: "cli/cli", url: "https://github.com/cli/cli", issues: { open: 1028 } });
+  const elsewhere = checkout({ origin: "https://git.example.com/fixture-org/tool.git" });
+  const offline = await home(elsewhere, fakeTrackers({ "git.example.com": { product: "GitLab", unreachable: "couldn't reach git.example.com" } }), { lastHome: last });
+  assert.equal(offline.home, undefined);
+  const here = checkout({ origin: "https://github.com/cli/cli.git" });
+  const gone = await home(here, fakeTrackers({ "github.com": { product: "GitHub", projects: [] } }), { lastHome: last });
+  assert.equal(gone.home, undefined);
 });

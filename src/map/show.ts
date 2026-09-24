@@ -25,11 +25,15 @@ const WAIT_MS = 5000;
 const POLL_MS = 250;
 
 export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: Command): Promise<string> {
+  // With no Tracker to say who the viewer is, the login the CLI holds reads its own Snapshot, and no other.
   const viewer = await tracker.viewer();
-  if (viewer.kind !== "viewer") {
-    return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}`;
+  const { login } = viewer;
+  if (login === undefined) return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer as CantAnswer)}`;
+  const key: SnapshotKey = { tracker: tracker.host, project: project.id, login };
+  if (viewer.kind === "refused") {
+    await deps.store.forget(key, viewer.reason);
+    return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`;
   }
-  const key: SnapshotKey = { tracker: tracker.host, project: project.id, login: viewer.login };
   const drawable = await deps.store.forDraw(key, tracker, project);
   if (drawable.kind === "refused") return `No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`;
   if (drawable.kind === "ready") {

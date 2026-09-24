@@ -7,6 +7,8 @@
  * `issue-map read --host <host> --path <path>`: the first read of a Project, run detached by `map`.
  */
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { mkdirSync, openSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -16,9 +18,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { anonymousHttp, processCli } from "./tracker/boundary.ts";
 import { github } from "./tracker/github.ts";
 import { gitlab } from "./tracker/gitlab.ts";
-import { trackers, type Trackers } from "./tracker/tracker.ts";
+import { trackers, type Project, type Trackers } from "./tracker/tracker.ts";
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
-import { resolveHome, type HomeAnswer } from "./home/home.ts";
+import { resolveHome, type HomeAnswer, type LastHome } from "./home/home.ts";
 import { snapshotStore } from "./snapshot/store.ts";
 import { showCard, showMap } from "./map/show.ts";
 import type { Card } from "./map/card.ts";
@@ -65,7 +67,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   const answer = await resolveHome(
-    { checkout: gitCheckout(root), trackers: known, env: process.env, sshHostname },
+    { checkout: gitCheckout(root), trackers: known, env: process.env, sshHostname, lastHome: lastHomeOf(root) },
     { pick: values.pick },
   );
   if (verb === "home" || !answer.home) {
@@ -109,6 +111,25 @@ function detach(args: string[]): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const log = openSync(join(dir, "read.log"), "a", 0o600);
   spawn(process.execPath, [fileURLToPath(import.meta.url), ...args], { detached: true, stdio: ["ignore", log, log] }).unref();
+}
+
+/** The Home Project last resolved for the checkout at `root`, kept beside the Snapshots, readable only by this OS user. */
+function lastHomeOf(root: string): LastHome {
+  const dir = join(stateDir(), "homes");
+  const path = join(dir, `${createHash("sha256").update(root).digest("hex")}.json`);
+  return {
+    async get() {
+      try {
+        return JSON.parse(await readFile(path, "utf8")) as Project;
+      } catch {
+        return undefined;
+      }
+    },
+    async set(project) {
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await writeFile(path, JSON.stringify(project), { mode: 0o600 });
+    },
+  };
 }
 
 /** Where Snapshots are kept: `ISSUE_MAP_STATE_DIR`, or the XDG state directory. */

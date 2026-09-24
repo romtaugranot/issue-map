@@ -59,7 +59,10 @@ export type CantAnswer =
   /** Nothing could be learned, for example because the Tracker couldn't be reached. */
   | { kind: "cant-tell"; reason: string };
 
-export type ViewerAnswer = { kind: "viewer"; login: string } | CantAnswer;
+export type ViewerAnswer =
+  | { kind: "viewer"; login: string }
+  /** `login` is the login the CLI holds for the host, as it says without the Tracker; absent when it holds none. */
+  | (CantAnswer & { login?: string });
 
 export type IssuePage =
   | {

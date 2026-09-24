@@ -2,6 +2,8 @@
  * Which Project the Map opens on for this checkout: the Home Project.
  * Remotes are read the way `gh` and `glab` read them, every candidate
  * without open Issues is dropped, and a real tie is left for the user to pick.
+ * While the Tracker can't be read, the Home Project last resolved opens, so
+ * the Map can still be drawn from its Snapshot (ADR 0006).
  */
 import type { Project, Tracker, Trackers } from "../tracker/tracker.ts";
 import type { Checkout, Remote } from "./checkout.ts";
@@ -12,6 +14,14 @@ export interface HomeDeps {
   trackers: Trackers;
   env: Record<string, string | undefined>;
   sshHostname(alias: string): Promise<string>;
+  /** Where the Home Project last resolved for this checkout is kept; nothing is kept without it. */
+  lastHome?: LastHome;
+}
+
+/** The Home Project last resolved for one checkout. */
+export interface LastHome {
+  get(): Promise<Project | undefined>;
+  set(project: Project): Promise<void>;
 }
 
 export interface Choice {
@@ -29,6 +39,12 @@ export interface HomeAnswer {
 }
 
 export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {}): Promise<HomeAnswer> {
+  const answer = await resolve(deps, request);
+  if (answer.home) await deps.lastHome?.set(answer.home.project);
+  return answer;
+}
+
+async function resolve(deps: HomeDeps, request: { pick?: string }): Promise<HomeAnswer> {
   const remotes = rankRemotes(await deps.checkout.remotes());
   const aliases = new Map<string, string>();
   for (const alias of new Set(remotes.flatMap((r) => sshHosts(r.url)))) aliases.set(alias, await deps.sshHostname(alias));
@@ -36,7 +52,7 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
   const read = projectReader(deps.trackers);
 
   const candidates: Candidate[] = [];
-  const unreadable: { remote: Remote; address: Address; why: string }[] = [];
+  const unreadable: { remote: Remote; address: Address; why: string; lasting: boolean; refused: boolean }[] = [];
   let leadsToHosts = false;
   for (const remote of remotes) {
     const address = addressOf(remote);
@@ -44,7 +60,7 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
     leadsToHosts = true;
     const resolved = await read(address);
     if (resolved.kind === "unreadable") {
-      if (!unreadable.some((u) => sameAddress(u.address, address))) unreadable.push({ remote, address, why: resolved.why });
+      if (!unreadable.some((u) => sameAddress(u.address, address))) unreadable.push({ remote, address, ...resolved });
       continue;
     }
     // A fork's Issues usually live in its parent, so the parent is the better guess.
@@ -55,6 +71,8 @@ export async function resolveHome(deps: HomeDeps, request: { pick?: string } = {
   const distinct = unique(candidates);
   if (distinct.length === 0) {
     if (!leadsToHosts) return { text: "No Home Project: this checkout has no remote that leads to a Tracker.", choices: [] };
+    const last = await lastHome(deps, unreadable);
+    if (last) return last;
     const lines = unreadable.map(({ remote, address, why }) => `  ${remote.name} → ${address.host}/${address.path}: ${why}`);
     return { text: ["No Home Project: no remote of this checkout leads to a Project the Map can read.", ...lines].join("\n"), choices: [] };
   }
@@ -160,10 +178,26 @@ async function configDefaults(checkout: Checkout, remotes: Remote[], addressOf: 
   return defaults;
 }
 
+/**
+ * The Home Project last resolved, when no remote could be read only because
+ * its Tracker couldn't answer or refused the login, and one of them leads to
+ * that Tracker. A refused login still opens it, so what's kept of it for
+ * that login can be deleted.
+ */
+async function lastHome(deps: HomeDeps, unreadable: { address: Address; why: string; lasting: boolean; refused: boolean }[]): Promise<HomeAnswer | undefined> {
+  if (!unreadable.every((u) => !u.lasting || u.refused)) return undefined;
+  const project = await deps.lastHome?.get();
+  const why = unreadable.find((u) => u.address.host === project?.host)?.why;
+  if (!project || why === undefined) return undefined;
+  const identified = await deps.trackers.at(project.host);
+  if (identified.kind !== "identified") return undefined;
+  return { text: `Home Project: ${name(project)}, as last resolved — ${why}`, choices: [], home: { tracker: identified.tracker, project } };
+}
+
 type Read =
   | { kind: "project"; tracker: Tracker; project: Project; parent: Project | null }
-  /** `lasting` is false when nothing could be learned, as when a Tracker couldn't be reached. */
-  | { kind: "unreadable"; why: string; lasting: boolean };
+  /** `lasting` is false when nothing could be learned, as when a Tracker couldn't be reached; `refused` when it refused the login. */
+  | { kind: "unreadable"; why: string; lasting: boolean; refused: boolean };
 
 /** Reads each Project once, however many remotes and defaults lead to it. */
 function projectReader(trackers: Trackers): (address: Address) => Promise<Read> {
@@ -181,19 +215,19 @@ function projectReader(trackers: Trackers): (address: Address) => Promise<Read> 
 
 async function readProject(trackers: Trackers, { host, path }: Address): Promise<Read> {
   const identified = await trackers.at(host);
-  if (identified.kind === "not-this-kind") return { kind: "unreadable", why: `${host} runs no Tracker the Map can read`, lasting: true };
-  if (identified.kind === "cant-tell") return { kind: "unreadable", why: `can't tell which Tracker runs at ${host}: ${identified.reason}`, lasting: false };
+  if (identified.kind === "not-this-kind") return { kind: "unreadable", why: `${host} runs no Tracker the Map can read`, lasting: true, refused: false };
+  if (identified.kind === "cant-tell") return { kind: "unreadable", why: `can't tell which Tracker runs at ${host}: ${identified.reason}`, lasting: false, refused: false };
   const { product } = identified.tracker;
   const answer = await identified.tracker.resolveProject(path);
   switch (answer.kind) {
     case "project":
       return { ...answer, tracker: identified.tracker };
     case "refused":
-      return { kind: "unreadable", why: `${product} refused: ${answer.reason}`, lasting: true };
+      return { kind: "unreadable", why: `${product} refused: ${answer.reason}`, lasting: true, refused: true };
     case "not-found":
-      return { kind: "unreadable", why: `${product}: ${answer.reason}`, lasting: true };
+      return { kind: "unreadable", why: `${product}: ${answer.reason}`, lasting: true, refused: false };
     case "cant-tell":
-      return { kind: "unreadable", why: `${product} can't tell: ${answer.reason}`, lasting: false };
+      return { kind: "unreadable", why: `${product} can't tell: ${answer.reason}`, lasting: false, refused: false };
   }
 }
 
