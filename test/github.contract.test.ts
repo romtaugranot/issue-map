@@ -9,12 +9,26 @@ import { trackerContract, type IssueSpec, type ProjectSpec, type World } from ".
 trackerContract({
   product: "GitHub",
   wellKnownHost: "github.com",
+  currentVersion: "3.20.0",
+  records: {
+    related: "GitHub records no Related Links",
+    taskLevel: "GitHub has no level below an ordinary Issue",
+    multipleParents: true,
+    namespaceIssues: "every GitHub Issue belongs to a repository",
+    projectsWithoutBlocks: "every repository on github.com records Blocks Links",
+    changeFeed: true,
+  },
+  saysClosedAs: ["completed", "not planned", "duplicate"],
+  requestRef: (path, n) => `${path}#${n}`,
   arrange(world) {
     let requests = 0;
     const loginsSentTo: string[] = [];
+    const tokenSentTo: string[] = [];
+    // gh sends GH_TOKEN to github.com, and GH_ENTERPRISE_TOKEN to any other host, before a login it stores.
+    const env = world.envTokenFor === undefined ? {} : world.envTokenFor === "github.com" ? { GH_TOKEN: "env-token" } : { GH_ENTERPRISE_TOKEN: "env-token", GH_HOST: world.envTokenFor };
     const kind = github({
-      env: {},
-      cli: async (command, args) => {
+      env,
+      cli: async (command, args, unset = []) => {
         if (command !== "gh" || (world.cli ?? "installed") === "missing") return { kind: "missing" };
         if (args[0] === "auth") {
           // Read from gh's own config, without the network: the login held for each host.
@@ -24,7 +38,13 @@ trackerContract({
           return exited(0, JSON.stringify({ hosts: Object.fromEntries(hosts.filter((h) => asked === null || h === asked).map((h) => [h, held(h)])) }));
         }
         requests++;
-        loginsSentTo.push(args[args.indexOf("--hostname") + 1]!);
+        const host = args[args.indexOf("--hostname") + 1]!;
+        loginsSentTo.push(host);
+        const token = host === "github.com" ? "GH_TOKEN" : "GH_ENTERPRISE_TOKEN";
+        if (token in env && !unset.includes(token)) {
+          tokenSentTo.push(host);
+          if (host !== world.envTokenFor) return ghApi({ ...world, login: "refused" }, args);
+        }
         return ghApi(world, args);
       },
       http: async (url) => {
@@ -32,7 +52,7 @@ trackerContract({
         return probe(world, new URL(url));
       },
     });
-    return { kind, requests: () => requests, loginsSentTo: () => loginsSentTo.filter((h) => h !== "github.com") };
+    return { kind, requests: () => requests, loginsSentTo: () => loginsSentTo.filter((h) => h !== "github.com"), tokenSentTo: () => tokenSentTo };
   },
 });
 
@@ -205,7 +225,7 @@ function restApi(world: World, rest: string): CliResult {
   const first = spec.issues?.[0];
   const events = [
     ...(first ? [event("labeled", `${spec.path}#${first.number}`, LONG_AGO)] : []),
-    ...(world.links ?? []).flatMap(([a, kind, b, at]) => (at && a.startsWith(`${spec.path}#`) ? linkEvents(a, kind, b, at, "added") : [])),
+    ...(world.links ?? []).flatMap(([a, kind, b, at]) => (at && kind !== "related" && a.startsWith(`${spec.path}#`) ? linkEvents(a, kind, b, at, "added") : [])),
     ...(world.removedLinks ?? []).flatMap(([a, kind, b, at]) => (a.startsWith(`${spec.path}#`) ? linkEvents(a, kind, b, at, "removed") : [])),
   ]
     .filter((e) => !world.changesKeptFrom || Date.parse(e.created_at) >= Date.parse(world.changesKeptFrom))

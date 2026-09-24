@@ -1,5 +1,5 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
-import { parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
+import { hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
 import type { CantAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
 
@@ -222,16 +222,19 @@ export function github(deps: AdapterDeps): TrackerKind {
    * host found only by probing is never read: it could be any server that
    * answers like GitHub.
    */
-  const trackerAt = (host: string, version: string | null, loginIsFor: boolean): Tracker => ({
-    product: PRODUCT,
-    host,
-    version,
-    resolveProject: async (path) => (loginIsFor ? resolveProject(cli, host, path) : noLogin(host)),
-    viewer: async () => (loginIsFor ? viewer(cli, host) : noLogin(host)),
-    openIssues: async (project, after) => (loginIsFor ? openIssues(cli, host, project, after) : noLogin(host)),
-    changes: async (project, since, outside) => (loginIsFor ? changes(cli, host, project, since, outside) : noLogin(host)),
-    issue: async (locator) => (loginIsFor ? issue(cli, host, locator) : noLogin(host)),
-  });
+  const trackerAt = (host: string, version: string | null, loginIsFor: boolean): Tracker => {
+    const cliHere: Cli = (command, args) => cli(command, args, foreignTokens(env, host));
+    return {
+      product: PRODUCT,
+      host,
+      version,
+      resolveProject: async (path) => (loginIsFor ? resolveProject(cliHere, host, path) : noLogin(host)),
+      viewer: async () => (loginIsFor ? viewer(cliHere, host) : noLogin(host)),
+      openIssues: async (project, after) => (loginIsFor ? openIssues(cliHere, host, project, after) : noLogin(host)),
+      changes: async (project, since, outside) => (loginIsFor ? changes(cliHere, host, project, since, outside) : noLogin(host)),
+      issue: async (locator) => (loginIsFor ? issue(cliHere, host, locator) : noLogin(host)),
+    };
+  };
 
   return {
     product: PRODUCT,
@@ -261,6 +264,18 @@ export function github(deps: AdapterDeps): TrackerKind {
       return { kind: "not-this-kind" };
     },
   };
+}
+
+/**
+ * The environment tokens `gh` would send to `host` that weren't issued for
+ * it. GH_TOKEN is for github.com, or for the GHEC host GH_HOST names; the
+ * enterprise token is for the host GH_HOST names, and `gh` would otherwise
+ * send it to any other.
+ */
+function foreignTokens(env: AdapterDeps["env"], host: string): string[] {
+  const named = hostNamed(env.GH_HOST);
+  const dotcom = named?.endsWith(".ghe.com") ? named : "github.com";
+  return [...(host === dotcom ? [] : ["GH_TOKEN", "GITHUB_TOKEN"]), ...(host === named ? [] : ["GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"])];
 }
 
 async function hostsGhKnows(cli: Cli): Promise<string[]> {

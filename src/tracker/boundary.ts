@@ -5,7 +5,12 @@ export type CliResult =
   | { kind: "exited"; code: number; stdout: string; stderr: string }
   | { kind: "missing" };
 
-export type Cli = (command: string, args: string[]) => Promise<CliResult>;
+/**
+ * Runs a Tracker's CLI. `unset` names environment variables it runs
+ * without, such as a token issued for another host than the one it's
+ * pointed at.
+ */
+export type Cli = (command: string, args: string[], unset?: string[]) => Promise<CliResult>;
 
 export type HttpResult =
   | { kind: "response"; status: number; headers: Record<string, string>; body: string }
@@ -22,6 +27,12 @@ export interface AdapterDeps {
 }
 
 /** A JSON object, or `null` for anything else. */
+/** The host an environment variable names, which may be written as a URL; `null` where it names none. */
+export function hostNamed(value: string | undefined): string | null {
+  const name = value?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  return name || null;
+}
+
 export function parseJson(text: string): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(text);
@@ -31,9 +42,11 @@ export function parseJson(text: string): Record<string, unknown> | null {
   }
 }
 
-export const processCli: Cli = (command, args) =>
+export const processCli: Cli = (command, args, unset = []) =>
   new Promise((resolve) => {
-    execFile(command, args, { maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const env = { ...process.env };
+    for (const name of unset) delete env[name];
+    execFile(command, args, { maxBuffer: 64 * 1024 * 1024, env }, (error, stdout, stderr) => {
       if (error && (error as NodeJS.ErrnoException).code === "ENOENT") return resolve({ kind: "missing" });
       const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
       resolve({ kind: "exited", code, stdout, stderr });
