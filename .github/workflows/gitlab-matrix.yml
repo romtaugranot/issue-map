@@ -31,6 +31,8 @@ permissions:
 
 env:
   GLAB_VERSION: "1.119.0"
+  # glab's published checksum for that version's linux_amd64 .deb; change both together.
+  GLAB_SHA256: "95a9ca105518dec7f70ee403d98501402a5fda154c406f4f4cd6696928d3a098"
 
 jobs:
   versions:
@@ -39,8 +41,8 @@ jobs:
     outputs:
       matrix: ${{ steps.versions.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
       - id: versions
@@ -65,8 +67,8 @@ jobs:
       GITLAB_HOST: gitlab.test
       NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/ssl/gitlab.test.crt
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -74,6 +76,7 @@ jobs:
       - name: Install glab
         run: |
           curl -fsSL -o glab.deb "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${GLAB_VERSION}/glab_${GLAB_VERSION}_linux_amd64.deb"
+          echo "$GLAB_SHA256  glab.deb" | sha256sum -c -
           sudo dpkg -i glab.deb
       # The adapters reach a Tracker only over HTTPS, so the GitLab gets a certificate this runner trusts.
       - name: Trust gitlab.test
@@ -125,7 +128,7 @@ jobs:
             if (!JSON.parse(text).data?.__schema) throw new Error(`no schema in the answer: ${text.slice(0, 500)}`);
             writeFileSync("schema.json", text);'
       - if: matrix.edition == 'ee'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: gitlab-${{ matrix.version }}-ee-schema
           path: schema.json
@@ -158,11 +161,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: gitlab-*-ee-schema
           path: recorded
@@ -175,7 +178,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           rm -rf recorded
-      - uses: peter-evans/create-pull-request@v8
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           branch: ci/gitlab-schemas
           commit-message: Record the GitLab matrix's EE GraphQL schemas
