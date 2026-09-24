@@ -1,9 +1,12 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
 import { parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { CantAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
+import type { CantAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread, ViewerAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
+
+/** Why a login gets no Closing Requests: a token without pull request access, such as a fine-grained one scoped to Issues. */
+const CANT_READ_PULLS = "this login can't read pull requests";
 
 const PROJECT_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -70,6 +73,60 @@ const ISSUE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
 }
 ${ISSUE_FIELDS}`;
 
+/** What a refresh reads again of an Issue that changed: all the Map reads of an open one, and how a closed one closed. */
+const CHANGED_FIELDS = `fragment changed on Issue { ...issue state closedAt stateReason repository { nameWithOwner } }`;
+
+/**
+ * What changed since a refresh last read, in one request a page: the Issues
+ * updated since, closed ones included so a close is seen, and the pull
+ * requests updated since, most recent first, for the Issues whose Closing
+ * Requests changed without marking them. Either is left out once read. The
+ * first page reads the first 100 Outside Issues too.
+ */
+const CHANGES_QUERY = `query($owner: String!, $name: String!, $since: DateTime!, $withIssues: Boolean!, $withPulls: Boolean!, $issuesAfter: String, $pullsAfter: String, $outside: [ID!]! = []) {
+  repository(owner: $owner, name: $name) {
+    issues(filterBy: {since: $since}, states: [OPEN, CLOSED], first: 100, after: $issuesAfter, orderBy: {field: UPDATED_AT, direction: ASC}) @include(if: $withIssues) {
+      pageInfo { hasNextPage endCursor }
+      nodes { ...changed }
+    }
+    pullRequests(first: 100, after: $pullsAfter, orderBy: {field: UPDATED_AT, direction: DESC}) @include(if: $withPulls) {
+      pageInfo { hasNextPage endCursor }
+      nodes { number updatedAt repository { nameWithOwner } closingIssuesReferences(first: 10) { nodes { id } } }
+    }
+  }
+  outside: nodes(ids: $outside) { ... on Issue { ...end } }
+}
+${ISSUE_FIELDS}
+${CHANGED_FIELDS}`;
+
+/** Issues by identity, 100 of each at a time: ones that changed, read whole, and Outside Issues, read as far ends. */
+const NODES_QUERY = `query($changed: [ID!]!, $outside: [ID!]!) {
+  changed: nodes(ids: $changed) { ... on Issue { ...changed } }
+  outside: nodes(ids: $outside) { ... on Issue { ...end } }
+}
+${ISSUE_FIELDS}
+${CHANGED_FIELDS}`;
+
+/**
+ * The issue-events feed's kinds that mark a Link made or removed, or a
+ * Closing Request linked by hand, none of which moves an Issue's `updatedAt`.
+ */
+const LINK_EVENTS = new Set([
+  "sub_issue_added",
+  "sub_issue_removed",
+  "parent_issue_added",
+  "parent_issue_removed",
+  "blocked_by_added",
+  "blocked_by_removed",
+  "blocking_added",
+  "blocking_removed",
+  "connected",
+  "disconnected",
+]);
+
+/** Pages of each kind one refresh reads before it gives up proving it caught up. */
+const REFRESH_PAGES = 10;
+
 interface IssueNode {
   id: string;
   number: number;
@@ -94,6 +151,35 @@ interface OneIssueNode extends IssueNode {
   repository: { nameWithOwner: string };
   timelineItems: { nodes: ({ source?: { __typename: string; id?: string } | null } | null)[] };
 }
+
+interface ChangedNode extends IssueNode {
+  state: "OPEN" | "CLOSED";
+  closedAt: string | null;
+  stateReason: StateReason | null;
+  repository: { nameWithOwner: string };
+}
+
+/** A pull request as a refresh reads it: which Issues it closes now. */
+interface PullChange {
+  number: number;
+  updatedAt: string;
+  repository: { nameWithOwner: string };
+  closingIssuesReferences: { nodes: ({ id: string } | null)[] } | null;
+}
+
+/** One event of the repository's issue-events feed, from the REST API. */
+interface EventNode {
+  event: string;
+  created_at: string;
+  issue?: { node_id: string; pull_request?: unknown } | null;
+}
+
+interface Connection<T> {
+  pageInfo: { hasNextPage: boolean; endCursor: string };
+  nodes: T[];
+}
+
+type GraphqlError = { type?: string; path?: (string | number)[]; message?: string };
 
 interface PullNode {
   number: number;
@@ -143,6 +229,7 @@ export function github(deps: AdapterDeps): TrackerKind {
     resolveProject: async (path) => (loginIsFor ? resolveProject(cli, host, path) : noLogin(host)),
     viewer: async () => (loginIsFor ? viewer(cli, host) : noLogin(host)),
     openIssues: async (project, after) => (loginIsFor ? openIssues(cli, host, project, after) : noLogin(host)),
+    changes: async (project, since, outside) => (loginIsFor ? changes(cli, host, project, since, outside) : noLogin(host)),
     issue: async (locator) => (loginIsFor ? issue(cli, host, locator) : noLogin(host)),
   });
 
@@ -225,7 +312,7 @@ async function openIssues(cli: Cli, host: string, { path }: Project, after: stri
     const unread: Unread = {};
     // A token without pull request access, such as a fine-grained one scoped to Issues, is refused this field on every Issue.
     if (errors.some((e) => e.path?.[4] === "closedByPullRequestsReferences" && e.path.length === 5)) {
-      unread.closingRequests = "this login can't read pull requests";
+      unread.closingRequests = CANT_READ_PULLS;
     }
     return {
       kind: "page",
@@ -236,6 +323,143 @@ async function openIssues(cli: Cli, host: string, { path }: Project, after: stri
     };
   }
   return failure(answer, body, host, path);
+}
+
+/**
+ * Only what changed in a Project since `since`. GitHub doesn't mark a Link
+ * made or removed on either Issue, nor a new Closing Request, so besides the
+ * Issues updated since, it reads the repository's issue-events feed and the
+ * pull requests updated since, then the Issues they name.
+ */
+async function changes(cli: Cli, host: string, project: Project, since: string, outside: string[]): Promise<ChangesAnswer> {
+  const [owner = "", name = ""] = project.path.split("/");
+  const changed = new Map<string, { node: ChangedNode; hiddenParent: boolean }>();
+  const named = new Set<string>();
+  const requests: string[] = [];
+  const ends: FarEnd[] = [];
+  const outsideFirst = outside.slice(0, 100);
+  const unread: Unread = {};
+  let caughtUp = true;
+  let issuesAfter: string | null = null;
+  let pullsAfter: string | null = null;
+  let withIssues = true;
+  let withPulls = true;
+  for (let pages = 0; withIssues || withPulls; pages++) {
+    if (pages === REFRESH_PAGES) {
+      caughtUp = false;
+      break;
+    }
+    const answer = await graphql(cli, host, CHANGES_QUERY, {
+      owner,
+      name,
+      since,
+      withIssues: String(withIssues),
+      withPulls: String(withPulls),
+      ...(issuesAfter ? { issuesAfter } : {}),
+      ...(pullsAfter ? { pullsAfter } : {}),
+      ...(pages === 0 ? { outside: outsideFirst } : {}),
+    });
+    if (answer.kind === "missing") return ghMissing(host);
+    const body = parse(answer.stdout);
+    const data = body?.data as { repository?: { issues?: Connection<ChangedNode>; pullRequests?: Connection<PullChange> | null } | null; outside?: (EndNode | null)[] } | undefined;
+    const repository = data?.repository;
+    const errors = (body?.errors ?? []) as GraphqlError[];
+    if (!repository || !(answer.code === 0 || onlyUnreadable(errors))) return failure(answer, body, host, project.path);
+    if (pages === 0) ends.push(...readEnds(data?.outside ?? [], outsideFirst));
+    if (errors.some((e) => e.path?.[4] === "closedByPullRequestsReferences" && e.path.length === 5) || repository.pullRequests === null) {
+      unread.closingRequests = CANT_READ_PULLS;
+    }
+    if (repository.issues) {
+      const hiddenParents = new Set(errors.filter((e) => e.path?.[1] === "issues" && e.path[4] === "parent").map((e) => e.path?.[3]));
+      repository.issues.nodes.forEach((node, index) => node && changed.set(node.id, { node, hiddenParent: hiddenParents.has(index) }));
+      withIssues = repository.issues.pageInfo.hasNextPage;
+      issuesAfter = repository.issues.pageInfo.endCursor;
+    }
+    if (withPulls) {
+      const pulls = repository.pullRequests;
+      const recent = (pulls?.nodes ?? []).filter((pull) => pull && Date.parse(pull.updatedAt) >= Date.parse(since));
+      for (const pull of recent) {
+        requests.push(`${pull.repository.nameWithOwner}#${pull.number}`);
+        for (const closes of pull.closingIssuesReferences?.nodes ?? []) if (closes) named.add(closes.id);
+      }
+      withPulls = !!pulls && recent.length === pulls.nodes.length && pulls.pageInfo.hasNextPage;
+      pullsAfter = pulls?.pageInfo.endCursor ?? null;
+    }
+  }
+  const events = await linkEvents(cli, host, project, since);
+  if (events.kind !== "events") return events;
+  for (const id of events.issues) named.add(id);
+  caughtUp &&= events.caughtUp;
+
+  const reread = [...named].filter((id) => !changed.has(id));
+  const outsideRest = outside.slice(100);
+  for (let at = 0; at < Math.max(reread.length, outsideRest.length); at += 100) {
+    const [someChanged, someOutside] = [reread.slice(at, at + 100), outsideRest.slice(at, at + 100)];
+    const answer = await graphql(cli, host, NODES_QUERY, { changed: someChanged, outside: someOutside });
+    if (answer.kind === "missing") return ghMissing(host);
+    const body = parse(answer.stdout);
+    const data = body?.data as { changed?: (ChangedNode | null)[]; outside?: (EndNode | null)[] } | undefined;
+    const errors = (body?.errors ?? []) as GraphqlError[];
+    if (!data?.changed || !data.outside || !(answer.code === 0 || onlyUnreadable(errors))) {
+      return failure(answer, body, host, project.path);
+    }
+    if (errors.some((e) => e.path?.[2] === "closedByPullRequestsReferences" && e.path.length === 3)) unread.closingRequests = CANT_READ_PULLS;
+    data.changed.forEach((node, index) => {
+      const hiddenParent = errors.some((e) => e.path?.[0] === "changed" && e.path[1] === index && e.path[2] === "parent");
+      if (node?.id) changed.set(node.id, { node, hiddenParent });
+      else if (!node) ends.push({ id: someChanged[index]!, readable: false });
+    });
+    ends.push(...readEnds(data.outside, someOutside));
+  }
+
+  const open: OpenIssue[] = [];
+  for (const { node, hiddenParent } of changed.values()) {
+    const here = node.repository.nameWithOwner.toLowerCase() === project.path.toLowerCase();
+    if (here && node.state === "OPEN") open.push(openIssue(node, hiddenParent));
+    else ends.push(farEnd(node));
+  }
+  return { kind: "changes", open, ends, requests, caughtUp, unread };
+}
+
+/**
+ * The Issues the repository's issue-events feed says had a Link made or
+ * removed since `since`, newest first. It has no `since` of its own, so it's
+ * read back a page at a time until an event older than `since` proves
+ * nothing between was missed.
+ */
+async function linkEvents(cli: Cli, host: string, { path }: Project, since: string): Promise<{ kind: "events"; issues: string[]; caughtUp: boolean } | CantAnswer | { kind: "not-found"; reason: string }> {
+  const issues = new Set<string>();
+  for (let page = 1; page <= REFRESH_PAGES; page++) {
+    const answer = await cli("gh", ["api", "--hostname", host, `repos/${path}/issues/events?per_page=100&page=${page}`]);
+    if (answer.kind === "missing") return ghMissing(host);
+    const body = parse(answer.stdout);
+    // GitHub stops paging this feed far back with a 422.
+    if (answer.code !== 0 && body?.status === "422") break;
+    const events = Array.isArray(body) ? (body as unknown as EventNode[]) : null;
+    if (answer.code !== 0 || !events) return failure(answer, body, host, path);
+    for (const event of events) {
+      if (Date.parse(event.created_at) < Date.parse(since)) return { kind: "events", issues: [...issues], caughtUp: true };
+      if (LINK_EVENTS.has(event.event) && event.issue && !event.issue.pull_request) issues.add(event.issue.node_id);
+    }
+    if (events.length < 100) break;
+  }
+  return { kind: "events", issues: [...issues], caughtUp: false };
+}
+
+/**
+ * Errors only for what this login can't read, or an Issue that's gone, each
+ * a `null` below the top of the answer: the rest of it still stands.
+ */
+function onlyUnreadable(errors: GraphqlError[]): boolean {
+  return errors.every((e) => (e.type === "FORBIDDEN" || e.type === "NOT_FOUND") && (e.path?.length ?? 0) > 1);
+}
+
+/** Issues read by identity as far ends; one that came back `null` can't be read. */
+function readEnds(nodes: (EndNode | null)[], ids: string[]): FarEnd[] {
+  return ids.map((id, index) => {
+    const node = nodes[index];
+    return node?.id ? farEnd(node) : { id, readable: false };
+  });
 }
 
 /** Each Link under GitHub's own name for its kind, as the Issue's page shows it. */
@@ -326,7 +550,7 @@ async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnsw
   }
   const unread: Unread = {};
   if (errors.some((e) => e.path?.[2] === "closedByPullRequestsReferences" && e.path.length === 3)) {
-    unread.closingRequests = "this login can't read pull requests";
+    unread.closingRequests = CANT_READ_PULLS;
   }
   const hiddenParent = errors.some((e) => e.path?.[2] === "parent");
   const mentionedBy = node.timelineItems.nodes.flatMap((item) => (item?.source?.__typename === "Issue" && item.source.id ? [item.source.id] : []));
@@ -348,8 +572,12 @@ async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnsw
   };
 }
 
-function graphql(cli: Cli, host: string, query: string, variables: Record<string, string>): Promise<CliResult> {
-  const fields = Object.entries(variables).flatMap(([key, value]) => ["-F", `${key}=${value}`]);
+/** A list is passed as one field per item, and an empty one as `key[]`. */
+function graphql(cli: Cli, host: string, query: string, variables: Record<string, string | string[]>): Promise<CliResult> {
+  const fields = Object.entries(variables).flatMap(([key, value]) => {
+    if (!Array.isArray(value)) return ["-F", `${key}=${value}`];
+    return value.length === 0 ? ["-f", `${key}[]`] : value.flatMap((item) => ["-f", `${key}[]=${item}`]);
+  });
   return cli("gh", ["api", "--hostname", host, "graphql", "-f", `query=${query}`, ...fields]);
 }
 
@@ -366,9 +594,14 @@ function failure(answer: Extract<CliResult, { kind: "exited" }>, body: Record<st
   if (answer.code === 4) {
     return { kind: "refused", reason: `not logged in to ${host} — run \`gh auth login --hostname ${host}\`` };
   }
-  const errors = (body?.errors ?? []) as { type?: string; message?: string }[];
-  if (errors.some((e) => e.type === "NOT_FOUND")) {
+  const errors = (body?.errors ?? []) as GraphqlError[];
+  if (errors.some((e) => e.type === "NOT_FOUND") || String(body?.status) === "404") {
     return { kind: "not-found", reason: `no repository ${what} on ${host} that this login can see` };
+  }
+  // A used-up rate limit answers 403 too, but it says nothing about the login.
+  const message = String(body?.message ?? errors[0]?.message ?? "");
+  if (/rate limit/i.test(message) || errors.some((e) => e.type === "RATE_LIMITED")) {
+    return { kind: "cant-tell", reason: `${host}'s rate limit for this login is used up for now` };
   }
   const status = String(body?.status ?? "");
   if (status === "401" || status === "403") {

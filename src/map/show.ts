@@ -1,9 +1,10 @@
 /**
  * Draws the Map of a Project from its Snapshot, starting the first read when
  * there is none. A read gets a few seconds to finish; after that the draw
- * shows progress and the read carries on outside the conversation. An Issue
- * card reads its Issue live instead, so it opens even during a first read
- * (ADR 0006).
+ * shows progress and the read carries on outside the conversation. A
+ * Snapshot more than two minutes old is refreshed first, and drawn with its
+ * age and why when it can't be. An Issue card reads its Issue live instead,
+ * so it opens even during a first read (ADR 0006).
  */
 import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/store.ts";
 import type { CantAnswer, Project, Tracker } from "../tracker/tracker.ts";
@@ -29,8 +30,14 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}`;
   }
   const key: SnapshotKey = { tracker: tracker.host, project: project.id, login: viewer.login };
-  let state = await deps.store.state(key);
-  if (state.kind !== "ready" && !(state.kind === "reading" && state.running)) deps.startRead();
+  const drawable = await deps.store.forDraw(key, tracker, project);
+  if (drawable.kind === "refused") return `No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`;
+  if (drawable.kind === "ready") {
+    const { snapshot, ageMs, stale } = drawable;
+    return draw(snapshot, command, stale === undefined ? undefined : { ageMs, reason: stale }).text;
+  }
+  let state: SnapshotState = drawable;
+  if (!(state.kind === "reading" && state.running)) deps.startRead();
   for (let waited = 0; state.kind !== "ready" && waited < WAIT_MS; waited += POLL_MS) {
     await deps.sleep(POLL_MS);
     state = await deps.store.state(key);

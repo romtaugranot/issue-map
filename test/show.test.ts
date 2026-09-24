@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { showCard, showMap } from "../src/map/show.ts";
 import { snapshotStore } from "../src/snapshot/store.ts";
-import type { IssueAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
+import type { ChangesAnswer, IssueAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 150 } };
 
@@ -30,6 +30,7 @@ function heldTracker() {
     host: "github.com",
     version: null,
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
+    changes: async () => ({ kind: "cant-tell", reason: "unused" }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
     viewer: async () => ({ kind: "viewer", login: "fixture-viewer" }),
     async openIssues(_, after) {
@@ -75,6 +76,56 @@ test("a login the Tracker refuses draws no Map, and says which Tracker refused a
   const tracker: Tracker = { ...heldTracker().tracker, viewer: async () => ({ kind: "refused", reason: "not logged in to github.com" }) };
   const text = await showMap({ store, startRead: () => assert.fail("no read without a login"), sleep: async () => {} }, tracker, project, { kind: "overview" });
   assert.equal(text, "No Map of github.com/fixture-org/tools: GitHub refused: not logged in to github.com");
+});
+
+describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
+  const key = { tracker: "github.com", project: project.id, login: "fixture-viewer" };
+  const noRead = () => assert.fail("a Snapshot that's been read isn't read again in full");
+
+  /** A store holding a finished read of the 150 Issues, read at 10:00, and a clock to move on. */
+  async function readStore() {
+    let now = Date.parse("2026-09-23T10:00:00Z");
+    const store = snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-show-")), { now: () => now });
+    const { tracker, release } = heldTracker();
+    release();
+    await store.read(key, tracker, project);
+    return { store, tracker, later: (ms: number) => (now += ms) };
+  }
+  const deps = (store: ReturnType<typeof snapshotStore>) => ({ store, startRead: noRead, sleep: async () => {} });
+
+  test("a Snapshot under two minutes old is drawn as it is", async () => {
+    const { store, tracker, later } = await readStore();
+    later(60_000);
+    const map = await showMap(deps(store), { ...tracker, changes: async () => assert.fail("no refresh") }, project, { kind: "overview" });
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked$/m);
+    assert.doesNotMatch(map, /⚠/);
+  });
+
+  test("an older one is refreshed first, so the Map shows what changed", async () => {
+    const { store, tracker, later } = await readStore();
+    later(3 * 60_000);
+    const closed: ChangesAnswer = { kind: "changes", open: [], ends: [{ id: "I_2", readable: true, open: false, project: project.path, ref: `${project.path}#2`, title: "Issue 2", url: `${project.url}/issues/2` }], requests: [], caughtUp: true, unread: {} };
+    const map = await showMap(deps(store), { ...tracker, changes: async () => closed }, project, { kind: "overview" });
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 149 open · 0 on the Map · 149 Unlinked$/m);
+    assert.doesNotMatch(map, /⚠/);
+  });
+
+  test("when the Tracker can't be reached, the old Snapshot is drawn with how old it is and why", async () => {
+    const { store, tracker, later } = await readStore();
+    later(3 * 3_600_000);
+    const offline = { ...tracker, changes: async () => ({ kind: "cant-tell", reason: "couldn't reach github.com" }) as const };
+    const map = await showMap(deps(store), offline, project, { kind: "overview" });
+    assert.match(map, /^⚠ read 3h ago — couldn't refresh it: couldn't reach github.com\n\*\*fixture-org\/tools\*\* · 150 open/);
+  });
+
+  test("once the Tracker refuses the login, no Map is drawn and its Snapshot is deleted", async () => {
+    const { store, tracker, later } = await readStore();
+    later(3 * 60_000);
+    const refused = { ...tracker, changes: async () => ({ kind: "refused", reason: "github.com refused this login: Bad credentials" }) as const };
+    const text = await showMap(deps(store), refused, project, { kind: "overview" });
+    assert.equal(text, "No Map of github.com/fixture-org/tools: github.com refused this login: Bad credentials. What was kept of it is deleted.");
+    assert.notEqual((await store.state(key)).kind, "ready");
+  });
 });
 
 describe("opening an Issue card", () => {
