@@ -16,11 +16,12 @@ import { remoteAddress, type Address } from "../home/remote-address.ts";
 import type { Card, Choice as LinkChoice } from "../map/card.ts";
 import type { Command } from "../map/draw.ts";
 import { typedRef, type Shown, type ShownCard } from "../map/show.ts";
+import type { Offer, OnScreen, Proposal } from "../map/suggest.ts";
 import { ago, plural, short } from "../map/text.ts";
 import type { IssueRead, Project, Tracker, Trackers } from "../tracker/tracker.ts";
 
 /** What is on screen: one of a Map's drawings, or an Issue card read live. */
-export type View = Command | { kind: "card"; ref: string; page: number };
+export type View = OnScreen;
 
 /** Where the user is: a view of one Project. */
 export interface Position {
@@ -73,6 +74,12 @@ export interface MoveDeps {
   assign(tracker: Tracker, project: Project, ref: string): Promise<ShownCard>;
   /** The body and comments of the Issue `ref` names, to brief the user from; one that can't be read says why. */
   start(tracker: Tracker, project: Project, ref: string): Promise<string>;
+  /** The text of the Issues `view` shows, for Claude to propose Link Suggestions from. */
+  suggest(tracker: Tracker, project: Project, view: View): Promise<string>;
+  /** The proposals that hold up, offered to confirm. */
+  offer(tracker: Tracker, project: Project, proposals: Proposal[]): Promise<Offer>;
+  /** Writes the offered suggestions `picked` numbers, and declines the rest. */
+  confirm(tracker: Tracker, project: Project, picked: number[]): Promise<string>;
 }
 
 export type Request =
@@ -85,6 +92,10 @@ export type Request =
   | { kind: "assign"; ref: string }
   /** Starts work on the Issue `ref` names in the Project on screen. */
   | { kind: "start"; ref: string }
+  /** Link Suggestions from what is on screen: its text to propose from, the proposals to offer, or the ones ticked to write. */
+  | { kind: "suggest" }
+  | { kind: "offer"; proposals: Proposal[] }
+  | { kind: "confirm"; picked: number[] }
   /** `picked` when the Home Project was just picked, so `home` goes there rather than re-pick. */
   | { kind: "home"; picked?: boolean };
 
@@ -101,6 +112,8 @@ export interface Answer {
   links: LinkChoice[];
   /** Choices to ask about, best first. */
   choices: MoveChoice[];
+  /** Link Suggestions to confirm in one multi-select, numbered from 1; `run` takes the numbers ticked. */
+  confirm?: { choices: LinkChoice[]; run: string };
 }
 
 /** Positions kept on the trail; the oldest drop off first. */
@@ -173,6 +186,19 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
       if ("why" in found) return say(`Can't start work on ${typedRef(request.ref)}: ${found.why}.`);
       // It hands the Issue over and moves nothing, so the user carries on from where they are.
       return say(await deps.start(found.tracker, here.project, request.ref));
+    }
+
+    case "suggest":
+    case "offer":
+    case "confirm": {
+      if (!here) return say(deps.home.text);
+      const found = await trackerAt(deps, here.project.host);
+      if ("why" in found) return say(`No Link Suggestions: ${found.why}.`);
+      // Suggesting reads what's on screen and moves nothing.
+      if (request.kind === "suggest") return say(await deps.suggest(found.tracker, here.project, here.view));
+      if (request.kind === "confirm") return say(await deps.confirm(found.tracker, here.project, request.picked));
+      const offered = await deps.offer(found.tracker, here.project, request.proposals);
+      return { ...say(offered.text), ...(offered.confirm ? { confirm: { choices: offered.confirm.choices, run: "issue-map confirm" } } : {}) };
     }
 
     case "back": {

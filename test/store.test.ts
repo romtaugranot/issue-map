@@ -71,6 +71,7 @@ function fakeTracker(
     host: "github.com",
     version: null,
     thread: async () => ({ kind: "cant-tell", reason: "unused" }),
+    link: async () => ({ kind: "cant-tell", reason: "unused" }),
     untested: options.untested ?? null,
     async capabilities() {
       capabilitiesAsked++;

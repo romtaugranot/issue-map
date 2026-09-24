@@ -74,6 +74,7 @@ function glabApi(world: World, host: string, login: "ok" | "none" | "refused", a
   const field = (name: string) => args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
   const endpoint = args[3]!;
   const query = field("query") ?? "";
+  if (endpoint !== "graphql" && args.includes("POST")) return restPost(new Gitlab(world, host, server.version, login, ""), endpoint, field);
   if (endpoint !== "graphql") return restApi(new Gitlab(world, host, server.version, login, ""), endpoint);
   return graphql(new Gitlab(world, host, server.version, login, query), query, field);
 }
@@ -294,7 +295,7 @@ function graphql(gl: Gitlab, query: string, field: (name: string) => string | un
     const refs = JSON.parse(byReference[2]!) as string[];
     const nodes = refs.flatMap((ref) => {
       const found = gl.find(ref.startsWith("#") ? `${context}${ref}` : ref);
-      return found && !found.issue.hidden ? [{ id: gid(found.spec, found.issue) }] : [];
+      return found && !found.issue.hidden ? [{ id: gid(found.spec, found.issue), reference: gl.addr(found.spec, found.issue) }] : [];
     });
     data.workItemsByReference = { nodes };
   }
@@ -307,16 +308,23 @@ function graphql(gl: Gitlab, query: string, field: (name: string) => string | un
   return answer(data, errors);
 }
 
+/** What GitLab answers a token that may only read, for any write. */
+function insufficientScope(): CliResult {
+  const body = { error: "insufficient_scope", error_description: "The request requires higher privileges than provided by the access token.", scope: "api" };
+  return exited(1, JSON.stringify(body), "glab: 403 Forbidden (HTTP 403)\n");
+}
+
+const NO_ACCESS = "The resource that you are attempting to access does not exist or you don't have permission to perform this action";
+
 /**
- * `issueSetAssignees`, appending the named login. A token that may only
- * read is refused any mutation; an Issue that doesn't exist, or that this
- * login may not write, is refused in the same words.
+ * `issueSetAssignees`, appending the named login, and `workItemUpdate`,
+ * setting a work item's parent. A token that may only read is refused any
+ * mutation; an Issue that doesn't exist, or that this login may not write,
+ * is refused in the same words.
  */
 function mutation(gl: Gitlab, query: string, field: (name: string) => string | undefined): CliResult {
-  if (gl.world.token === "reads") {
-    const body = { error: "insufficient_scope", error_description: "The request requires higher privileges than provided by the access token.", scope: "api" };
-    return exited(1, JSON.stringify(body), "glab: 403 Forbidden (HTTP 403)\n");
-  }
+  if (gl.world.token === "reads") return insufficientScope();
+  if (query.includes("workItemUpdate(")) return setParent(gl, field("id")!, field("parent")!);
   if (!query.includes("issueSetAssignees(")) return answer(null, [{ message: "unknown mutation" }]);
   const issue = gl.project(field("path") ?? "")?.issues?.find((i) => i.number === Number(field("iid")));
   if (!issue || issue.hidden || gl.world.role === "reader") {
@@ -325,6 +333,25 @@ function mutation(gl: Gitlab, query: string, field: (name: string) => string | u
   }
   issue.assignees = [...new Set([...(issue.assignees ?? []), field("viewer")!])];
   return answer({ issueSetAssignees: { issue: { assignees: { nodes: issue.assignees.map((username) => ({ username })) } }, errors: [] } }, []);
+}
+
+/**
+ * `workItemUpdate` with a parent, as GitLab does it: a work item that has
+ * a parent is moved to the new one. Only a task goes under an Issue; an
+ * epic takes Issues.
+ */
+function setParent(gl: Gitlab, id: string, parentId: string): CliResult {
+  const all = (gl.world.projects ?? []).flatMap((spec) => (spec.issues ?? []).map((issue) => ({ spec, issue })));
+  const [child, parent] = [id, parentId].map((wanted) => all.find(({ spec, issue }) => gid(spec, issue) === wanted));
+  if (!child || !parent || child.issue.hidden || parent.issue.hidden || gl.world.role === "reader") {
+    return answer({ workItemUpdate: null }, [{ message: NO_ACCESS, path: ["workItemUpdate"] }]);
+  }
+  if (!parent.spec.namespace && !child.issue.taskLevel) {
+    return answer({ workItemUpdate: { workItem: null, errors: [`${gl.addr(child.spec, child.issue)} cannot be added: it's not allowed to add this type of parent item`] } }, []);
+  }
+  const self = gl.addr(child.spec, child.issue);
+  gl.world.links = [...(gl.world.links ?? []).filter(([, kind, b]) => !(kind === "parent" && b === self)), [gl.addr(parent.spec, parent.issue), "parent", self]];
+  return answer({ workItemUpdate: { workItem: { id }, errors: [] } }, []);
 }
 
 function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: string) => string | undefined) {
@@ -374,6 +401,29 @@ function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: st
 function byIids(gl: Gitlab, spec: ProjectSpec, query: string) {
   const iids = JSON.parse(/iids: (\[[^\]]*\])/.exec(query)![1]!) as string[];
   return (spec.issues ?? []).filter((i) => !i.hidden && iids.includes(String(i.number))).map((i) => gl.item(spec, i, query));
+}
+
+/**
+ * `POST projects/:id/issues/:iid/links`: a Blocks or Related Link from one
+ * of a Project's Issues to another's, answered with the kind recorded.
+ */
+function restPost(gl: Gitlab, endpoint: string, field: (name: string) => string | undefined): CliResult {
+  const { world } = gl;
+  const [kind, encoded, issues, iid, links] = endpoint.split("/");
+  const notFound = exited(1, JSON.stringify({ message: "404 Not found" }), "glab: 404 Not Found (HTTP 404)\n");
+  if (kind !== "projects" || issues !== "issues" || links !== "links" || gl.login !== "ok") return notFound;
+  if (world.token === "reads") return insufficientScope();
+  const from = gl.find(`${decodeURIComponent(encoded!)}#${iid}`);
+  const to = gl.find(`${field("target_project_id")}#${field("target_issue_iid")}`);
+  if (!from || !to || from.issue.hidden || to.issue.hidden) return notFound;
+  if (world.role === "reader") return exited(1, JSON.stringify({ message: "403 Forbidden" }), "glab: 403 Forbidden (HTTP 403)\n");
+  const type = field("link_type") ?? "relates_to";
+  const [a, b] = [gl.addr(from.spec, from.issue), gl.addr(to.spec, to.issue)];
+  // GitLab keeps one Link between two Issues, whatever its type.
+  const joined = (world.links ?? []).some(([x, kind, y]) => kind !== "parent" && ((x === a && y === b) || (x === b && y === a)));
+  if (joined) return exited(1, JSON.stringify({ message: "Issue(s) already assigned" }), "glab: 409 Conflict (HTTP 409)\n");
+  world.links =[...(world.links ?? []), [a, type === "blocks" ? "blocks" : "related", b]];
+  return exited(0, JSON.stringify({ source_issue: restIssue(gl, from.spec, from.issue), target_issue: restIssue(gl, to.spec, to.issue), link_type: type }));
 }
 
 /**

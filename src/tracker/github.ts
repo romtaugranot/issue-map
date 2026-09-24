@@ -1,7 +1,7 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
 import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
-import type { AssignAnswer, CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
+import type { AssignAnswer, CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, LinkAnswer, LinkKind, Mention, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitHub";
 
@@ -18,14 +18,18 @@ const OLDEST_SUPPORTED_GHES = "3.18";
  */
 const GHES_SINCE = { subIssues: "3.17", blocks: "3.19" };
 
+/** Why GitHub offers no Related Link to write or read. */
+const NO_RELATED = "GitHub records no Related Links";
+
 /** The fields an Issue has in this GitHub's schema, which say which Link kinds it records (ADR 0004). */
 const SCHEMA_QUERY = `query { __type(name: "Issue") { fields { name } } }`;
 
-/** Which Link kinds' fields this GitHub's schema has. */
+/** Which Link kinds' fields this GitHub's schema has, and whether it says which Issue a duplicate duplicates. */
 interface Has {
   subIssues: boolean;
   blocks: boolean;
   tracked: boolean;
+  duplicateOf: boolean;
 }
 
 type Failure = CantAnswer | { kind: "not-found"; reason: string };
@@ -76,7 +80,10 @@ function issueFields({ has }: Ctx): string {
     nodes { number url isDraft state author { login } repository { nameWithOwner } }
   }
 }
-fragment end on Issue { id number title url state closedAt stateReason repository { nameWithOwner } }`;
+fragment end on Issue {
+  id number title url state closedAt stateReason repository { nameWithOwner }
+  ${has.duplicateOf ? "duplicateOf { number repository { nameWithOwner } }" : ""}
+}`;
 }
 
 /**
@@ -107,7 +114,7 @@ const issueQuery = (ctx: Ctx) => `query($owner: String!, $name: String!, $number
       state stateReason
       repository { nameWithOwner }
       timelineItems(itemTypes: [CROSS_REFERENCED_EVENT], first: 100) {
-        nodes { ... on CrossReferencedEvent { source { __typename ... on Issue { id } } } }
+        nodes { ... on CrossReferencedEvent { source { __typename ... on Issue { id number repository { nameWithOwner } } } } }
       }
     }
   }
@@ -201,7 +208,7 @@ interface OneIssueNode extends IssueNode {
   state: "OPEN" | "CLOSED";
   stateReason: StateReason | null;
   repository: { nameWithOwner: string };
-  timelineItems: { nodes: ({ source?: { __typename: string; id?: string } | null } | null)[] };
+  timelineItems: { nodes: ({ source?: { __typename: string; id?: string; number?: number; repository?: { nameWithOwner: string } } | null } | null)[] };
 }
 
 interface ChangedNode extends IssueNode {
@@ -252,6 +259,8 @@ interface EndNode {
   closedAt: string | null;
   stateReason: StateReason | null;
   repository: { nameWithOwner: string };
+  /** Asked for only where the schema has it. */
+  duplicateOf?: { number: number; repository: { nameWithOwner: string } } | null;
 }
 
 type StateReason = "COMPLETED" | "NOT_PLANNED" | "DUPLICATE" | "REOPENED";
@@ -300,6 +309,7 @@ export function github(deps: AdapterDeps): TrackerKind {
       capabilities: async (project) => (loginIsFor ? withSchema((ctx) => capabilities(ctx, project)) : noLogin(host)),
       thread: async (locator) => (loginIsFor ? thread(cliHere, host, locator) : noLogin(host)),
       assign: async (locator, viewer) => (loginIsFor ? assign(cliHere, host, locator, viewer) : noLogin(host)),
+      link: async (from, kind, to) => (loginIsFor ? withSchema((ctx) => link(ctx, from, kind, to)) : noLogin(host)),
     };
   };
 
@@ -339,14 +349,14 @@ export function github(deps: AdapterDeps): TrackerKind {
  * suggests (ADR 0004).
  */
 async function schemaOf(cli: Cli, host: string, ghes: Ctx["ghes"]): Promise<Has | Failure> {
-  if (!ghes) return { subIssues: true, blocks: true, tracked: true };
+  if (!ghes) return { subIssues: true, blocks: true, tracked: true, duplicateOf: true };
   const answer = await graphql(cli, host, SCHEMA_QUERY, {});
   if (answer.kind === "missing") return ghMissing(host);
   const body = parse(answer.stdout);
   const fields = (body?.data as { __type?: { fields?: { name: string }[] } | null } | undefined)?.__type?.fields;
   if (answer.code !== 0 || !fields) return failure(answer, body, host, "its schema");
   const has = (...names: string[]) => names.every((name) => fields.some((field) => field.name === name));
-  return { subIssues: has("parent", "subIssues"), blocks: has("blockedBy", "blocking"), tracked: has("trackedIssues", "trackedInIssues") };
+  return { subIssues: has("parent", "subIssues"), blocks: has("blockedBy", "blocking"), tracked: has("trackedIssues", "trackedInIssues"), duplicateOf: has("duplicateOf") };
 }
 
 /** Why the Map isn't tested on this GitHub: a GHES release GitHub no longer supports. */
@@ -384,7 +394,7 @@ async function capabilities(ctx: Ctx, { path }: Project): Promise<CapabilitiesAn
   const links: Capabilities["links"] = {
     blocks: linkKind(ctx, ctx.has.blocks, "Blocks", GHES_SINCE.blocks),
     parent: linkKind(ctx, ctx.has.subIssues, "Parent", GHES_SINCE.subIssues),
-    related: { kind: "cant-record", reason: "GitHub records no Related Links" },
+    related: { kind: "cant-record", reason: NO_RELATED },
   };
   return { kind: "capabilities", links, write: await writes(ctx, path, repository.viewerPermission) };
 }
@@ -662,6 +672,7 @@ function farEnd(end: EndNode): FarEnd {
     url: end.url,
     ...(end.state === "CLOSED" && end.closedAt ? { closedAt: end.closedAt } : {}),
     ...(how ? { closedAs: how } : {}),
+    ...(how === "duplicate" && end.duplicateOf ? { duplicateOf: `${end.duplicateOf.repository.nameWithOwner}#${end.duplicateOf.number}` } : {}),
   };
 }
 
@@ -728,7 +739,10 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
     unread.closingRequests = CANT_READ_PULLS;
   }
   const hiddenParent = errors.some((e) => e.path?.[2] === "parent");
-  const mentionedBy = node.timelineItems.nodes.flatMap((item) => (item?.source?.__typename === "Issue" && item.source.id ? [item.source.id] : []));
+  const mentionedBy = node.timelineItems.nodes.flatMap((item): Mention[] => {
+    const source = item?.source;
+    return source?.__typename === "Issue" && source.id && source.repository ? [{ id: source.id, ref: `${source.repository.nameWithOwner}#${source.number}` }] : [];
+  });
   return {
     kind: "issue",
     issue: {
@@ -809,6 +823,69 @@ async function assign(cli: Cli, host: string, locator: string, viewer: string): 
     return { kind: "not-allowed", reason: `${host} refused to let this login assign ${ref}: ${String(body?.message)} — it takes the triage role in ${at.owner}/${at.name} and a token that may write Issues` };
   }
   return failure(answer, body, host, `${at.owner}/${at.name}`);
+}
+
+/** Need 10's two ends: each one's identity, and the Parent the far end has where the schema records Parents. */
+const linkEndsQuery = ({ has }: Ctx) => `query($fromOwner: String!, $fromName: String!, $fromNumber: Int!, $toOwner: String!, $toName: String!, $toNumber: Int!) {
+  from: repository(owner: $fromOwner, name: $fromName) { issue(number: $fromNumber) { id } }
+  to: repository(owner: $toOwner, name: $toName) { issue(number: $toNumber) { id ${has.subIssues ? "parent { id number repository { nameWithOwner } }" : ""} } }
+}`;
+
+/** The mutation that writes each kind GitHub records, as it names it; a sub-issue is never moved from a parent it has. */
+const LINK_MUTATIONS = {
+  blocks: { name: "addBlockedBy", query: `mutation($to: ID!, $from: ID!) { addBlockedBy(input: {issueId: $to, blockingIssueId: $from}) { issue { id } } }` },
+  parent: { name: "addSubIssue", query: `mutation($to: ID!, $from: ID!) { addSubIssue(input: {issueId: $from, subIssueId: $to, replaceParent: false}) { issue { id } } }` },
+} as const;
+
+/**
+ * Need 10: both Issues' identities are read first, and the Parent the far
+ * end has, so a Parent Link never moves it; then one mutation. GitHub
+ * records Parents as sub-issues, and has no Related Links.
+ */
+async function link(ctx: Ctx, from: string, kind: LinkKind, to: string): Promise<LinkAnswer> {
+  const { cli, host } = ctx;
+  if (kind === "related") return { kind: "cant-record", reason: NO_RELATED };
+  const recorded = kind === "blocks" ? linkKind(ctx, ctx.has.blocks, "Blocks", GHES_SINCE.blocks) : linkKind(ctx, ctx.has.subIssues, "Parent", GHES_SINCE.subIssues);
+  if (recorded.kind !== "readable") return { kind: "cant-record", reason: recorded.reason };
+  const [a, b] = [issueAt(host, from), issueAt(host, to)];
+  if ("kind" in a) return a;
+  if ("kind" in b) return b;
+  const [fromRef, toRef] = [`${a.owner}/${a.name}#${a.number}`, `${b.owner}/${b.name}#${b.number}`];
+  const variables = { fromOwner: a.owner, fromName: a.name, fromNumber: a.number, toOwner: b.owner, toName: b.name, toNumber: b.number };
+  const read = await graphql(cli, host, linkEndsQuery(ctx), variables);
+  if (read.kind === "missing") return ghMissing(host);
+  const body = parse(read.stdout);
+  type End = { id: string; parent?: { id: string; number: number; repository: { nameWithOwner: string } } | null } | null;
+  const data = body?.data as { from?: { issue: End } | null; to?: { issue: End } | null } | undefined;
+  const errors = (body?.errors ?? []) as GraphqlError[];
+  const [fromIssue, toIssue] = [data?.from?.issue, data?.to?.issue];
+  if (!fromIssue || !toIssue) {
+    // An Issue that isn't there, or that this login can't see, is left `null` with an error at it.
+    const onlyMissing = data && errors.every((e) => e.type === "NOT_FOUND" || e.type === "FORBIDDEN");
+    if (!onlyMissing) {
+      const failed = failure(read as Extract<CliResult, { kind: "exited" }>, body, host, `${a.owner}/${a.name}`);
+      if (failed.kind !== "not-found") return failed;
+    }
+    return { kind: "not-found", reason: `no Issue ${fromIssue ? toRef : fromRef} on ${host} that this login can read` };
+  }
+  const parent = toIssue.parent;
+  if (kind === "parent" && parent) {
+    if (parent.id === fromIssue.id) return { kind: "linked" };
+    return { kind: "not-allowed", reason: `${toRef} already has a Parent, ${parent.repository.nameWithOwner}#${parent.number}, and the Map never moves an Issue from its Parent` };
+  }
+  const mutation = LINK_MUTATIONS[kind];
+  const wrote = await graphql(cli, host, mutation.query, { to: toIssue.id, from: fromIssue.id });
+  if (wrote.kind === "missing") return ghMissing(host);
+  const said = parse(wrote.stdout);
+  if (wrote.code === 0 && (said?.data as Record<string, unknown> | undefined)?.[mutation.name]) return { kind: "linked" };
+  const refused = ((said?.errors ?? []) as GraphqlError[]).find((e) => e.path?.[0] === mutation.name || e.type === "INSUFFICIENT_SCOPES");
+  if (refused?.type === "INSUFFICIENT_SCOPES") {
+    return { kind: "not-allowed", reason: `this login's token can't write: it has no \`repo\` scope — run \`gh auth refresh --hostname ${host} --scopes repo\`` };
+  }
+  if (refused && refused.type !== "RATE_LIMITED") {
+    return { kind: "not-allowed", reason: `${host} refused to let this login link ${fromRef} to ${toRef}: ${refused.message} — it takes the triage role in ${b.owner}/${b.name} and a token that may write Issues` };
+  }
+  return failure(wrote as Extract<CliResult, { kind: "exited" }>, said, host, `${b.owner}/${b.name}`);
 }
 
 /** A list is passed as one field per item, and an empty one as `key[]`. */

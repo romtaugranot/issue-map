@@ -94,6 +94,12 @@ export interface SnapshotStore {
    * write once a refresh has read it.
    */
   assigned(key: SnapshotKey, issue: string, assignees: string[]): Promise<void>;
+  /**
+   * Takes in a Link the Map wrote, as `assigned` does a write: each Issue
+   * `ends` names by identity that the Snapshot holds gets its end of it,
+   * unless it has that end already.
+   */
+  linked(key: SnapshotKey, ends: { issue: string; link: Link }[]): Promise<void>;
   /** Deletes what's kept for a login the Tracker refused, keeping only why. */
   forget(key: SnapshotKey, reason: string): Promise<Refused>;
   /**
@@ -331,6 +337,20 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
         const snapshot = current(await readJson<Snapshot>(at.snapshot));
         if (!snapshot?.issues.some((held) => held.id === issue)) return;
         await save(at.snapshot, { ...snapshot, issues: snapshot.issues.map((held) => (held.id === issue ? { ...held, assignees } : held)) });
+      });
+    },
+
+    async linked(key, ends) {
+      const at = paths(key);
+      if (!current(await readJson<Snapshot>(at.snapshot))) return;
+      await locked(at.lock, async () => {
+        const snapshot = current(await readJson<Snapshot>(at.snapshot));
+        if (!snapshot) return;
+        const issues = snapshot.issues.map((held) => {
+          const more = ends.filter((end) => end.issue === held.id && !held.links.some((l) => l.role === end.link.role && l.to.id === end.link.to.id));
+          return more.length > 0 ? { ...held, links: [...held.links, ...more.map((end) => end.link)] } : held;
+        });
+        await save(at.snapshot, { ...snapshot, issues });
       });
     },
 

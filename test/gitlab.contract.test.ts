@@ -89,7 +89,7 @@ describe("GitLab by version: a self-hosted GitLab from 16.0 is asked only for wh
 
       assert.deepEqual(card.links.map((l) => `${l.role} ${l.name}`).sort(), ["blocker Blocked by", "parent Parent"], "a duplicate is no Link");
       const byMention = issue(page.issues, "#4").id;
-      assert.deepEqual(card.mentionedBy, version < "16.7" ? [] : [byMention]);
+      assert.deepEqual(card.mentionedBy, version < "16.7" ? [] : [{ id: byMention, ref: `${tools}#4` }]);
 
       assert.ok(shared.readable);
       const epicCard = await tracker.issue(shared.url);
@@ -266,6 +266,47 @@ describe("GitLab by version: whether this login can write, and whether a Project
 
   test("before 15.5 GitLab doesn't say what a token may write", async () => {
     assert.equal((await write("15.4.0")).kind, "cant-tell");
+  });
+});
+
+describe("GitLab: writing a Link (need 10)", () => {
+  const tools = "fixture-org/tools";
+  const epic: ProjectSpec = { path: "fixture-org", number: 2, open: 1, namespace: true, issues: [{ number: 12, title: "Q3 importer epic" }] };
+  const world = (version: string): World => ({
+    servers: { "git.example.com": { runs: "this-kind", version } },
+    loggedInTo: ["git.example.com"],
+    projects: [{ path: tools, number: 1, open: 2, issues: [{ number: 1 }, { number: 2 }] }, epic],
+  });
+  async function trackerAt(version: string) {
+    const probed = await arrange(world(version)).kind.probe("git.example.com");
+    return (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+  }
+
+  test("only a task goes under an Issue: GitLab's refusal to put one Issue under another is said, and nothing is written", async () => {
+    const tracker = await trackerAt(LATEST);
+    const answer = await tracker.link(`${tools}#1`, "parent", `${tools}#2`);
+    assert.equal(answer.kind, "not-allowed", JSON.stringify(answer));
+    assert.match((answer as { reason: string }).reason, /not allowed to add this type of parent/);
+    const two = (await tracker.issue(`${tools}#2`)) as Extract<IssueAnswer, { kind: "issue" }>;
+    assert.deepEqual(two.issue.links, []);
+  });
+
+  test("GitLab keeps one Link between two Issues: a Blocks Link where a Related one is recorded isn't said to be written", async () => {
+    const related: World = { ...world(LATEST), links: [[`${tools}#1`, "related", `${tools}#2`]] };
+    const probed = await arrange(related).kind.probe("git.example.com");
+    const tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+    const answer = await tracker.link(`${tools}#1`, "blocks", `${tools}#2`);
+    assert.equal(answer.kind, "cant-record", JSON.stringify(answer));
+    assert.match((answer as { reason: string }).reason, /already Linked/);
+    const one = (await tracker.issue(`${tools}#1`)) as Extract<IssueAnswer, { kind: "issue" }>;
+    assert.deepEqual(one.issue.links.map((link) => link.role), ["related"]);
+  });
+
+  test("before 17.7 an epic isn't a work item, so no Issue is put under one", async () => {
+    const answer = await (await trackerAt("17.6.0")).link("fixture-org&12", "parent", `${tools}#1`);
+    assert.equal(answer.kind, "cant-record", JSON.stringify(answer));
+    assert.match((answer as { reason: string }).reason, /17\.7/);
+    assert.deepEqual(await (await trackerAt("17.7.0")).link("fixture-org#12", "parent", `${tools}#1`), { kind: "linked" });
   });
 });
 

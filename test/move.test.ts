@@ -93,6 +93,9 @@ async function world(options: { others?: HomeAnswer["others"]; trail?: Position[
     showCard,
     start: startWork,
     assign: (tracker, project, ref) => assignToViewer({ store: snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-move-")), { now: () => NOW }) }, tracker, project, ref),
+    suggest: async (_tracker, project, view) => `SUGGEST ${project.path} ${view.kind}`,
+    offer: async () => ({ text: "OFFER" }),
+    confirm: async () => "CONFIRM",
   };
   return {
     deps,

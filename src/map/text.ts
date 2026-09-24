@@ -46,3 +46,11 @@ export function ago(then: string, now: string): string {
   if (ms < 730 * DAY) return `${Math.floor(ms / (30 * DAY))}mo ago`;
   return `${Math.floor(ms / (365 * DAY))}y ago`;
 }
+
+/** `text` at most about `max` characters long: its start and its end, with how much was left out between. */
+export function cut(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const start = Math.floor((max * 2) / 3);
+  const end = max - start;
+  return `${text.slice(0, start)}\n[… ${count(text.length - start - end)} characters left out …]\n${text.slice(-end)}`;
+}

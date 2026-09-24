@@ -6,7 +6,7 @@
  * its REST API fills in.
  */
 import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
-import type { AssignAnswer, CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkKind, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
+import type { AssignAnswer, CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkAnswer, LinkKind, Mention, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitLab";
 
@@ -204,6 +204,7 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
       capabilities: async (project) => (loginIsFor ? capabilities(ctx, project) : noLogin(host)),
       thread: async (locator) => (loginIsFor ? thread(ctx, locator) : noLogin(host)),
       assign: async (locator, viewer) => (loginIsFor ? assign(ctx, locator, viewer) : noLogin(host)),
+      link: async (from, kind, to) => (loginIsFor ? link(ctx, from, kind, to) : noLogin(host)),
     };
   };
 
@@ -678,7 +679,7 @@ interface ThreadWidgets {
   discussions?: { pageInfo: { hasPreviousPage: boolean }; nodes: { notes: { nodes: { body: string; createdAt: string; author: { username: string } | null }[] } }[] };
 }
 
-function card(node: ItemNode, mentionedBy: string[], unread: Unread): IssueAnswer {
+function card(node: ItemNode, mentionedBy: Mention[], unread: Unread): IssueAnswer {
   return {
     kind: "issue",
     issue: {
@@ -739,6 +740,96 @@ async function assign(ctx: Ctx, locator: string, viewer: string): Promise<Assign
   return { kind: "not-allowed", reason: `GitLab refused to let this login assign ${ref}: assigning in ${path} takes at least the Reporter role` };
 }
 
+/** A Link end as need 10 reads it: its identity, and the Parent it has. */
+interface LinkEnd {
+  id: string;
+  reference: string;
+  widgets: { parent?: { id: string; reference: string } | null }[];
+}
+
+/**
+ * Need 10. Blocks and Related Links are written through REST, between a
+ * Project's Issues, from the one at `from`; GitLab answers with the kind it
+ * recorded. A Parent is written through the work-item GraphQL once both
+ * ends are read, so the far end is never moved from a Parent it has, which
+ * GitLab itself would do; before 17.7 an epic isn't a work item, and isn't
+ * written to.
+ */
+async function link(ctx: Ctx, from: string, kind: LinkKind, to: string): Promise<LinkAnswer> {
+  const [a, b] = [itemAt(ctx, from), itemAt(ctx, to)];
+  if ("kind" in a) return a;
+  if ("kind" in b) return b;
+  const [fromRef, toRef] = [`${a.path}#${a.iid}`, `${b.path}#${b.iid}`];
+  const tokenReads = (answer: Extract<CliResult, { kind: "exited" }>): LinkAnswer | null =>
+    /insufficient_scope/.test(`${answer.stdout}\n${answer.stderr}`)
+      ? { kind: "not-allowed", reason: `this login's token can't write: it has no \`api\` scope — run \`glab auth login --hostname ${ctx.host}\` with a token that has it` }
+      : null;
+  const refused = (path: string): LinkAnswer => ({
+    kind: "not-allowed",
+    reason: `GitLab refused to let this login link ${fromRef} to ${toRef}: it takes at least the ${ctx.version === null || atLeast(ctx.version, GUEST_WRITES_LINKS) ? "Guest" : "Reporter"} role in ${path}`,
+  });
+
+  if (kind !== "parent") {
+    const grouped = a.inGroup ? fromRef : b.inGroup ? toRef : null;
+    if (grouped) return { kind: "cant-record", reason: `the Map writes Blocks and Related Links only between Projects' Issues, and ${grouped} is a group's` };
+    const type = kind === "blocks" ? "blocks" : "relates_to";
+    const endpoint = `projects/${encodeURIComponent(a.path)}/issues/${a.iid}/links`;
+    const answer = await ctx.cli("glab", ["api", "--hostname", ctx.host, endpoint, "--method", "POST", "-f", `target_project_id=${b.path}`, "-f", `target_issue_iid=${b.iid}`, "-f", `link_type=${type}`]);
+    if (answer.kind === "missing") return glabMissing(ctx.host);
+    const scope = tokenReads(answer);
+    if (scope) return scope;
+    const body = parse(answer.stdout);
+    if (answer.code === 0) {
+      if (body?.link_type === type) return { kind: "linked" };
+      return { kind: "not-allowed", reason: `GitLab recorded ${fromRef} and ${toRef} as ${LINK_NAMES[String(body?.link_type)] ?? String(body?.link_type)} rather than ${LINK_NAMES[type]}` };
+    }
+    const said = `${answer.stdout}\n${answer.stderr}`;
+    // GitLab keeps one Link between two Issues, whatever its type, so the one there may not be this.
+    if (/\b409\b|already assigned/i.test(said)) return { kind: "cant-record", reason: `${fromRef} and ${toRef} are already Linked, and GitLab keeps one Link between two Issues` };
+    if (/\b404\b/.test(said)) return { kind: "not-found", reason: `no Issue ${fromRef} or ${toRef} on ${ctx.host} that this login can read` };
+    if (/\b403\b/.test(said)) return refused(a.path);
+    return failure(ctx, answer, body, a.path);
+  }
+
+  if (!ctx.has.workItems) return { kind: "cant-record", reason: `GitLab ${ctx.version} writes a Parent only from ${SINCE.workItems}` };
+  const epic = a.inGroup ? fromRef : b.inGroup ? toRef : null;
+  if (epic && !ctx.has.epicWorkItems) return { kind: "cant-record", reason: `GitLab ${ctx.version} keeps ${epic}, a group's epic, apart from work items until ${SINCE.epicWorkItems}, and the Map doesn't write it` };
+  const ends: LinkEnd[] = [];
+  for (const [at, ref] of [[a, fromRef], [b, toRef]] as const) {
+    const within = (container: string) => `query($path: ID!) {
+  currentUser { username }
+  ${container}(fullPath: $path) {
+    workItems(iids: ${JSON.stringify([at.iid])}, first: 1) { nodes { id reference(full: true) widgets { ... on WorkItemWidgetHierarchy { parent { id reference(full: true) } } } } }
+  }
+}`;
+    const found = await workItemIn<{ workItems: { nodes: LinkEnd[] } }>(ctx, at.path, at.inGroup, within);
+    if ("kind" in found) return notFound(found, ctx, ref);
+    const node = found.container?.workItems.nodes[0];
+    if (!node) return { kind: "not-found", reason: `no Issue ${ref} on ${ctx.host} that this login can read` };
+    ends.push(node);
+  }
+  const [parent, child] = ends as [LinkEnd, LinkEnd];
+  const has = Object.assign({}, ...child.widgets).parent as LinkEnd["widgets"][number]["parent"];
+  if (has) {
+    if (has.id === parent.id) return { kind: "linked" };
+    return { kind: "not-allowed", reason: `${toRef} already has a Parent, ${has.reference}, and the Map never moves an Issue from its Parent` };
+  }
+  const mutation = `mutation($id: WorkItemID!, $parent: WorkItemID!) {
+  workItemUpdate(input: {id: $id, hierarchyWidget: {parentId: $parent}}) { workItem { id } errors }
+}`;
+  const answer = await ctx.cli("glab", ["api", "--hostname", ctx.host, "graphql", "-f", `query=${mutation}`, "-f", `id=${child.id}`, "-f", `parent=${parent.id}`]);
+  if (answer.kind === "missing") return glabMissing(ctx.host);
+  const scope = tokenReads(answer);
+  if (scope) return scope;
+  const body = parse(answer.stdout);
+  const update = (body?.data as { workItemUpdate?: { workItem: { id: string } | null; errors: string[] } | null } | null | undefined)?.workItemUpdate;
+  if (update?.errors.length) return { kind: "not-allowed", reason: `GitLab refused to put ${toRef} under ${fromRef}: ${update.errors.join("; ")}` };
+  if (update?.workItem) return { kind: "linked" };
+  // Both ends were just read, so a refusal at the mutation is of the write.
+  if (((body?.errors ?? []) as GraphqlError[]).some((e) => e.path?.[0] === "workItemUpdate")) return refused(b.path);
+  return failure(ctx, answer, body, b.path);
+}
+
 function notFound(answer: Failure, ctx: Ctx, locator: string): Failure {
   return answer.kind === "not-found" ? { kind: "not-found", reason: `no Issue ${locator} on ${ctx.host} that this login can read` } : answer;
 }
@@ -749,7 +840,7 @@ function notFound(answer: Failure, ctx: Ctx, locator: string): Failure {
  * 100 notes of its activity are read, and merge requests and commits that
  * name it aren't Issues.
  */
-async function mentions(ctx: Ctx, node: ItemNode): Promise<string[] | Failure> {
+async function mentions(ctx: Ctx, node: ItemNode): Promise<Mention[] | Failure> {
   const notes = (widgetsOf(node).discussions?.nodes ?? []).flatMap((discussion) => discussion.notes.nodes);
   const refs = notes.flatMap((note) => {
     if (note.systemNoteMetadata?.action !== "cross_reference") return [];
@@ -758,10 +849,10 @@ async function mentions(ctx: Ctx, node: ItemNode): Promise<string[] | Failure> {
   });
   if (refs.length === 0 || !ctx.has.workItemsByReference) return [];
   const context = node.namespace.fullPath;
-  const query = `query {\n  workItemsByReference(contextNamespacePath: ${JSON.stringify(context)}, refs: ${JSON.stringify(refs)}) { nodes { id } }\n}`;
+  const query = `query {\n  workItemsByReference(contextNamespacePath: ${JSON.stringify(context)}, refs: ${JSON.stringify(refs)}) { nodes { id reference(full: true) } }\n}`;
   const answer = await graphql(ctx, query, {}, context, false);
   if ("kind" in answer) return answer;
-  return ((answer.data.workItemsByReference as { nodes: ({ id: string } | null)[] } | null)?.nodes ?? []).flatMap((n) => (n ? [n.id] : []));
+  return ((answer.data.workItemsByReference as { nodes: ({ id: string; reference: string } | null)[] } | null)?.nodes ?? []).flatMap((n) => (n ? [{ id: n.id, ref: n.reference }] : []));
 }
 
 /** Need 5 for Blocks, into `unread`: nothing where the Project can record them, else why not. */
@@ -1136,6 +1227,8 @@ function farEnd(end: EndNode): FarEnd {
     url: end.webUrl,
     ...(end.state === "CLOSED" && end.closedAt ? { closedAt: end.closedAt } : {}),
     ...(how ? { closedAs: how } : {}),
+    // Before 17.8 REST names the duplicated Issue only by its API address, which isn't one users type.
+    ...(how && !/\/api\/v4\//.test(end.duplicatedToWorkItemUrl!) ? { duplicateOf: end.duplicatedToWorkItemUrl! } : {}),
   };
 }
 
