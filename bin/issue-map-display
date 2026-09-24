@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# The MessageDisplay hook (ADR 0009). It runs as every reply streams, so a
+# reply with no line of the Map's leaves here, without starting Node.
+input=$(cat)
+[[ $input == *"⟦issue-map "* ]] || exit 0
+printf '%s' "$input" | exec node "$(dirname "$(realpath "$0")")/../src/display.ts"
