@@ -48,14 +48,16 @@ export function gitlabMatrix(tags: Record<Edition, string[]>, floor: string): Ma
 
 /**
  * The jobs `wanted` names, a comma-separated list of minors such as
- * `16.0-ee, 19.4`: one edition, or both where none is given. Nothing
- * wanted is every job. A name no job has is refused, so a narrowed run
- * never passes by running nothing.
+ * `16.0-ee, 19.4`: one edition, or both where none is given. `ends` is the
+ * oldest and newest minors, as the weekly run tests, the full matrix being
+ * run before a release. Nothing wanted is every job. A name no job has is
+ * refused, so a narrowed run never passes by running nothing.
  */
 export function only(matrix: MatrixEntry[], wanted: string): MatrixEntry[] {
-  const names = wanted.split(",").map((name) => name.trim()).filter(Boolean);
-  if (names.length === 0) return matrix;
   const minor = (entry: MatrixEntry) => entry.version.split(".").slice(0, 2).join(".");
+  const ends = matrix.length === 0 ? [] : [minor(matrix[0]!), minor(matrix.at(-1)!)];
+  const names = wanted.split(",").map((name) => name.trim()).filter(Boolean).flatMap((name) => (name === "ends" ? ends : [name]));
+  if (names.length === 0) return matrix;
   const matches = (name: string, entry: MatrixEntry) => name === minor(entry) || name === `${minor(entry)}-${entry.edition}`;
   const unknown = names.filter((name) => !matrix.some((entry) => matches(name, entry)));
   if (unknown.length > 0) throw new Error(`no promised GitLab job is ${unknown.join(", ")}`);

@@ -1,7 +1,9 @@
 # The GitLab version matrix (ADR 0004): every GitLab minor the Map promises,
 # as CE and EE, one per job on a hosted runner. Which minors that is comes
 # from scripts/ci/versions.ts, worked out from the bands each run, so a
-# GitLab released after a plugin release is in the next run.
+# GitLab released after a plugin release is in the next run. The weekly run
+# tests only the oldest and newest minors, the full matrix costing a private
+# repository's Actions minutes for a month; a release runs every one.
 #
 # Each job runs that GitLab's image over HTTPS at gitlab.test, seeds the
 # GitLab Free Fixture on it, and reads it back through the real adapter,
@@ -19,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Only these minors, such as 16.0-ee, 19.4 (both editions); empty runs every promised one"
+        description: "Only these minors, such as 16.0-ee, 19.4 (both editions), or ends (the oldest and newest); empty runs every promised one"
         required: false
         default: ""
   workflow_call:
@@ -43,7 +45,7 @@ jobs:
           node-version: 24
       - id: versions
         env:
-          ONLY: ${{ inputs.only }}
+          ONLY: ${{ github.event_name == 'schedule' && 'ends' || inputs.only }}
         run: |
           matrix=$(node scripts/ci/versions.ts gitlab "$ONLY")
           echo "$matrix"
