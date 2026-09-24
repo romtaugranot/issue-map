@@ -13,8 +13,8 @@ The Map puts every Project in a band from what its Tracker shows there ([ADR 000
 | GHES 3.18 and later, the releases GitHub still supports | Promised | Stood in for: github.com's nightly reads, and every query checked against each release's published schema on every change |
 | Older GHES | Best effort | Read-only and marked untested |
 | gitlab.com | Promised | The contract suite on every change; the fixture Projects read live every night, on Free and on a licensed tier |
-| GitLab Dedicated | Promised | Stood in for: gitlab.com's nightly reads and the GitLab version matrix |
-| Self-managed GitLab 16.0 and later, every tier | Promised | The GitLab version matrix, weekly and before every release: every minor as CE and as EE, one per job. EE runs unlicensed, and licensed tiers are stood in for by the licensed group on gitlab.com |
+| GitLab Dedicated | Promised | Stood in for: gitlab.com's nightly reads, the GitLab version matrix, and every query checked on every change against the schema recorded from each promised version's EE |
+| Self-managed GitLab 16.0 and later, every tier | Promised | The GitLab version matrix, weekly and before every release: every minor as CE and as EE, one per job. EE runs unlicensed, and licensed tiers are stood in for by the licensed group on gitlab.com and by every query checked against the schema recorded from each version's EE |
 | Self-managed GitLab 13.4 to 15.11 | Best effort | Read-only and marked untested |
 | GitLab before 13.4 | Refused | The Map can read no Link kind there |
 

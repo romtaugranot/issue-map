@@ -25,6 +25,7 @@ export function arrange(given: World, env: Record<string, string> = envFor(given
   let requests = 0;
   const loginsSentTo: string[] = [];
   const tokenSentTo: string[] = [];
+  const queries: string[] = [];
   const kind = gitlab({
     env,
     cli: async (command, args, unset = []) => {
@@ -42,6 +43,8 @@ export function arrange(given: World, env: Record<string, string> = envFor(given
       if (args[0] === "auth") return envToken || stored ? exited(0, "") : exited(1, "", `x ${host} has not been authenticated with glab.\n`);
       requests++;
       loginsSentTo.push(apiHost);
+      const query = args.find((a) => a.startsWith("query="));
+      if (query !== undefined) queries.push(query.slice("query=".length));
       const login = envToken ? (apiHost === world.envTokenFor ? "ok" : "refused") : stored ? (world.login === "refused" ? "refused" : "ok") : "none";
       return glabApi(world, apiHost, login, args);
     },
@@ -50,7 +53,7 @@ export function arrange(given: World, env: Record<string, string> = envFor(given
       return probe(world, new URL(url));
     },
   });
-  return { kind, requests: () => requests, loginsSentTo: () => loginsSentTo.filter((h) => h !== "gitlab.com"), tokenSentTo: () => tokenSentTo };
+  return { kind, requests: () => requests, loginsSentTo: () => loginsSentTo.filter((h) => h !== "gitlab.com"), tokenSentTo: () => tokenSentTo, queries: () => queries };
 }
 
 /** glab takes GITLAB_TOKEN for every host, and GITLAB_HOST names the one it's meant for. */
@@ -234,17 +237,18 @@ function notesWidget(notes: { body: string; systemNoteMetadata: { action: string
 }
 
 /**
- * The comments widget: the last `n` discussions the query asks for, oldest
- * first; each comment in the World starts a discussion, and its first reply
- * is in the same one.
+ * The comments widget: the first `n` discussions the query asks for, in the
+ * order it asks for, oldest first unless it sorts them newest first; each
+ * comment in the World starts a discussion, and its first reply is in the
+ * same one.
  */
 function commentsWidget(issue: IssueSpec, query: string) {
-  const last = Number(/filter: ONLY_COMMENTS, last: (\d+)/.exec(query)?.[1] ?? 20);
+  const first = Number(/filter: ONLY_COMMENTS[^)]*first: (\d+)/.exec(query)?.[1] ?? 20);
   const note = (c: NonNullable<IssueSpec["comments"]>[number]) => ({ body: c.body, createdAt: c.at, author: { username: c.author } });
   const comments = issue.comments ?? [];
   const discussions = comments.map((c) => ({ notes: { nodes: [note(c)] } }));
-  const latest = discussions.slice(-last);
-  return { discussions: { pageInfo: { hasPreviousPage: latest.length < discussions.length }, nodes: latest } };
+  const ordered = query.includes("sort: CREATED_DESC") ? [...discussions].reverse() : discussions;
+  return { discussions: { pageInfo: { hasNextPage: ordered.length > first }, nodes: ordered.slice(0, first) } };
 }
 
 /**
@@ -263,6 +267,9 @@ const SINCE: [RegExp, string, string][] = [
   [/\bmaxAccessLevel\b/, "16.9", "Field 'maxAccessLevel' doesn't exist on type 'Project'"],
   [/\bforkedFrom\b/, "18.0", "Field 'forkedFrom' doesn't exist on type 'Project'"],
   [/\bavailableFeatures\b/, "18.3", "Field 'availableFeatures' doesn't exist on type 'Namespace'"],
+  // Discussions page forward only, on every version: the latest come first once they can be sorted.
+  [/\bdiscussions\([^)]*\blast:/, "999.0", "Field 'discussions' doesn't accept argument 'last'"],
+  [/\bdiscussions\([^)]*\bsort:/, "18.4", "Field 'discussions' doesn't accept argument 'sort'"],
 ];
 
 function graphql(gl: Gitlab, query: string, field: (name: string) => string | undefined): CliResult {
