@@ -155,7 +155,7 @@ describe("Take next", () => {
     ]);
   });
 
-  test("orders by how many wait on it, then earliest Planned date, then oldest, and shows 5", () => {
+  test("orders by how many wait on it, then earliest Planned date, then oldest, and shows 5, counting the rest in its heading", () => {
     const s = snapshot(
       [
         { n: 1 },
@@ -171,7 +171,7 @@ describe("Take next", () => {
       [[1, "blocks", 9], [7, "blocks", 8], [2, "related", 3], [3, "related", 4], [4, "related", 5], [5, "related", 6]],
     );
     const expected = [
-      "**Take next: 7** — most waited on first",
+      "**Take next: 7** — most waited on first · 2 more not listed",
       "- #7 Issue 7 — ▶1 wait on it · due 2026-11-01",
       "- #1 Issue 1 — ▶1 wait on it",
       "- #3 Issue 3 — due 2026-10-01",
@@ -203,7 +203,7 @@ describe("Take next", () => {
       [[1, "parent", 2], [1, "parent", 3], [1, "parent", 4], [1, "parent", 5], [1, "parent", 6], [20, "related", 21]],
     );
     assert.deepEqual(takeNext(overview(s)), [
-      "**Take next: 7** — most waited on first",
+      "**Take next: 7** — most waited on first · 1 more not listed",
       "- #2 Issue 2 — via #1",
       "- #3 Issue 3 — via #1",
       "- #4 Issue 4 — via #1",
@@ -428,7 +428,7 @@ describe("a Group's outline (ADR 0008)", () => {
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
     );
-    assert.equal(outline(tree, "#2").split("\n")[2], "**Under #2: 1** — most under it first", "a level deeper again");
+    assert.equal(outline(tree, "#2").split("\n")[2], "**Under #2: 1** — oldest first", "a level deeper again, where nothing has anything beneath it");
     assert.equal(outline(tree, "https://github.com/fixture-org/tools/issues/2"), outline(tree, "#2"), "by URL too");
   });
 
@@ -442,7 +442,7 @@ describe("a Group's outline (ADR 0008)", () => {
   test("an Issue with Related Links shows how many on its line, and the Related Issue stays in its own Group", () => {
     // #2 is Related to #4, which is in the Group #3 heads, and to an Outside Issue.
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [3, "parent", 4], [2, "related", 4], [2, "related", { outside: "fixture-org/plans#9" }]]);
-    assert.deepEqual(outline(s, 1).split("\n").slice(2, 4), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — 2 Related"]);
+    assert.deepEqual(outline(s, 1).split("\n").slice(2, 4), ["**Under #1, alone at the top: 1** — oldest first", "- #2 Issue 2 — 2 Related"]);
     assert.equal(outline(s, 2).split("\n")[3], "- #4 Issue 4 — 1 Related");
   });
 
@@ -451,18 +451,18 @@ describe("a Group's outline (ADR 0008)", () => {
     assert.doesNotMatch(overview(s), /Related/);
   });
 
-  test("a Group of Issues joined only by Related lists them all at its top, a page of 10 at a time", () => {
+  test("a Group of Issues joined only by Related lists them all at its top, oldest first, a page of 10 at a time, with nothing beneath to open", () => {
     const issues = Array.from({ length: 12 }, (_, i): IssueSpec => ({ n: i + 1 }));
     const links = issues.slice(1).map(({ n }): LinkSpec => [n - 1, "related", n]);
     const first = outline(snapshot(issues, links), 1).split("\n");
-    assert.deepEqual(first.slice(2, 5), ["**At the top: 12** — most under it first · page 1 of 2", "- #1 Issue 1 — 1 Related", "- #2 Issue 2 — 2 Related"]);
+    assert.deepEqual(first.slice(2, 5), ["**At the top: 12** — oldest first · page 1 of 2", "- #1 Issue 1 — 1 Related", "- #2 Issue 2 — 2 Related"]);
     assert.equal(first.length, 14);
-    assert.equal(first.at(-1), "_`more` for the next 10 · name one to open the level below it · `map` for the Map_");
+    assert.equal(first.at(-1), "_`more` for the next 10 · `map` for the Map_");
     assert.deepEqual(outline(snapshot(issues, links), 1, 2).split("\n").slice(2), [
-      "**At the top: 12** — most under it first · page 2 of 2",
+      "**At the top: 12** — oldest first · page 2 of 2",
       "- #11 Issue 11 — 2 Related",
       "- #12 Issue 12 — 1 Related",
-      "_Name one to open the level below it · `map` for the Map_",
+      "_`map` for the Map_",
     ]);
   });
 
