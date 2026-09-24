@@ -24,11 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: The version is the plugin's, and not released yet
+      - name: Released from main, as a version the plugin declares and hasn't released yet
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then echo "::error::a release is made from main, not $GITHUB_REF"; exit 1; fi
+          if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::$VERSION isn't a version such as 0.1.0"; exit 1; fi
           declared=$(node -p 'require("./.claude-plugin/plugin.json").version')
           if [ "$declared" != "$VERSION" ]; then echo "::error::.claude-plugin/plugin.json says $declared, not $VERSION"; exit 1; fi
           if gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" >/dev/null 2>&1; then echo "::error::v$VERSION is already tagged"; exit 1; fi
@@ -50,9 +52,11 @@ jobs:
     needs: check
     uses: ./.github/workflows/gitlab-matrix.yml
     secrets: inherit
-    # What the called workflow's jobs may ask for; only a nightly run files an Issue.
+    # What the called workflow's jobs may ask for, checked before any of them starts: its schemas job opens a pull
+    # request with the EE schemas the full matrix recorded, and only a scheduled run files an Issue.
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
       issues: write
 
   release:
@@ -65,4 +69,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "v${{ inputs.version }}" --target "${{ github.sha }}" --title "v${{ inputs.version }}" --generate-notes
+          VERSION: ${{ inputs.version }}
+        run: gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
