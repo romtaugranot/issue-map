@@ -33,7 +33,7 @@ describe("recorded Snapshots", () => {
   // The worked example of #12: the RFC Tracker has four waiting on it and gives way to its unassigned children.
   test("opentofu/opentofu: Take next opens with #3414's children, carrying its count", () => {
     const lines = section(draw(recorded("opentofu__opentofu"), { kind: "overview" }).text, "**Take next");
-    assert.match(lines[0]!, /^\*\*Take next: 15\*\* — most waited on first · 4 taken by others · Closing Requests unread \(the recording didn't read them\)/);
+    assert.match(lines[0]!, /^\*\*Take next: 15\*\* — most waited on first · 10 more not listed · 4 taken by others · Closing Requests unread \(the recording didn't read them\)/);
     assert.deepEqual(lines.slice(1, 4).map((l) => l.replace(/^(- #\d+) .* — /, "$1 — ")), ["- #4227 — ▶4 via #3414", "- #4297 — ▶4 via #3414", "- #4390 — ▶4 via #3414"]);
   });
 
@@ -83,7 +83,7 @@ describe("recorded Snapshots", () => {
       const lines = outline.split("\n");
       assert.ok(lines.length <= OUTLINE_LINES, `${lines.length} lines:\n${outline}`);
       assert.match(lines[0]!, /^\*\*Group 1 of 5,812\*\* · ↗gitlab-org&8918 .* \(an Outside Issue\) — 306 Issues, 1↗$/);
-      assert.match(lines[2]!, /^\*\*Under ↗gitlab-org&8918, alone at the top: 306\*\* — most under it first · page 1 of 31$/);
+      assert.match(lines[2]!, /^\*\*Under ↗gitlab-org&8918, alone at the top: 306\*\* — oldest first · page 1 of 31$/);
       assert.equal(lines.filter((l) => l.startsWith("- ")).length, 10);
       for (const page of [2, 31]) {
         const later = draw(snapshot, { kind: "under", ref: "gitlab-org&8918", page }).text.split("\n");

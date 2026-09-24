@@ -156,26 +156,31 @@ function takeNextSection(snapshot: Snapshot, next: TakeNext, shows: Shows): stri
   const { picks, takenByOthers, closingRequestsUnread } = next;
   const unread = closingRequestsUnread === null ? "" : ` · Closing Requests unread (${closingRequestsUnread}), so none leaves an Issue out`;
   const taken = picks.length > 0 && takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
-  return [`**${head}** — ${why}${taken}${unread}`, ...pickLines(picks, snapshot, shows)];
+  const { lines, untold } = pickLines(picks, snapshot, shows);
+  const more = untold > 0 ? ` · ${count(untold)} more not listed` : "";
+  return [`**${head}** — ${why}${more}${taken}${unread}`, ...lines];
 }
 
-/** Take next's lines, where the children standing in for one Parent past the first few are held in a count. */
-function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): string[] {
+/** Take next's lines, where the children standing in for one Parent past the first few are held in a count; and how many picks past the last line neither names nor counts. */
+function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): { lines: string[]; untold: number } {
   const lines: string[] = [];
   const shownUnder = new Map<OpenIssue, number>();
+  let told = 0;
   for (const pick of picks) {
     if (lines.length === TAKE_NEXT_LINES) break;
     const parent = pick.waiting.via;
-    if (!parent) {
+    const shown = parent ? (shownUnder.get(parent) ?? 0) : 0;
+    if (parent) shownUnder.set(parent, shown + 1);
+    if (shown < STAND_INS) {
       lines.push(`- ${pickLine(pick, snapshot, shows)}`);
-      continue;
+      told++;
+    } else if (shown === STAND_INS) {
+      const rest = picks.filter((p) => p.waiting.via === parent).length - STAND_INS;
+      lines.push(`- … ${count(rest)} more under ${parent!.ref}`);
+      told += rest;
     }
-    const shown = shownUnder.get(parent) ?? 0;
-    shownUnder.set(parent, shown + 1);
-    if (shown < STAND_INS) lines.push(`- ${pickLine(pick, snapshot, shows)}`);
-    else if (shown === STAND_INS) lines.push(`- … ${count(picks.filter((p) => p.waiting.via === parent).length - STAND_INS)} more under ${parent.ref}`);
   }
-  return lines;
+  return { lines, untold: picks.length - told };
 }
 
 /** One line of Take next, less its `- `: the overview's and the status line's alike. */
@@ -245,13 +250,15 @@ function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows)
   const pages = Math.max(1, Math.ceil(entries.length / OUTLINE_PAGE));
   const at = Math.min(Math.max(1, page), pages);
   const where = above ? `Under ${label(above)}${alone ? ", alone at the top" : ""}` : "At the top";
-  lines.push(`**${where}: ${count(entries.length)}** — most under it first${pages > 1 ? ` · page ${count(at)} of ${count(pages)}` : ""}`);
+  // A level where nothing has anything beneath it, as in a Group joined only by Related Links, has no deeper level to open.
+  const deeper = entries.some((e) => e.under > 0);
+  lines.push(`**${where}: ${count(entries.length)}** — ${deeper ? "most under it first" : "oldest first"}${pages > 1 ? ` · page ${count(at)} of ${count(pages)}` : ""}`);
   const shown = entries.slice((at - 1) * OUTLINE_PAGE, at * OUTLINE_PAGE);
   for (const member of [above, ...shown.map((entry) => entry.member)]) if (member?.kind === "issue") shows(member.issue);
   lines.push(...shown.map(entryLine));
   const hints = [
     at < pages ? `\`more\` for the next ${OUTLINE_PAGE}` : "",
-    entries.some((e) => e.under > 0 || e.how === null) ? "name one to open the level below it" : "",
+    deeper ? "name one to open the level below it" : "",
     "`map` for the Map",
   ].filter(Boolean);
   const hint = hints.join(" · ");
