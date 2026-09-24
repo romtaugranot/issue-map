@@ -7,6 +7,13 @@ description: The Map of this checkout's Project and its open Issues. Use when th
 
 The Map opens on the checkout's **Home Project**, and every command acts on the Project on screen: the Home Project until the user moves to another. Run every command in the checkout.
 
+**Reprint every output in your reply, exactly as printed.** The user doesn't see tool output, so what you don't reprint they never see — and the Map, an outline and a card are already cut to fit one screen. Never summarise one in a sentence of your own, reorder it or add Issues to it. This holds most of all:
+
+- when the user asks for several things at once — reprint each command's output in turn, in full;
+- right before asking with `AskUserQuestion` — the card the picker is about goes in your reply above it, line for line, not described.
+
+The only exceptions are said where they apply: `start`'s and `suggest`'s output, and the blocks under a card or list that say they are for you.
+
 - **The Map**: `issue-map map`, the overview of the Project on screen. Run it when the user types `map`.
 - **A Group's outline**: `issue-map group <n>`, where `n` is the Group's place in the overview's Group lines, counting from 1 at the top. It lists what sits at the Group's top, one level at a time. When the user picks a Group off the overview, open it by its place, even when they name it by the Issue on its line.
 - **The level beneath an Issue**: `issue-map group '<ref>'` with the reference as the outline or overview prints it (`#123`, `owner/name#45`, `group&12` — drop a leading `↗`), or the Issue's URL. Quote it: `#` starts a shell comment. When the user says `more` on an outline, run the same command with `--page <n>` for the next page.
@@ -18,7 +25,6 @@ The Map opens on the checkout's **Home Project**, and every command acts on the 
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
 - **The status line**: `issue-map statusline --setup` — see **The status line**.
 
-Reprint the output in your reply exactly as printed: tool output isn't reliably shown to the user, and the Map is already cut to fit one screen. Don't summarise it, reorder it or add Issues to it.
 
 ## Take next
 
@@ -34,7 +40,7 @@ The Map is drawn from a Snapshot, refreshed first when it's more than two minute
 
 ## Moving along Links
 
-A card shows the Issue's name and URL, whether it is Blocked and whom it's assigned to, its Links by kind under the Tracker's own names, its open Closing Requests, and how many other Issues mention it. Reprint the card itself exactly, line for line, every time one opens — whether the user typed `open #n` or picked it — and before asking where to go from it: never put it in a sentence of your own. Only the **Links to follow** and **Choices** blocks under it are for you, not the user. The card prints the Issue's URL, so never offer to open it in a browser.
+A card shows the Issue's name and URL, whether it is Blocked and whom it's assigned to, its Links by kind under the Tracker's own names, its open Closing Requests, and how many other Issues mention it. Reprint the card itself, line for line (see the top); only the **Links to follow** and **Choices** blocks under it are for you, not the user. The card prints the Issue's URL, so never offer to open it in a browser.
 
 When the card has Links to follow, ask with `AskUserQuestion` which one to follow — first the card's **Choices** in the order printed, **Assign … to me** (see **Assigning an Issue to yourself**) and **Start work on …** (see **Starting work on an Issue**), then Links in the block's order up to three options in all, labelled with the Link's reference and with its description as the option's description, then a fourth option — **More Links** while any are left, otherwise **The Map**. **More Links** asks again with the next three. "Other" takes any target the user types, which `issue-map go '<target>'` moves to. Open the picked Issue's card with `issue-map issue '<label>'`, reprint it, and ask again from there; **The Map** runs `issue-map map`.
 
