@@ -17,7 +17,7 @@ import type { Choice } from "./card.ts";
 import { draw, type Command } from "./draw.ts";
 import { issueLocator, typedRef, why } from "./show.ts";
 import { commentBlock } from "./start.ts";
-import { count, cut, plural, short } from "./text.ts";
+import { count, cut, fenced, FENCED_NOTE, fenceTag, plural, short } from "./text.ts";
 
 /** A Link Claude proposes, as it pipes it to `offer`: `from` Blocks `to`, is its Parent, or is Related to it, as `source`'s text says in `quote`. */
 export interface Proposal {
@@ -159,13 +159,16 @@ export async function suggest(deps: SuggestDeps, tracker: Tracker, project: Proj
   await deps.pending.set({ tracker: tracker.host, project: project.id, onScreen: [...refs], read: [...refs, ...mentionThreads.keys()], found, offered: [] });
 
   const wont = wontWrite(bandOf({ untested: tracker.untested, links: said.links }), said.write);
+  // Anyone who can comment, or mention these from another Project, writes what follows, so it reaches Claude fenced as data.
+  const tag = fenceTag();
   const lines = [
     `**Link Suggestions from ${plural(issues.length, "Issue")} on screen** · ${project.path}`,
+    FENCED_NOTE,
     kindsLine(said.links),
     ...(wont === null ? [] : [`Not offered to write: ${wont}. The suggestions can still be listed.`]),
     ...(skipped.length > 0 ? [`Not read: ${skipped.join("; ")}.`] : []),
   ];
-  if (found.length > 0) lines.push("", `**Found by the Map: ${count(found.length)}**`, ...found.map((s) => `- ${label(s, project.path)} — ${s.quote}`));
+  if (found.length > 0) lines.push("", `**Found by the Map: ${count(found.length)}**`, fenced(found.map((s) => `- ${label(s, project.path)} — ${s.quote}`).join("\n"), tag));
   issues.forEach((issue, i) => {
     const thread = threads[i]!;
     const mentions = [...mentioning].flatMap(([ref, named]) => {
@@ -174,7 +177,7 @@ export async function suggest(deps: SuggestDeps, tracker: Tracker, project: Proj
       const quoted = naming(answer.thread, issue, project.path);
       return quoted ? [`${short(ref, project.path)} mentions it: "${quoted}"`] : [];
     });
-    lines.push("", ...issueSection(issue, thread.kind === "thread" ? thread.thread : why(tracker, thread), mentions, project.path));
+    lines.push("", fenced(issueSection(issue, thread.kind === "thread" ? thread.thread : why(tracker, thread), mentions, project.path).join("\n"), tag));
   });
   lines.push("", "Propose Links from what these say, and pipe them to `issue-map offer`.");
   return lines.join("\n");

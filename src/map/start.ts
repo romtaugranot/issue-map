@@ -7,7 +7,7 @@
  */
 import type { IssueComment, Project, Thread, Tracker } from "../tracker/tracker.ts";
 import { issueLocator, typedRef, why } from "./show.ts";
-import { count, cut, plural, short } from "./text.ts";
+import { count, cut, FENCED_NOTE, fenced, fenceTag, plural, short } from "./text.ts";
 
 /** The most characters a thread is handed over in, however long it is. */
 export const THREAD_BUDGET = 12_000;
@@ -22,7 +22,8 @@ export async function startWork(tracker: Tracker, project: Project, typed: strin
   const ref = typedRef(typed);
   const answer = await tracker.thread(issueLocator(project, ref));
   if (answer.kind !== "thread") return `Can't start work on ${ref}: ${why(tracker, answer)}.`;
-  return drawThread(answer.thread, project.path);
+  // Anyone who can comment writes this, so it reaches Claude fenced as data.
+  return `${FENCED_NOTE}\n\n${fenced(drawThread(answer.thread, project.path), fenceTag())}`;
 }
 
 /** Pure. `project` is the path of the Project whose Map it's started from. */
