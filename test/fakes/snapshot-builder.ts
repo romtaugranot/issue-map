@@ -53,6 +53,7 @@ export function snapshot(issues: IssueSpec[], links: LinkSpec[] = [], unread: Un
     project: { id: "github.com#1", path: PROJECT, url: `https://github.com/${PROJECT}` },
     login: VIEWER,
     readAt: READ_AT,
+    fullReadAt: READ_AT,
     changesSince: READ_AT,
     caughtUp: true,
     issues: [...built.values()],

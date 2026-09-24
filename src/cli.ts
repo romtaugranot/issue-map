@@ -4,7 +4,8 @@
  * `issue-map unlinked [--page <n>] [--pick <URL>]`: lists its Unlinked Issues, 15 a page, newest first.
  * `issue-map group <n | ref> [--page <n>] [--pick <URL>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
  * `issue-map issue <ref> [--page <n>] [--pick <URL>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
- * `issue-map read --host <host> --path <path>`: the first read of a Project, run detached by `map`.
+ * `issue-map read --host <host> --path <path>`: a full read of a Project, run detached by `map` and the refresher.
+ * `issue-map refresher --host <host> --path <path> --login <login>`: keeps the Home Project's Snapshot warm, run detached by `map`.
  */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -18,10 +19,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { anonymousHttp, processCli } from "./tracker/boundary.ts";
 import { github } from "./tracker/github.ts";
 import { gitlab } from "./tracker/gitlab.ts";
-import { trackers, type Project, type Trackers } from "./tracker/tracker.ts";
+import { trackers, type Project, type Tracker, type Trackers } from "./tracker/tracker.ts";
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
 import { resolveHome, type HomeAnswer, type LastHome } from "./home/home.ts";
-import { snapshotStore } from "./snapshot/store.ts";
+import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
+import { keepWarm } from "./snapshot/refresher.ts";
 import { showCard, showMap } from "./map/show.ts";
 import type { Card } from "./map/card.ts";
 import type { Command } from "./map/draw.ts";
@@ -33,7 +35,7 @@ async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { pick: { type: "string" }, page: { type: "string" }, host: { type: "string" }, path: { type: "string" } },
+    options: { pick: { type: "string" }, page: { type: "string" }, host: { type: "string" }, path: { type: "string" }, login: { type: "string" } },
   });
   const [verb, ...rest] = positionals;
   const page = values.page === undefined ? 1 : Number(values.page);
@@ -46,7 +48,10 @@ async function main(argv: string[]): Promise<number> {
   switch (verb) {
     case "read":
       if (!values.host || !values.path) return usage();
-      return firstRead(known, values.host, values.path);
+      return fullRead(known, values.host, values.path);
+    case "refresher":
+      if (!values.host || !values.path || !values.login) return usage();
+      return refresher(known, values.host, values.path, values.login);
     case "group":
       if (!opening) return usage();
       break;
@@ -80,9 +85,15 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   const command: Command = verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening!;
-  const store = snapshotStore(stateDir(), { now: Date.now });
+  const store = openStore();
   const startRead = () => detach(["read", "--host", tracker.host, "--path", project.path]);
-  console.log(await showMap({ store, startRead, sleep }, tracker, project, command));
+  // Only the Home Project is kept warm.
+  const startRefresher = async ({ login }: SnapshotKey) => {
+    if (!(await store.refresherRunning({ tracker: tracker.host, project: project.id, login }))) {
+      detach(["refresher", "--host", tracker.host, "--path", project.path, "--login", login]);
+    }
+  };
+  console.log(await showMap({ store, startRead, sleep, startRefresher }, tracker, project, command));
   return 0;
 }
 
@@ -94,22 +105,44 @@ function toOpen(arg: string | undefined, page: number): Command | undefined {
 }
 
 /** Reads a Project in full into its Snapshot, resuming where an earlier read stopped. */
-async function firstRead(known: Trackers, host: string, path: string): Promise<number> {
-  const identified = await known.at(host);
-  if (identified.kind !== "identified") return 1;
-  const { tracker } = identified;
-  const [resolved, viewer] = await Promise.all([tracker.resolveProject(path), tracker.viewer()]);
-  if (resolved.kind !== "project" || viewer.kind !== "viewer") return 1;
-  const store = snapshotStore(stateDir(), { now: Date.now });
-  const outcome = await store.read({ tracker: host, project: resolved.project.id, login: viewer.login }, tracker, resolved.project);
+async function fullRead(known: Trackers, host: string, path: string): Promise<number> {
+  const connected = await connect(known, host, path);
+  if (!connected) return 1;
+  const { tracker, project } = connected;
+  const viewer = await tracker.viewer();
+  if (viewer.kind !== "viewer") return 1;
+  const outcome = await openStore().read({ tracker: host, project: project.id, login: viewer.login }, tracker, project);
   return outcome.kind === "failed" ? 1 : 0;
+}
+
+/** Keeps `login`'s Snapshot of the Project at `path` warm until it has to stop, then says why in the log. */
+async function refresher(known: Trackers, host: string, path: string, login: string): Promise<number> {
+  const connected = await connect(known, host, path);
+  if (!connected) return 1;
+  const { tracker, project } = connected;
+  const startRead = () => detach(["read", "--host", host, "--path", path]);
+  const stopped = await keepWarm({ store: openStore(), startRead, sleep }, tracker, path, { tracker: host, project: project.id, login });
+  console.log(`${new Date().toISOString()} stopped keeping ${host}/${path} warm for ${login}: ${stopped}`);
+  return 0;
+}
+
+/** The Tracker at `host` and the Project at `path` on it, as a process run detached finds them; `null` when either can't be had. */
+async function connect(known: Trackers, host: string, path: string): Promise<{ tracker: Tracker; project: Project } | null> {
+  const identified = await known.at(host);
+  if (identified.kind !== "identified") return null;
+  const resolved = await identified.tracker.resolveProject(path);
+  return resolved.kind === "project" ? { tracker: identified.tracker, project: resolved.project } : null;
+}
+
+function openStore() {
+  return snapshotStore(stateDir(), { now: Date.now });
 }
 
 /** Runs this CLI again in a process of its own that outlives this one; what it prints goes to a log beside the Snapshots. */
 function detach(args: string[]): void {
   const dir = stateDir();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const log = openSync(join(dir, "read.log"), "a", 0o600);
+  const log = openSync(join(dir, "background.log"), "a", 0o600);
   spawn(process.execPath, [fileURLToPath(import.meta.url), ...args], { detached: true, stdio: ["ignore", log, log] }).unref();
 }
 

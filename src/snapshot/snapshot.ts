@@ -5,7 +5,7 @@
 import type { OpenIssue, Unread } from "../tracker/tracker.ts";
 
 /** The shape Snapshots are saved in; one saved in any other is read again. */
-export const SNAPSHOT_FORMAT = 4;
+export const SNAPSHOT_FORMAT = 5;
 
 export interface Snapshot {
   format: typeof SNAPSHOT_FORMAT;
@@ -14,8 +14,14 @@ export interface Snapshot {
   project: { id: string; path: string; url: string };
   /** The login that read it; no other login is ever shown it. */
   login: string;
-  /** When the last read or refresh finished, as an ISO date. */
+  /**
+   * How old it is, as an ISO date: when the last refresh finished, or when
+   * the last full read started, since a full read's first page is as old as
+   * the read.
+   */
   readAt: string;
+  /** When the last full read started, as an ISO date; it's read in full again a week on (ADR 0006). */
+  fullReadAt: string;
   /** Where the next refresh reads changes from, as an ISO date: when the last one started, less a margin. */
   changesSince: string;
   /** `false` once a refresh couldn't reach back to where it read from, until the next full read. */

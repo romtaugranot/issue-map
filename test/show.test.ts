@@ -9,7 +9,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { showCard, showMap } from "../src/map/show.ts";
-import { snapshotStore } from "../src/snapshot/store.ts";
+import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
 import type { ChangesAnswer, IssueAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 150 } };
@@ -54,6 +54,7 @@ test("a first read shows progress and no Map until the Snapshot is complete, the
       reading = store.read({ tracker: "github.com", project: project.id, login: "fixture-viewer" }, tracker, project);
     },
     sleep: () => new Promise<void>((resolve) => setImmediate(resolve)),
+    startRefresher: async () => {},
   };
 
   const first = await showMap(deps, tracker, project, { kind: "overview" });
@@ -74,7 +75,7 @@ test("a first read shows progress and no Map until the Snapshot is complete, the
 test("a login the Tracker refuses draws no Map, and says which Tracker refused and why", async () => {
   const store = snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-show-")), { now: Date.now });
   const tracker: Tracker = { ...heldTracker().tracker, viewer: async () => ({ kind: "refused", reason: "not logged in to github.com" }) };
-  const text = await showMap({ store, startRead: () => assert.fail("no read without a login"), sleep: async () => {} }, tracker, project, { kind: "overview" });
+  const text = await showMap({ store, startRead: () => assert.fail("no read without a login"), sleep: async () => {}, startRefresher: async () => assert.fail("nothing kept warm without a login") }, tracker, project, { kind: "overview" });
   assert.equal(text, "No Map of github.com/fixture-org/tools: GitHub refused: not logged in to github.com");
 });
 
@@ -91,7 +92,7 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     await store.read(key, tracker, project);
     return { store, tracker, later: (ms: number) => (now += ms) };
   }
-  const deps = (store: ReturnType<typeof snapshotStore>) => ({ store, startRead: noRead, sleep: async () => {} });
+  const deps = (store: ReturnType<typeof snapshotStore>) => ({ store, startRead: noRead, sleep: async () => {}, startRefresher: async () => {} });
 
   test("a Snapshot under two minutes old is drawn as it is", async () => {
     const { store, tracker, later } = await readStore();
@@ -116,6 +117,24 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     const offline = { ...tracker, changes: async () => ({ kind: "cant-tell", reason: "couldn't reach github.com" }) as const };
     const map = await showMap(deps(store), offline, project, { kind: "overview" });
     assert.match(map, /^⚠ read 3h ago — couldn't refresh it: couldn't reach github.com\n\*\*fixture-org\/tools\*\* · 150 open/);
+  });
+
+  test("drawing it keeps it warm in the background, for this login", async () => {
+    const { store, tracker } = await readStore();
+    const kept: SnapshotKey[] = [];
+    await showMap({ ...deps(store), startRefresher: async (key) => void kept.push(key) }, tracker, project, { kind: "overview" });
+    assert.deepEqual(kept, [key]);
+  });
+
+  test("a refresh that can't prove it caught up starts a full read in the background, and the Map is drawn meanwhile", async () => {
+    const { store, tracker, later } = await readStore();
+    later(3 * 60_000);
+    let started = 0;
+    const behind: Tracker = { ...tracker, changes: async () => ({ kind: "changes", open: [], ends: [], requests: [], caughtUp: false, unread: {} }) };
+    const map = await showMap({ ...deps(store), startRead: () => void started++ }, behind, project, { kind: "overview" });
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 2 on the Map · 148 Unlinked$/m);
+    assert.doesNotMatch(map, /⚠/);
+    assert.equal(started, 1);
   });
 
   test("offline, with no Tracker to say who the viewer is, the login the CLI holds draws its old Snapshot", async () => {

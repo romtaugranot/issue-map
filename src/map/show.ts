@@ -3,7 +3,8 @@
  * there is none. A read gets a few seconds to finish; after that the draw
  * shows progress and the read carries on outside the conversation. A
  * Snapshot more than two minutes old is refreshed first, and drawn with its
- * age and why when it can't be. An Issue card reads its Issue live instead,
+ * age and why when it can't be; one due a full read again is drawn while
+ * that read runs in the background. An Issue card reads its Issue live instead,
  * so it opens even during a first read (ADR 0006).
  */
 import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/store.ts";
@@ -14,10 +15,12 @@ import { OUTSIDE } from "./text.ts";
 
 export interface ShowDeps {
   store: SnapshotStore;
-  /** Starts the first read in a process of its own, which outlives this one. */
+  /** Starts a full read in a process of its own, which outlives this one: the first, or one the Snapshot is due. */
   startRead(): void;
   /** Resolves after `ms`. */
   sleep(ms: number): Promise<void>;
+  /** Starts the refresher that keeps this login's Snapshot warm, in a process of its own, unless one is running. */
+  startRefresher(key: SnapshotKey): Promise<void>;
 }
 
 /** How long a draw waits for a read it started or found running. */
@@ -34,10 +37,13 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     await deps.store.forget(key, viewer.reason);
     return `No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`;
   }
+  if (viewer.kind === "viewer") await deps.startRefresher(key);
   const drawable = await deps.store.forDraw(key, tracker, project);
   if (drawable.kind === "refused") return `No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`;
   if (drawable.kind === "ready") {
-    const { snapshot, ageMs, stale } = drawable;
+    const { snapshot, ageMs, stale, readAgain } = drawable;
+    // Minutes on a large Project, so it never holds up the draw: this Snapshot is drawn meanwhile.
+    if (readAgain) deps.startRead();
     return draw(snapshot, command, stale === undefined ? undefined : { ageMs, reason: stale }).text;
   }
   let state: SnapshotState = drawable;
