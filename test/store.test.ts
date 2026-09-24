@@ -110,7 +110,7 @@ describe("the Snapshot store (ADR 0006)", () => {
     const { snapshot, ageMs } = state as Extract<SnapshotState, { kind: "ready" }>;
     assert.equal(ageMs, 45_000);
     assert.deepEqual(snapshot, {
-      format: 2,
+      format: 3,
       tracker: "github.com",
       project: { id: project.id, path: project.path, url: project.url },
       login: "fixture-viewer",

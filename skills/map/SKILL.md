@@ -20,6 +20,8 @@ Reprint the output in your reply exactly as printed: tool output isn't reliably 
 
 The overview opens with **Take next**: the Unblocked Issues the user could take, in an order a fixed rule gives — how many open Issues wait on each (`▶n`), then the earliest Planned date, then the oldest. It is never your judgement, so it is the same on every draw. When the user asks what to take next, draw the Map and point at that list.
 
+A closed blocker still unblocks, so Take next can hold Unlinked Issues. `unblocked 2d ago` dates when the last of an Issue's blockers closed, from the Tracker's close dates; a blocker that closed as a duplicate or as not planned is named with how it closed. Closed Issues are never drawn in the overview or an outline — only on cards.
+
 When the user asks what *you* would pick, give your opinion in the conversation: say which Issue and why, quoting what the Map or the Issues say. Keep it separate from the list, and never reorder, redraw or trim Take next to match it.
 
 When the output says the Project is being read for the first time, that is all there is to show: the read carries on by itself, and running `issue-map map` again shows how far it has got, then the Map once it's done.

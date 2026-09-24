@@ -252,10 +252,91 @@ describe("Groups (ADR 0008)", () => {
   });
 
   test("an Issue whose only Links reach closed Issues is Unlinked", () => {
-    const s = snapshot([{ n: 1 }, { n: 2 }], [[{ closed: 9 }, "blocks", 1], [2, "related", { closed: 8 }]]);
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[{ closed: 9 }, "related", 1], [2, "related", { closed: 8 }]]);
     const text = overview(s);
     assert.match(text, /· 2 open · 0 on the Map · 2 Unlinked$/m);
     assert.match(text, /^No Issue here has a Link, so there's no Map to draw\.$/m);
+  });
+});
+
+describe("closed Issues", () => {
+  test("an Issue whose only blocker has closed is Unblocked and in Take next, marked with when, though it stays Unlinked", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[{ closed: 9 }, "blocks", 1]]);
+    assert.equal(
+      overview(s),
+      [
+        "**fixture-org/tools** · 2 open · 0 on the Map · 2 Unlinked",
+        "",
+        "**Take next: 1** — most waited on first",
+        "- #1 Issue 1 — unblocked 2d ago",
+        "",
+        "No Issue here has a Link to another open Issue, so there are no Groups to draw.",
+        "",
+        "**Unlinked: 2** — no Link to another open Issue. Ask to list them.",
+      ].join("\n"),
+    );
+  });
+
+  test("a blocker closed as a duplicate or as not planned still unblocks, and the line says how it closed; the last to close dates it", () => {
+    // #1 and #2 are Related. #1's blockers closed as a duplicate 5 hours before the read, and as completed long before; #2's as not planned.
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }],
+      [
+        [1, "related", 2],
+        [{ closed: 7, closedAs: "completed", closedAt: "2026-06-01T00:00:00Z" }, "blocks", 1],
+        [{ closed: 8, closedAs: "duplicate", closedAt: "2026-09-22T19:00:00Z" }, "blocks", 1],
+        [{ closed: 9, closedAs: "not planned", closedAt: "2024-01-01T00:00:00Z" }, "blocks", 2],
+      ],
+    );
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 2** — most waited on first",
+      "- #1 Issue 1 — unblocked 5h ago · #8 closed as duplicate",
+      "- #2 Issue 2 — unblocked 2y ago · #9 closed as not planned",
+    ]);
+  });
+
+  test("a blocker that closed on a date the read didn't give is named instead, even beside one it did, since it may have closed last", () => {
+    const s = snapshot([{ n: 1 }], [[{ closed: 8 }, "blocks", 1], [{ closed: 9 }, "blocks", 1]]);
+    delete (s.issues[0]!.links[1]!.to as { closedAt?: string }).closedAt;
+    assert.deepEqual(takeNext(overview(s)), ["**Take next: 1** — most waited on first", "- #1 Issue 1 — unblocked since #9 closed"]);
+  });
+
+  test("a closed blocker doesn't unblock an Issue an open one still Blocks", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[{ closed: 9 }, "blocks", 2], [1, "blocks", 2]]);
+    assert.deepEqual(takeNext(overview(s)), ["**Take next: 1** — most waited on first", "- #1 Issue 1 — ▶1 wait on it"]);
+  });
+
+  test("a wait stops at a closed Issue: what it Blocked is Unblocked, and what Blocked it gets no count for it", () => {
+    // #1 Blocks #9, which is closed and Blocks #2.
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "blocks", { closed: 9 }], [{ closed: 9 }, "blocks", 2], [1, "related", 3]]);
+    assert.deepEqual(takeNext(overview(s)), [
+      "**Take next: 3** — most waited on first",
+      "- #1 Issue 1",
+      "- #2 Issue 2 — unblocked 2d ago",
+      "- #3 Issue 3",
+    ]);
+  });
+
+  test("a closed Parent joins nothing: its open children split into Groups of their own, and it is drawn in neither the overview nor an outline", () => {
+    // #9 is closed and the Parent of #1 and #2, which are the Parents of #3 and #4.
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[{ closed: 9 }, "parent", 1], [{ closed: 9 }, "parent", 2], [1, "parent", 3], [2, "parent", 4]]);
+    const text = overview(s);
+    assert.deepEqual(groupLines(text), ["**Groups: 2** — largest first", "- #1 Issue 1 — 2 Issues", "- #2 Issue 2 — 2 Issues"]);
+    for (const drawn of [text, draw(s, { kind: "group", group: 1, page: 1 }).text, draw(s, { kind: "under", ref: "#1", page: 1 }).text]) {
+      assert.doesNotMatch(drawn, /#9/);
+    }
+  });
+
+  test("the marking comes from close dates against when the Snapshot was read, so the same Snapshot always draws the same", () => {
+    const s = snapshot([{ n: 1 }], [[{ closed: 9, closedAt: "2026-09-20T00:00:00Z" }, "blocks", 1]]);
+    assert.equal(takeNext(overview(s))[1], "- #1 Issue 1 — unblocked 3d ago");
+    assert.equal(overview(s), overview(s));
+    assert.equal(takeNext(overview({ ...s, readAt: "2026-11-20T00:00:00Z" }))[1], "- #1 Issue 1 — unblocked 2mo ago", "read again later");
+  });
+
+  test("the Unlinked list marks an Issue a closed blocker left Unblocked", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[{ closed: 9 }, "blocks", 1]]);
+    assert.deepEqual(draw(s, { kind: "unlinked", page: 1 }).text.split("\n").slice(1, 3), ["- #2 Issue 2", "- #1 Issue 1 — unblocked 2d ago"]);
   });
 });
 

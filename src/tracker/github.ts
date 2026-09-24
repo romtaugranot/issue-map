@@ -33,7 +33,7 @@ const ISSUE_FIELDS = `fragment issue on Issue {
     nodes { number url isDraft state author { login } repository { nameWithOwner } }
   }
 }
-fragment end on Issue { id number title url state repository { nameWithOwner } }`;
+fragment end on Issue { id number title url state closedAt stateReason repository { nameWithOwner } }`;
 
 /**
  * Needs 3, 4 and 7 in one request a page. GitHub allows 100 sub-issues a
@@ -90,7 +90,7 @@ interface IssueNode {
 
 interface OneIssueNode extends IssueNode {
   state: "OPEN" | "CLOSED";
-  stateReason: "COMPLETED" | "NOT_PLANNED" | "DUPLICATE" | "REOPENED" | null;
+  stateReason: StateReason | null;
   repository: { nameWithOwner: string };
   timelineItems: { nodes: ({ source?: { __typename: string; id?: string } | null } | null)[] };
 }
@@ -111,8 +111,12 @@ interface EndNode {
   title: string;
   url: string;
   state: "OPEN" | "CLOSED";
+  closedAt: string | null;
+  stateReason: StateReason | null;
   repository: { nameWithOwner: string };
 }
+
+type StateReason = "COMPLETED" | "NOT_PLANNED" | "DUPLICATE" | "REOPENED";
 
 interface Repository {
   databaseId: number;
@@ -240,9 +244,7 @@ function linksOf(node: IssueNode, hiddenParent: boolean): NamedLink[] {
   const seen = new Set<string>();
   let hidden = 0;
   const add = (role: NamedLink["role"], name: string, end: EndNode | null) => {
-    const to: FarEnd = end
-      ? { id: end.id, readable: true, open: end.state === "OPEN", project: end.repository.nameWithOwner, ref: `${end.repository.nameWithOwner}#${end.number}`, title: end.title, url: end.url }
-      : { id: `${node.id}/hidden/${hidden++}`, readable: false };
+    const to: FarEnd = end ? farEnd(end) : { id: `${node.id}/hidden/${hidden++}`, readable: false };
     // A sub-issue's parent can also track it in a task list: one Link, not two.
     if (seen.has(`${role} ${to.id}`)) return;
     seen.add(`${role} ${to.id}`);
@@ -255,6 +257,22 @@ function linksOf(node: IssueNode, hiddenParent: boolean): NamedLink[] {
   for (const end of node.blockedBy.nodes) add("blocker", "Blocked by", end);
   for (const end of node.blocking.nodes) add("blocked", "Blocking", end);
   return links;
+}
+
+/** A Link's far end this login can read; once closed, with when and, where GitHub says, how. */
+function farEnd(end: EndNode): FarEnd {
+  const how = end.state === "CLOSED" ? closedAs(end.stateReason) : null;
+  return {
+    id: end.id,
+    readable: true,
+    open: end.state === "OPEN",
+    project: end.repository.nameWithOwner,
+    ref: `${end.repository.nameWithOwner}#${end.number}`,
+    title: end.title,
+    url: end.url,
+    ...(end.state === "CLOSED" && end.closedAt ? { closedAt: end.closedAt } : {}),
+    ...(how ? { closedAs: how } : {}),
+  };
 }
 
 function openIssue(node: IssueNode, hiddenParent: boolean): OpenIssue {
@@ -282,6 +300,11 @@ function closingRequests(node: IssueNode): ClosingRequest[] {
 }
 
 const CLOSED_AS = { COMPLETED: "completed", NOT_PLANNED: "not planned", DUPLICATE: "duplicate" } as const;
+
+/** How a closed Issue closed; `null` where GitHub doesn't say. */
+function closedAs(reason: StateReason | null): string | null {
+  return reason && reason !== "REOPENED" ? CLOSED_AS[reason] : null;
+}
 
 /** One Issue by its reference, `owner/name#123`, or its URL on this host. */
 async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnswer> {
@@ -316,7 +339,7 @@ async function issue(cli: Cli, host: string, locator: string): Promise<IssueAnsw
       title: node.title,
       url: node.url,
       open: node.state === "OPEN",
-      closedAs: node.state === "CLOSED" && node.stateReason && node.stateReason !== "REOPENED" ? CLOSED_AS[node.stateReason] : null,
+      closedAs: node.state === "CLOSED" ? closedAs(node.stateReason) : null,
       links: linksOf(node, hiddenParent),
       closingRequests: closingRequests(node),
       mentionedBy,

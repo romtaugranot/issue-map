@@ -178,9 +178,16 @@ export type FarEnd =
       ref: string;
       title: string;
       url: string;
+      /** When it closed, as an ISO date; absent while it is open, or where the read didn't say. */
+      closedAt?: string;
+      /** How it closed, as the Tracker says, such as `completed`, `not planned` or `duplicate`; absent while it is open, or where the Tracker doesn't say. */
+      closedAs?: string;
     }
   /** The Tracker records the Link but won't show this login the Issue; the id is the adapter's own. */
   | { id: string; readable: false };
+
+/** The far end of a Link that this login can read. */
+export type ReadableEnd = Extract<FarEnd, { readable: true }>;
 
 /** Asks every kind in turn which one runs at a host. */
 export interface Trackers {

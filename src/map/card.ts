@@ -4,7 +4,7 @@
  */
 import type { IssueRead, NamedLink } from "../tracker/tracker.ts";
 import { isOpen } from "./links.ts";
-import { count, OUTSIDE, plural, trim } from "./text.ts";
+import { count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
 import type { Drawing } from "./draw.ts";
 
 /** A choice to offer in a picker: its label is what opens it, typed as it is. */
@@ -56,11 +56,13 @@ export function drawCard(issue: IssueRead, project: string, page = 1): Card {
         continue;
       }
       const ref = short(to.ref, project);
-      lines.push(`- ${ref} ${trim(to.title)}${to.open ? "" : " — closed"}`);
+      const how = howClosed(to.closedAs);
+      const closed = to.open ? "" : how ? `closed ${how}` : "closed";
+      lines.push(`- ${ref} ${trim(to.title)}${closed ? ` — ${closed}` : ""}`);
       const outside = ref.startsWith(OUTSIDE);
       choices.push({
         label: outside ? to.ref : ref,
-        description: [name, to.open ? "" : "closed", `${outside ? `${OUTSIDE} ` : ""}${trim(to.title)}`].filter(Boolean).join(" · "),
+        description: [name, closed, `${outside ? `${OUTSIDE} ` : ""}${trim(to.title)}`].filter(Boolean).join(" · "),
       });
     }
     const left = links.length - from - shown.length;
@@ -108,9 +110,4 @@ function byName(links: NamedLink[]): [string, NamedLink[]][] {
     for (const link of openFirst) if (link.role === role) named.set(link.name, [...(named.get(link.name) ?? []), link]);
   }
   return [...named];
-}
-
-/** A reference inside the Project as users type it there, such as `#12`; one outside it marked as an Outside Issue. */
-function short(ref: string, project: string): string {
-  return ref.startsWith(`${project}#`) ? ref.slice(project.length) : `${OUTSIDE}${ref}`;
 }

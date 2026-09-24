@@ -33,8 +33,15 @@ describe("recorded Snapshots", () => {
   // The worked example of #12: the RFC Tracker has four waiting on it and gives way to its unassigned children.
   test("opentofu/opentofu: Take next opens with #3414's children, carrying its count", () => {
     const lines = section(draw(recorded("opentofu__opentofu"), { kind: "overview" }).text, "**Take next");
-    assert.match(lines[0]!, /^\*\*Take next: 10\*\* — most waited on first · 3 taken by others · Closing Requests unread \(the recording didn't read them\)/);
+    assert.match(lines[0]!, /^\*\*Take next: 15\*\* — most waited on first · 4 taken by others · Closing Requests unread \(the recording didn't read them\)/);
     assert.deepEqual(lines.slice(1, 4).map((l) => l.replace(/^(- #\d+) .* — /, "$1 — ")), ["- #4227 — ▶4 via #3414", "- #4297 — ▶4 via #3414", "- #4390 — ▶4 via #3414"]);
+  });
+
+  // #20 measured it: 7 open Issues have a closed blocker, and for 6 it's their only Link, so they're Unlinked and still in Take next.
+  test("opentofu/opentofu: an Unlinked Issue whose blocker closed is marked on the Unlinked list, by the blocker, since the recording has no close dates", () => {
+    const page = draw(recorded("opentofu__opentofu"), { kind: "unlinked", page: 6 }).text.split("\n");
+    assert.ok(page.includes("- #3107 `-detailed-exitcode` should exit with status 2 when `-refre… — unblocked since #3595 closed"), page.join("\n"));
+    assert.ok(page.some((l) => l.startsWith("- #3163 ") && l.endsWith(" — unblocked since ↗golang/go#71924 closed")), "an Outside blocker too");
   });
 
   test("microsoft/playwright: no Links, so no Map", () => {

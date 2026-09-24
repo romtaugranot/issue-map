@@ -3,11 +3,11 @@
  * the text to print. No network, no wall clock, no `gh`/`glab`.
  */
 import type { Snapshot } from "../snapshot/snapshot.ts";
-import type { OpenIssue } from "../tracker/tracker.ts";
+import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { layout, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
-import { takeNext, type Pick } from "./take-next.ts";
-import { count, OUTSIDE, plural, trim } from "./text.ts";
+import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
+import { ago, count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
 
 export type Command =
   | { kind: "overview" }
@@ -38,7 +38,7 @@ export function draw(snapshot: Snapshot, command: Command): Drawing {
     case "overview":
       return { text: overview(snapshot) };
     case "unlinked":
-      return { text: unlinkedPage(layout(snapshot).unlinked, command.page).join("\n") };
+      return { text: unlinkedPage(snapshot, layout(snapshot).unlinked, command.page).join("\n") };
     case "group":
       return { text: outline(snapshot, openGroup(layout(snapshot), command.group), command.page) };
     case "under":
@@ -82,11 +82,19 @@ function overview(snapshot: Snapshot): string {
   const { onMap, unlinked, groups } = laidOut;
   const header = `**${snapshot.project.path}** · ${count(snapshot.issues.length)} open · ${count(onMap.length)} on the Map · ${count(unlinked.length)} Unlinked`;
   const unlinkedLine = `**Unlinked: ${count(unlinked.length)}** — no Link to another open Issue. Ask to list them.`;
-  if (onMap.length === 0) return [header, "", "No Issue here has a Link, so there's no Map to draw.", "", unlinkedLine].join("\n");
+  const next = takeNext(snapshot, laidOut);
+  if (onMap.length === 0) {
+    // An Unlinked Issue that a closed Issue Blocks is still Unblocked, so Take next can hold something with no Map to draw.
+    if (next.kind === "blocks-unread" || (next.picks.length === 0 && next.takenByOthers === 0)) {
+      return [header, "", "No Issue here has a Link, so there's no Map to draw.", "", unlinkedLine].join("\n");
+    }
+    const noGroups = "No Issue here has a Link to another open Issue, so there are no Groups to draw.";
+    return [header, "", ...takeNextSection(snapshot, next), "", noGroups, "", unlinkedLine].join("\n");
+  }
   const lines = [
     header,
     "",
-    ...takeNextSection(snapshot, laidOut),
+    ...takeNextSection(snapshot, next),
     "",
     `**Groups: ${count(groups.length)}** — largest first`,
     ...groups.slice(0, GROUP_LINES).map(groupLine),
@@ -99,8 +107,7 @@ function overview(snapshot: Snapshot): string {
   return lines.join("\n");
 }
 
-function takeNextSection(snapshot: Snapshot, laidOut: Layout): string[] {
-  const next = takeNext(snapshot, laidOut);
+function takeNextSection(snapshot: Snapshot, next: TakeNext): string[] {
   if (next.kind === "blocks-unread") {
     return [`**Take next: none** — the Map can't read this Project's Blocks Links (${next.reason}), so it calls no Issue Unblocked`];
   }
@@ -111,43 +118,69 @@ function takeNextSection(snapshot: Snapshot, laidOut: Layout): string[] {
   }
   if (picks.length === 0) return [`**Take next: 0** — every Issue on the Map is Blocked, or a Parent of Blocked Issues${unread}`];
   const taken = takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
-  return [`**Take next: ${count(picks.length)}** — most waited on first${taken}${unread}`, ...pickLines(picks)];
+  return [`**Take next: ${count(picks.length)}** — most waited on first${taken}${unread}`, ...pickLines(picks, snapshot)];
 }
 
 /** Take next's lines, where the children standing in for one Parent past the first few are held in a count. */
-function pickLines(picks: Pick[]): string[] {
+function pickLines(picks: Pick[], snapshot: Snapshot): string[] {
   const lines: string[] = [];
   const shownUnder = new Map<OpenIssue, number>();
   for (const pick of picks) {
     if (lines.length === TAKE_NEXT_LINES) break;
     const parent = pick.waiting.via;
     if (!parent) {
-      lines.push(pickLine(pick));
+      lines.push(pickLine(pick, snapshot));
       continue;
     }
     const shown = shownUnder.get(parent) ?? 0;
     shownUnder.set(parent, shown + 1);
-    if (shown < STAND_INS) lines.push(pickLine(pick));
+    if (shown < STAND_INS) lines.push(pickLine(pick, snapshot));
     else if (shown === STAND_INS) lines.push(`- … ${count(picks.filter((p) => p.waiting.via === parent).length - STAND_INS)} more under ${parent.ref}`);
   }
   return lines;
 }
 
-function pickLine({ issue, waiting: { count: n, via, carried }, yours }: Pick): string {
+function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot): string {
   const waits = n === 0 ? "" : carried ? `▶${count(n)} via ${via!.ref}` : `▶${count(n)} wait on it`;
   const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
-  const reasons = [waits, standsIn, issue.planned ? `due ${issue.planned.slice(0, 10)}` : "", yours ? "yours" : ""].filter(Boolean);
+  const reasons = [
+    waits,
+    standsIn,
+    ...unblockedBy(closedBlockers, snapshot),
+    issue.planned ? `due ${issue.planned.slice(0, 10)}` : "",
+    yours ? "yours" : "",
+  ].filter(Boolean);
   return `- ${issue.ref} ${trim(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
 }
 
-function unlinkedPage(unlinked: OpenIssue[], page: number): string[] {
+/**
+ * When the last of an Issue's blockers closed, from the Tracker's close dates
+ * against when the Snapshot was read, so nothing is kept per viewer; and
+ * any blocker that closed other than as completed, since it still unblocks.
+ */
+function unblockedBy(closed: ReadableEnd[], { readAt, project }: Snapshot): string[] {
+  const last = closed[0];
+  if (!last) return [];
+  const when = last.closedAt ? `unblocked ${ago(last.closedAt, readAt)}` : `unblocked since ${short(last.ref, project.path)} closed`;
+  const how = closed.flatMap((end) => {
+    const how = howClosed(end.closedAs);
+    return how ? [`${short(end.ref, project.path)} closed ${how}`] : [];
+  });
+  return [when, ...how];
+}
+
+function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number): string[] {
   const pages = Math.max(1, Math.ceil(unlinked.length / PAGE));
   const at = Math.min(Math.max(1, page), pages);
   const newestFirst = [...unlinked].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
   const shown = newestFirst.slice((at - 1) * PAGE, at * PAGE);
   return [
     `**Unlinked: ${count(unlinked.length)}** — newest first, page ${count(at)} of ${count(pages)}`,
-    ...shown.map((issue) => `- ${issue.ref} ${trim(issue.title)}`),
+    ...shown.map((issue) => {
+      // With no Link to an open Issue, nothing open Blocks it: a closed blocker left it Unblocked, where Blocks Links can be read.
+      const unblocked = snapshot.unread.blocks === undefined ? unblockedBy(closedBlockers(issue), snapshot) : [];
+      return `- ${issue.ref} ${trim(issue.title)}${unblocked.length > 0 ? ` — ${unblocked.join(" · ")}` : ""}`;
+    }),
     at < pages ? `_\`more\` for the next ${PAGE}_` : "_That's all of them. `map` for the Map._",
   ];
 }
