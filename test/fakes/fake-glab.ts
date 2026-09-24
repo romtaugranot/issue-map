@@ -514,7 +514,8 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
   }
   if (rest[0] === "issues" && rest[2] === "links") {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
-    if (!issue || issue.hidden) return notFound;
+    // REST's Issue Links don't know a task, as the matrix found on 16.0.
+    if (!issue || issue.hidden || issue.taskLevel) return notFound;
     const linked = gl.linkedTo(gl.addr(spec, issue)).flatMap(([linkType, to]) => {
       const end = gl.found(to);
       // REST leaves out an Issue this login can't read.

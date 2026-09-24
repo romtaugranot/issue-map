@@ -70,6 +70,21 @@ describe("GitLab by version: a self-hosted GitLab from 16.0 is asked only for wh
   const issue = (issues: OpenIssue[], ref: string) => issues.find((i) => i.ref === ref)!;
   const roles = (issues: OpenIssue[], ref: string) => issue(issues, ref).links.map((l) => l.role).sort();
 
+  for (const version of ["16.7.0", "17.2.0", "17.7.0"]) {
+    test(`${version}: a task's Blocks Link is read from the work-item GraphQL, since REST's Issue Links don't know a task`, async () => {
+      const blocked = world(version);
+      blocked.links = [...blocked.links!, [`${tools}#4`, "blocks", `${tools}#3`]];
+      const { page } = await read(blocked);
+      assert.deepEqual(roles(page.issues, "#3"), ["blocker", "parent"]);
+      assert.deepEqual(roles(page.issues, "#4"), ["blocked", "related"]);
+    });
+  }
+
+  test("16.0: a task has no Links but its Parent, since GitLab can't link one before 16.7", async () => {
+    const { page } = await read(world("16.0.0"));
+    assert.deepEqual(roles(page.issues, "#3"), ["parent"]);
+  });
+
   for (const version of ["16.0.0", "16.3.0", "16.7.0", "17.1.0", "17.2.0", "17.7.0", "17.8.0", "18.0.0", "18.3.0", LATEST]) {
     test(`${version}: every Link kind, the epic an Issue is in, and the Project it was forked from`, async () => {
       const { tracker, project, parent, page, card, loginsSentTo } = await read(world(version));
