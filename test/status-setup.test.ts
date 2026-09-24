@@ -65,6 +65,18 @@ test("installing it again changes nothing, and doesn't wrap it twice", async () 
   assert.match(said, /already installed/);
 });
 
+test("installing it again from where the plugin now lives points it there, still wrapping the user's own", async () => {
+  const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: "my-status", padding: 1 } }));
+  await installStatusLine(path, "/opt/plugins/issue-map/0.1.0/bin/issue-map-status-line");
+  const said = await installStatusLine(path, "/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line");
+  assert.deepEqual(read(path).statusLine, {
+    type: "command",
+    command: "'/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line' --wrap 'my-status'",
+    padding: 1,
+  });
+  assert.match(said, /now runs from/);
+});
+
 test("leaves a settings file it can't read as JSON alone, and says why", async () => {
   const path = settingsFile("{ not json");
   const said = await installStatusLine(path, ENTRY);

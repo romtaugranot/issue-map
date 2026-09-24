@@ -12,7 +12,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { OLDEST_SUPPORTED_GHES } from "../../src/tracker/github.ts";
-import { ghesReleases, schemaUrl } from "./versions.ts";
+import { ghesReleases, publishedOnDocs, schemaUrl } from "./versions.ts";
 
 export const SCHEMAS = fileURLToPath(new URL("../../test/schemas/github/", import.meta.url));
 
@@ -22,7 +22,7 @@ async function fetched(url: string): Promise<string | null> {
 }
 
 async function main(): Promise<void> {
-  const ghes = await ghesReleases(OLDEST_SUPPORTED_GHES, async (release) => (await fetch(schemaUrl(release), { method: "HEAD" })).ok);
+  const ghes = await ghesReleases(OLDEST_SUPPORTED_GHES, publishedOnDocs);
   const wanted = new Map<string, string>([["fpt", schemaUrl("fpt")], ["ghec", schemaUrl("ghec")], ...ghes.map((r): [string, string] => [`ghes-${r}`, schemaUrl(r)])]);
   await mkdir(SCHEMAS, { recursive: true });
   for (const [name, url] of wanted) {

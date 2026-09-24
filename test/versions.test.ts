@@ -31,6 +31,15 @@ test("the promised GHES releases run from the oldest GitHub supports to the newe
   assert.deepEqual(await ghesReleases("3.18", async (r) => published.has(r)), ["3.18", "3.19", "3.20"]);
 });
 
+test("the promised GHES releases carry on into the next major", async () => {
+  const published = new Set(["3.21", "3.22", "4.0", "4.1"]);
+  assert.deepEqual(await ghesReleases("3.21", async (r) => published.has(r)), ["3.21", "3.22", "4.0", "4.1"]);
+});
+
+test("a floor GitHub no longer publishes a schema for is refused, so no recorded schema is deleted", async () => {
+  await assert.rejects(ghesReleases("3.18", async (r) => r === "3.19"), /GHES 3\.18.*OLDEST_SUPPORTED_GHES/);
+});
+
 test("the README's support table promises from the floors the adapters promise from", async () => {
   const { readFile } = await import("node:fs/promises");
   const { TESTED_FROM } = await import("../src/tracker/gitlab.ts");

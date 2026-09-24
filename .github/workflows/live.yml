@@ -37,13 +37,17 @@ jobs:
         run: |
           curl -fsSL -o glab.deb "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${GLAB_VERSION}/glab_${GLAB_VERSION}_linux_amd64.deb"
           sudo dpkg -i glab.deb
-      # Read as the fixtures' GitHub App, never a personal login, installed on NAMESPACES.github.main in test/live/fixtures.ts.
+      # The namespaces test/live/fixtures.ts names, and nowhere else.
+      - name: Name the fixture namespaces
+        id: names
+        run: node test/live/fixtures.ts names >> "$GITHUB_OUTPUT"
+      # Read as the fixtures' GitHub App, never a personal login, installed on the main organisation.
       - uses: actions/create-github-app-token@v3
         id: app
         with:
           client-id: ${{ vars.FIXTURES_APP_CLIENT_ID }}
           private-key: ${{ secrets.FIXTURES_APP_PRIVATE_KEY }}
-          owner: issue-map-fixtures
+          owner: ${{ steps.names.outputs.GH_MAIN }}
       - name: Read the fixture Projects
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}

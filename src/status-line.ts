@@ -9,17 +9,14 @@
  * error: a status line has nowhere to show one.
  */
 import { spawn } from "node:child_process";
-import { checkoutRoot } from "./home/checkout.ts";
-import { snapshotStore } from "./snapshot/store.ts";
-import { lastHomeOf, stateDir } from "./state.ts";
-import { statusLine } from "./status/line.ts";
+import { homeRowHere } from "./status/line.ts";
 
 async function main(argv: string[]): Promise<void> {
   const wrap = argv[0] === "--wrap" ? argv[1] : undefined;
   const input = await stdin();
   const [theirs, ours] = await Promise.all([
     wrap === undefined ? "" : shell(wrap, input),
-    statusLine({ checkoutRoot, lastHome: (root) => lastHomeOf(root).get(), store: snapshotStore(stateDir(), { now: Date.now }) }, directoryIn(input)).catch(() => ""),
+    homeRowHere(directoryIn(input)).catch(() => ""),
   ]);
   const rows = [theirs.replace(/\n+$/, ""), ours].filter(Boolean);
   if (rows.length > 0) process.stdout.write(`${rows.join("\n")}\n`);

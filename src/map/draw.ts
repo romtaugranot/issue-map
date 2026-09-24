@@ -118,10 +118,7 @@ function overview(snapshot: Snapshot, home: string | undefined, shows: Shows): s
   const unlinkedLine = `**Unlinked: ${count(unlinked.length)}** — no Link to another open Issue. Ask to list them.`;
   const next = takeNext(snapshot, laidOut);
   if (onMap.length === 0) {
-    // An Unlinked Issue that a closed Issue Blocks is still Unblocked, so Take next can hold something with no Map to draw.
-    if (next.kind === "blocks-unread" || (next.picks.length === 0 && next.takenByOthers === 0)) {
-      return [header, "", "No Issue here has a Link, so there's no Map to draw.", "", unlinkedLine].join("\n");
-    }
+    if (noMapToDraw(laidOut, next)) return [header, "", `${NO_MAP}.`, "", unlinkedLine].join("\n");
     const noGroups = "No Issue here has a Link to another open Issue, so there are no Groups to draw.";
     return [header, "", ...takeNextSection(snapshot, next, shows), "", noGroups, "", unlinkedLine].join("\n");
   }
@@ -136,18 +133,30 @@ function overview(snapshot: Snapshot, home: string | undefined, shows: Shows): s
   return lines.join("\n");
 }
 
+/** Where the overview draws no Map at all. */
+export const NO_MAP = "No Issue here has a Link, so there's no Map to draw";
+
+/** Whether there's no Map to draw; an Unlinked Issue that a closed Issue Blocks is still Unblocked, so Take next can hold something with no Map. */
+export function noMapToDraw({ onMap }: Layout, next: TakeNext): boolean {
+  return onMap.length === 0 && (next.kind === "blocks-unread" || (next.picks.length === 0 && next.takenByOthers === 0));
+}
+
+/** Take next's headline and why, in the words the overview and the status line share. */
+export function takeNextSaid(next: TakeNext): { head: string; why: string } {
+  if (next.kind === "blocks-unread") return { head: "Take next: none", why: "the Map can't read this Project's Blocks Links" };
+  const { picks, takenByOthers } = next;
+  if (picks.length > 0) return { head: `Take next: ${count(picks.length)}`, why: "most waited on first" };
+  if (takenByOthers > 0) return { head: "Take next: 0", why: `all ${plural(takenByOthers, "Unblocked Issue")} ${takenByOthers === 1 ? "is" : "are"} taken by others` };
+  return { head: "Take next: 0", why: "every Issue on the Map is Blocked, or a Parent of Blocked Issues" };
+}
+
 function takeNextSection(snapshot: Snapshot, next: TakeNext, shows: Shows): string[] {
-  if (next.kind === "blocks-unread") {
-    return [`**Take next: none** — the Map can't read this Project's Blocks Links (${next.reason}), so it calls no Issue Unblocked`];
-  }
+  const { head, why } = takeNextSaid(next);
+  if (next.kind === "blocks-unread") return [`**${head}** — ${why} (${next.reason}), so it calls no Issue Unblocked`];
   const { picks, takenByOthers, closingRequestsUnread } = next;
   const unread = closingRequestsUnread === null ? "" : ` · Closing Requests unread (${closingRequestsUnread}), so none leaves an Issue out`;
-  if (picks.length === 0 && takenByOthers > 0) {
-    return [`**Take next: 0** — all ${plural(takenByOthers, "Unblocked Issue")} ${takenByOthers === 1 ? "is" : "are"} taken by others${unread}`];
-  }
-  if (picks.length === 0) return [`**Take next: 0** — every Issue on the Map is Blocked, or a Parent of Blocked Issues${unread}`];
-  const taken = takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
-  return [`**Take next: ${count(picks.length)}** — most waited on first${taken}${unread}`, ...pickLines(picks, snapshot, shows)];
+  const taken = picks.length > 0 && takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
+  return [`**${head}** — ${why}${taken}${unread}`, ...pickLines(picks, snapshot, shows)];
 }
 
 /** Take next's lines, where the children standing in for one Parent past the first few are held in a count. */

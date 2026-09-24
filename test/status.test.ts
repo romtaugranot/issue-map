@@ -11,7 +11,7 @@ import { statusRow } from "../src/map/status.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
 import type { Glance } from "../src/snapshot/store.ts";
 import type { Project } from "../src/tracker/tracker.ts";
-import { statusLine, type StatusDeps } from "../src/status/line.ts";
+import { homeRow, type StatusDeps } from "../src/status/line.ts";
 import { snapshot, PROJECT } from "./fakes/snapshot-builder.ts";
 
 function recorded(name: string): Snapshot {
@@ -95,35 +95,35 @@ describe("the status line", () => {
   const row = `◆ fixture-org/tools · Take next: 2 · #1 Land the API — ▶2 wait on it`;
 
   test("shows the row kept beside the Home Project's Snapshot, from anywhere in its checkout", async () => {
-    assert.equal(await statusLine(deps({ "github.com github.com#1": { kind: "ready", line: row, ageMs: 100_000 } }), "/work/tools/src"), row);
+    assert.equal(await homeRow(deps({ "github.com github.com#1": { kind: "ready", line: row, ageMs: 100_000 } }), "/work/tools/src"), row);
   });
 
   test("says how old the Snapshot is once it stops being fresh, as the Map does", async () => {
-    const shown = await statusLine(deps({ "github.com github.com#1": { kind: "ready", line: row, ageMs: 3 * 3_600_000 + 60_000 } }), "/work/tools");
+    const shown = await homeRow(deps({ "github.com github.com#1": { kind: "ready", line: row, ageMs: 3 * 3_600_000 + 60_000 } }), "/work/tools");
     assert.equal(shown, `${row} · read 3h ago`);
   });
 
   test("always shows the Home Project, never a Project the user moved to", async () => {
     const elsewhere = { "gitlab.com gitlab.com#9": { kind: "ready", line: "◆ fixture-group/app · Take next: 1 · #3 Elsewhere", ageMs: 0 } } as const;
     const d = deps({ ...elsewhere, "github.com github.com#1": { kind: "ready", line: row, ageMs: 0 } });
-    assert.equal(await statusLine(d, "/work/tools"), row);
+    assert.equal(await homeRow(d, "/work/tools"), row);
     assert.deepEqual(d.asked, ["github.com github.com#1"]);
   });
 
   test("says how far the first read has got", async () => {
-    const shown = await statusLine(deps({ "github.com github.com#1": { kind: "reading", read: 1200, total: 48243 } }), "/work/tools");
+    const shown = await homeRow(deps({ "github.com github.com#1": { kind: "reading", read: 1200, total: 48243 } }), "/work/tools");
     assert.equal(shown, "◆ fixture-org/tools · reading it for the first time: 1,200 of 48,243 Issues (2%)");
   });
 
   test("with nothing kept warm for the Home Project, asks for the Map rather than reading it", async () => {
-    assert.equal(await statusLine(deps({}), "/work/tools"), "◆ fixture-org/tools · ask for the Map to see Take next here");
+    assert.equal(await homeRow(deps({}), "/work/tools"), "◆ fixture-org/tools · ask for the Map to see Take next here");
   });
 
   test("before the Home Project is known, asks for the Map", async () => {
-    assert.equal(await statusLine(deps({}, { home: null }), "/work/tools"), "◆ No Home Project yet · ask for the Map");
+    assert.equal(await homeRow(deps({}, { home: null }), "/work/tools"), "◆ No Home Project yet · ask for the Map");
   });
 
   test("outside a git checkout, shows nothing", async () => {
-    assert.equal(await statusLine(deps({}), "/somewhere/else"), "");
+    assert.equal(await homeRow(deps({}), "/somewhere/else"), "");
   });
 });

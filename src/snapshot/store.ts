@@ -143,7 +143,7 @@ interface Summary {
 }
 
 /** How long a Snapshot is fresh; a draw refreshes one older than this first (ADR 0006). */
-const FRESH_MS = 2 * 60_000;
+export const FRESH_MS = 2 * 60_000;
 /** How often a Snapshot is read in full again, even when every refresh caught up, so drift can't build up unseen (ADR 0006). */
 const FULL_READ_EVERY_MS = 7 * 86_400_000;
 /** How far before its last read a refresh reads changes from, since this machine's clock and the Tracker's can disagree. */

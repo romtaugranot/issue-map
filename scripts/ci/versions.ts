@@ -46,12 +46,27 @@ export function gitlabMatrix(tags: Record<Edition, string[]>, floor: string): Ma
   });
 }
 
-/** GHES releases from `floor` on, while docs.github.com publishes a schema for each; `published` says whether it does. */
+/**
+ * GHES releases from `floor` on, while docs.github.com publishes a schema for
+ * each, carrying on into the next major; `published` says whether it does. A
+ * floor with no schema is refused rather than answered with none, since the
+ * recorded schemas are pruned to this list.
+ */
 export async function ghesReleases(floor: string, published: (release: string) => Promise<boolean>): Promise<string[]> {
-  const [major, minor] = floor.split(".").map(Number) as [number, number];
-  const releases: string[] = [];
-  for (let at = minor; await published(`${major}.${at}`); at++) releases.push(`${major}.${at}`);
-  return releases;
+  if (!(await published(floor))) throw new Error(`docs.github.com publishes no schema for GHES ${floor}: raise OLDEST_SUPPORTED_GHES in src/tracker/github.ts`);
+  let [major, minor] = floor.split(".").map(Number) as [number, number];
+  const releases = [floor];
+  for (;;) {
+    if (await published(`${major}.${minor + 1}`)) minor++;
+    else if (await published(`${major + 1}.0`)) [major, minor] = [major + 1, 0];
+    else return releases;
+    releases.push(`${major}.${minor}`);
+  }
+}
+
+/** Whether docs.github.com publishes a GraphQL schema for a GHES release. */
+export async function publishedOnDocs(release: string): Promise<boolean> {
+  return (await fetch(schemaUrl(release), { method: "HEAD" })).ok;
 }
 
 /** Where docs.github.com publishes a GraphQL schema: `fpt` for github.com, `ghec`, or a GHES release. */
@@ -85,8 +100,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const [ce, ee] = await Promise.all([dockerTags("ce", TESTED_FROM), dockerTags("ee", TESTED_FROM)]);
     console.log(JSON.stringify(gitlabMatrix({ ce, ee }, TESTED_FROM)));
   } else if (what === "ghes") {
-    const published = async (release: string) => (await fetch(schemaUrl(release), { method: "HEAD" })).ok;
-    console.log(JSON.stringify(await ghesReleases(OLDEST_SUPPORTED_GHES, published)));
+    console.log(JSON.stringify(await ghesReleases(OLDEST_SUPPORTED_GHES, publishedOnDocs)));
   } else {
     console.error("usage: node scripts/ci/versions.ts gitlab | ghes");
     process.exitCode = 2;
