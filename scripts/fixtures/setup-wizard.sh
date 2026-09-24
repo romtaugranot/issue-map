@@ -190,7 +190,7 @@ finish() {
 # Secrets go only to this repository's GitHub Actions secrets; the few
 # public values it remembers are kept outside the repository.
 
-TOTAL_STAGES=8
+TOTAL_STAGES=9
 
 # Nothing is written inside the repository, which is headed public.
 ENV_FILE="${ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/issue-map/fixtures.env}"
@@ -219,10 +219,10 @@ step "GitHub App name: issue-map-fixtures-reader (or any free name). Homepage UR
 step "Webhook: untick ${BOLD}Active${RESET}."
 step "Repository permissions: ${BOLD}Issues: Read-only${RESET}, ${BOLD}Pull requests: Read-only${RESET}; Metadata stays Read-only. Nothing else."
 step "Where can this GitHub App be installed? ${BOLD}Any account${RESET}, so it can be installed on ${GH_OTHER} too."
-step "Create GitHub App. On its General page, copy the ${BOLD}App ID${RESET}."
-ask FIXTURES_APP_ID "Paste the App ID:"
-write_env FIXTURES_APP_ID "$FIXTURES_APP_ID"
-set_var FIXTURES_APP_ID "$FIXTURES_APP_ID"
+step "Create GitHub App. On its General page, copy the ${BOLD}Client ID${RESET}."
+ask FIXTURES_APP_CLIENT_ID "Paste the Client ID:"
+write_env FIXTURES_APP_CLIENT_ID "$FIXTURES_APP_CLIENT_ID"
+set_var FIXTURES_APP_CLIENT_ID "$FIXTURES_APP_CLIENT_ID"
 step "Further down, Private keys → ${BOLD}Generate a private key${RESET}; a .pem file downloads."
 ask PEM_PATH "Path to the downloaded .pem file:"
 if [[ -f "$PEM_PATH" ]]; then
@@ -279,6 +279,7 @@ if confirm "Seed the GitLab Free Fixture now (node scripts/fixtures/seed.ts gitl
 fi
 if confirm "Has GitLab for Open Source licensed ${GL_OSS}, so the licensed Fixture can be seeded?"; then
   node scripts/fixtures/seed.ts gitlab-oss || SKIPPED+=("seeding gitlab-oss (re-run: node scripts/fixtures/seed.ts gitlab-oss)")
+  set_var ISSUE_MAP_LIVE "github,gitlab-free,gitlab-oss"
 else
   SKIPPED+=("seeding gitlab-oss, once GitLab for Open Source licenses ${GL_OSS}: node scripts/fixtures/seed.ts gitlab-oss")
 fi
@@ -288,6 +289,16 @@ stage "Read them back"
 say "The live reads check the adapters read exactly what was seeded."
 if confirm "Run them now with your own logins (ISSUE_MAP_LIVE=github,gitlab-free npm run test:live)?"; then
   ISSUE_MAP_LIVE=github,gitlab-free npm run test:live || SKIPPED+=("the live reads failed: see the output above")
+  pause
+fi
+
+stage "CI — the nightly reads and the licence gate"
+say "Licensed self-managed GitLab stays stood in for until GitLab agrees in writing to a"
+say "self-generated test licence in public CI (ADR 0004): the version matrix runs EE unlicensed."
+set_var GITLAB_LICENCE_AGREED "false"
+if confirm "Start the nightly live reads once now, as CI runs them (gh workflow run live.yml)?"; then
+  gh workflow run live.yml || SKIPPED+=("starting the Live workflow: gh workflow run live.yml")
+  note "Follow it with: gh run watch"
   pause
 fi
 

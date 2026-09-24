@@ -1,0 +1,68 @@
+# A release (ADR 0004): tagged only from a commit where every tier passed.
+# Run by hand with the version to release. It runs all three tiers on the
+# commit it was started on, in this run, and tags and releases that commit
+# only once every one of them is green, so no earlier run on another commit
+# or with other results can stand in for them.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The version to release, as in .claude-plugin/plugin.json, such as 0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: The version is the plugin's, and not released yet
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          declared=$(node -p 'require("./.claude-plugin/plugin.json").version')
+          if [ "$declared" != "$VERSION" ]; then echo "::error::.claude-plugin/plugin.json says $declared, not $VERSION"; exit 1; fi
+          if gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" >/dev/null 2>&1; then echo "::error::v$VERSION is already tagged"; exit 1; fi
+
+  contract:
+    needs: check
+    uses: ./.github/workflows/contract.yml
+
+  live:
+    needs: check
+    uses: ./.github/workflows/live.yml
+    secrets: inherit
+    # What the called workflow's jobs may ask for; only a nightly run files an Issue.
+    permissions:
+      contents: read
+      issues: write
+
+  gitlab:
+    needs: check
+    uses: ./.github/workflows/gitlab-matrix.yml
+    secrets: inherit
+    # What the called workflow's jobs may ask for; only a nightly run files an Issue.
+    permissions:
+      contents: read
+      issues: write
+
+  release:
+    needs: [contract, live, gitlab]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Tag and release the commit every tier passed on
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "v${{ inputs.version }}" --target "${{ github.sha }}" --title "v${{ inputs.version }}" --generate-notes

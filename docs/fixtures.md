@@ -44,10 +44,12 @@ Kept only as GitHub Actions settings of this repository, never in the repo:
 
 | Name | Kind | What |
 |---|---|---|
-| `FIXTURES_APP_ID` | variable | the GitHub App's ID |
+| `FIXTURES_APP_CLIENT_ID` | variable | the GitHub App's Client ID |
 | `FIXTURES_APP_PRIVATE_KEY` | secret | a private key generated for the App |
 | `FIXTURES_GITLAB_TOKEN` | secret | the gitlab.com bot account's `read_api` token |
+| `ISSUE_MAP_LIVE` | variable | the Fixtures the nightly tier reads; `github,gitlab-free` when unset, and `github,gitlab-free,gitlab-oss` once GitLab for Open Source licenses the group |
 | `GITLAB_LICENCE_AGREED` | variable | `false` until GitLab agrees in writing to a self-generated test licence in public CI (ADR 0004); see below |
+| `GITLAB_TEST_LICENCE` | secret | only once `GITLAB_LICENCE_AGREED` is `true`: the licence the version matrix's EE jobs apply |
 
 ## Running the live reads
 

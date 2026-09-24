@@ -9,7 +9,7 @@ const PRODUCT = "GitHub";
 const CANT_READ_PULLS = "this login can't read pull requests";
 
 /** The oldest GHES release GitHub still supports, a window that rolls as GitHub retires releases (ADR 0003). */
-const OLDEST_SUPPORTED_GHES = "3.18";
+export const OLDEST_SUPPORTED_GHES = "3.18";
 
 /**
  * The first GHES release whose published GraphQL schema has each Link kind's
