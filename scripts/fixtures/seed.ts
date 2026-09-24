@@ -15,6 +15,7 @@
  */
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { setTimeout as sleep } from "node:timers/promises";
 import { anonymousHttp, processCli, type Cli } from "../../src/tracker/boundary.ts";
 import { github } from "../../src/tracker/github.ts";
 import { gitlab } from "../../src/tracker/gitlab.ts";
@@ -185,8 +186,15 @@ export function githubSeeding(cli: Cli, host: string): Seeding {
   };
 }
 
-/** Seeding on a GitLab, through `glab api`: REST for Projects and Issues, the work-item GraphQL for epics. */
-export function gitlabSeeding(cli: Cli, host: string): Seeding {
+/** How long a GitLab gets to work out which Issues a merge request it opened closes, which it does in the background. */
+const CLOSING_TRIES = 60;
+const CLOSING_EVERY_MS = 2000;
+
+/**
+ * Seeding on a GitLab, through `glab api`: REST for Projects and Issues, the
+ * work-item GraphQL for tasks and epics. `wait` resolves after `ms`.
+ */
+export function gitlabSeeding(cli: Cli, host: string, wait: (ms: number) => Promise<unknown> = sleep): Seeding {
   const api = apiOf(cli, "glab", host);
   const graphql = async (query: string, variables: Record<string, string>) => {
     const body = (await api(["graphql", "-f", `query=${query}`, ...Object.entries(variables).flatMap(([name, value]) => ["-f", `${name}=${value}`])])) as {
@@ -201,6 +209,16 @@ export function gitlabSeeding(cli: Cli, host: string): Seeding {
   type RestIssue = { id: number; iid: number; title: string; state: string };
   const fromRest = (path: string, issue: RestIssue): Existing => ({ id: `gid://gitlab/WorkItem/${issue.id}`, ref: `${path}#${issue.iid}`, title: issue.title, open: issue.state === "opened" });
   const split = (ref: string) => /^(.+)[#&](\d+)$/.exec(ref)!.slice(1) as [string, string];
+  /** A work item of the type `type` names, made in the Project or group at `path`. */
+  const made = async (path: string, issue: FixtureIssue, type: string): Promise<Existing> => {
+    const answer = await graphql(
+      `mutation($path: ID!, $title: String!, $type: WorkItemsTypeID!) { workItemCreate(input: {namespacePath: $path, title: $title, workItemTypeId: $type}) { workItem { id iid title state reference(full: true) } errors } }`,
+      { path, title: title(issue), type },
+    );
+    const created = answer.workItemCreate as { workItem: Node | null; errors: string[] };
+    if (!created.workItem) fail(`GitLab didn't make ${title(issue)} in ${path}: ${created.errors.join("; ")}`);
+    return held(created.workItem);
+  };
 
   return {
     async namespace(path, create) {
@@ -230,16 +248,16 @@ export function gitlabSeeding(cli: Cli, host: string): Seeding {
       if (issue.level === "epic") {
         const types = await graphql(`query($path: ID!) { group(fullPath: $path) { workItemTypes(name: EPIC) { nodes { id } } } }`, { path });
         const type = (types.group as { workItemTypes: { nodes: { id: string }[] } } | null)?.workItemTypes.nodes[0]?.id ?? fail(`${path} has no epics: it needs GitLab's Premium tier or above`);
-        const made = await graphql(
-          `mutation($path: ID!, $title: String!, $type: WorkItemsTypeID!) { workItemCreate(input: {namespacePath: $path, title: $title, workItemTypeId: $type}) { workItem { id iid title state reference(full: true) } errors } }`,
-          { path, title: title(issue), type },
-        );
-        const created = made.workItemCreate as { workItem: Node | null; errors: string[] };
-        if (!created.workItem) fail(`GitLab didn't make ${title(issue)} in ${path}: ${created.errors.join("; ")}`);
-        return held(created.workItem);
+        return made(path, issue, type);
       }
-      const type = issue.level === "task" ? ["-f", "issue_type=task"] : [];
-      return fromRest(path, (await api([`projects/${encode(path)}/issues`, "--method", "POST", "-f", `title=${title(issue)}`, ...type])) as RestIssue);
+      if (issue.level === "task") {
+        // GitLab's REST takes `issue_type=task` only in later versions; every promised one's work-item GraphQL makes one.
+        const types = await graphql(`query($path: ID!) { project(fullPath: $path) { workItemTypes(first: 20) { nodes { id name } } } }`, { path });
+        const nodes = (types.project as { workItemTypes: { nodes: { id: string; name: string }[] } } | null)?.workItemTypes.nodes ?? fail(`${path} isn't there`);
+        const type = nodes.find((node) => node.name === "Task")?.id ?? fail(`${path} has no tasks`);
+        return made(path, issue, type);
+      }
+      return fromRest(path, (await api([`projects/${encode(path)}/issues`, "--method", "POST", "-f", `title=${title(issue)}`])) as RestIssue);
     },
     async close(issue, how, duplicateOf) {
       const [path, iid] = split(issue.ref);
@@ -267,8 +285,14 @@ export function gitlabSeeding(cli: Cli, host: string): Seeding {
         ]);
       }
       const [, iid] = split(issue.ref);
-      await api([`${project}/merge_requests`, "--method", "POST", "-f", `source_branch=${branch}`, "-f", `target_branch=${base}`, "-f", `title=Fixture: closes ${key}`, "-f", `description=Closes #${iid}`]);
-      return true;
+      const request = (await api([`${project}/merge_requests`, "--method", "POST", "-f", `source_branch=${branch}`, "-f", `target_branch=${base}`, "-f", `title=Fixture: closes ${key}`, "-f", `description=Closes #${iid}`])) as { iid: number };
+      // Until GitLab has worked out what it closes, a read would find no Closing Request.
+      for (let tries = 1; ; tries++) {
+        const closes = (await api([`${project}/merge_requests/${request.iid}/closes_issues`])) as { iid: number }[] | null;
+        if (closes?.some((closed) => String(closed.iid) === iid)) return true;
+        if (tries === CLOSING_TRIES) fail(`GitLab never said ${path}!${request.iid} closes ${issue.ref}`);
+        await wait(CLOSING_EVERY_MS);
+      }
     },
   };
 }

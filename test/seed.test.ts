@@ -206,21 +206,55 @@ describe("seeding GitHub through gh", () => {
 describe("seeding GitLab through glab", () => {
   const graphqlAnswer = (data: object) => () => ({ data });
 
-  test("a task is made as a task, and an epic as an Issue of the group's own", async () => {
+  test("a task is made as a task through the work-item GraphQL, which every promised GitLab takes, and an epic as an Issue of the group's own", async () => {
     const { cli, calls } = scripted([
-      [/^POST projects\/g%2Fmap\/issues$/, () => ({ id: 77, iid: 4, title: "[t1a] Add the lint job", state: "opened" })],
       [/^GET graphql$/, (args) =>
-        args.some((a) => a.includes("workItemTypes"))
-          ? { data: { group: { workItemTypes: { nodes: [{ id: "gid://gitlab/WorkItems::Type/8" }] } } } }
-          : { data: { workItemCreate: { workItem: { id: "gid://gitlab/WorkItem/9", iid: "2", title: "[e1] Ship version two", state: "OPEN", reference: "g&2" }, errors: [] } } }],
+        args.some((a) => a.includes("project(fullPath: $path) { workItemTypes"))
+          ? { data: { project: { workItemTypes: { nodes: [{ id: "gid://gitlab/WorkItems::Type/1", name: "Issue" }, { id: "gid://gitlab/WorkItems::Type/5", name: "Task" }] } } } }
+          : args.some((a) => a.includes("workItemTypes"))
+            ? { data: { group: { workItemTypes: { nodes: [{ id: "gid://gitlab/WorkItems::Type/8" }] } } } }
+            : args.some((a) => a.includes("path=g/map"))
+              ? { data: { workItemCreate: { workItem: { id: "gid://gitlab/WorkItem/77", iid: "4", title: "[t1a] Add the lint job", state: "OPEN", reference: "g/map#4" }, errors: [] } } }
+              : { data: { workItemCreate: { workItem: { id: "gid://gitlab/WorkItem/9", iid: "2", title: "[e1] Ship version two", state: "OPEN", reference: "g&2" }, errors: [] } } }],
     ]);
     const seeding = gitlabSeeding(cli, "gitlab.com");
     const task = await seeding.create({ path: "g/map", issues: [] }, { key: "t1a", title: "Add the lint job", level: "task" });
     assert.deepEqual(task, { id: "gid://gitlab/WorkItem/77", ref: "g/map#4", title: "[t1a] Add the lint job", open: true });
-    assert.match(calls[0]!, /-f title=\[t1a\] Add the lint job -f issue_type=task$/);
+    assert.match(calls.at(-1)!, /workItemCreate\(input: \{namespacePath: \$path.*-f path=g\/map -f title=\[t1a\] Add the lint job -f type=gid:\/\/gitlab\/WorkItems::Type\/5$/s);
+    assert.ok(!calls.some((c) => c.includes("issue_type")), "GitLab 16.0's REST refuses issue_type=task");
     const epic = await seeding.create({ path: "g", namespace: true, issues: [] }, { key: "e1", title: "Ship version two", level: "epic" });
     assert.equal(epic.ref, "g&2");
     assert.match(calls.at(-1)!, /workItemCreate\(input: \{namespacePath: \$path.*-f path=g -f title=\[e1\] Ship version two -f type=gid:\/\/gitlab\/WorkItems::Type\/8$/s);
+  });
+
+  test("a Closing Request is done only once GitLab says it closes the Issue, which it works out after opening it", async () => {
+    let asked = 0;
+    const { cli, calls } = scripted([
+      [/^GET projects\/g%2Fmap\/merge_requests\?/, () => []],
+      [/^GET projects\/g%2Fmap$/, () => ({ default_branch: "main" })],
+      [/^GET projects\/g%2Fmap\/repository\/branches\//, () => ({ name: "fixture/m1" })],
+      [/^POST projects\/g%2Fmap\/merge_requests$/, () => ({ iid: 3 })],
+      [/^GET projects\/g%2Fmap\/merge_requests\/3\/closes_issues$/, () => (++asked < 3 ? [] : [{ iid: 7 }])],
+    ]);
+    const waits: number[] = [];
+    const seeding = gitlabSeeding(cli, "gitlab.test", async (ms) => void waits.push(ms));
+    const m1 = { id: "gid://gitlab/WorkItem/70", ref: "g/map#7", title: "[m1] Fix the broken link in the footer", open: true };
+    assert.equal(await seeding.closingRequest("g/map", m1, "m1"), true);
+    assert.equal(calls.filter((c) => c.endsWith("closes_issues")).length, 3);
+    assert.equal(waits.length, 2);
+  });
+
+  test("a Closing Request GitLab never says closes its Issue stops the seeding, rather than leave a Fixture the live reads fail on", async () => {
+    const { cli } = scripted([
+      [/^GET projects\/g%2Fmap\/merge_requests\?/, () => []],
+      [/^GET projects\/g%2Fmap$/, () => ({ default_branch: "main" })],
+      [/^GET projects\/g%2Fmap\/repository\/branches\//, () => ({ name: "fixture/m1" })],
+      [/^POST projects\/g%2Fmap\/merge_requests$/, () => ({ iid: 3 })],
+      [/^GET projects\/g%2Fmap\/merge_requests\/3\/closes_issues$/, () => []],
+    ]);
+    const seeding = gitlabSeeding(cli, "gitlab.test", async () => {});
+    const m1 = { id: "gid://gitlab/WorkItem/70", ref: "g/map#7", title: "[m1] Fix the broken link in the footer", open: true };
+    await assert.rejects(seeding.closingRequest("g/map", m1, "m1"), /never said .*!3 closes g\/map#7/);
   });
 
   test("a duplicate closes through GitLab's /duplicate, the one close it says how of", async () => {
