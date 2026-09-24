@@ -19,6 +19,7 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
     resolveProject: async () => notYet,
     viewer: async () => notYet,
     openIssues: async () => notYet,
+    changes: async () => notYet,
     issue: async () => notYet,
   });
 

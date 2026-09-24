@@ -1,7 +1,8 @@
 /**
  * The Tracker seam (ADR 0007). Everything above it speaks only the
  * glossary's terms; only the adapters behind it know GitHub from GitLab.
- * This file holds needs 1, 2, 3, 4, 6 and 7 so far.
+ * This file holds needs 1, 2, 3, 4, 6 and 7 so far, and
+ * reading only what changed for needs 3, 4 and 7.
  */
 
 /** One kind of Tracker (GitHub, GitLab), able to say whether it runs at a host. */
@@ -35,6 +36,14 @@ export interface Tracker {
    */
   openIssues(project: Project, after: string | null): Promise<IssuePage>;
   /**
+   * Needs 3, 4 and 7 again, for only what changed in a Project since `since`,
+   * an ISO date, so a Snapshot is refreshed without a full read (ADR 0006):
+   * every Issue updated, given or stripped of a Link, or given or stripped
+   * of a Closing Request since then, as far as the Tracker records it. The
+   * Issues `outside` names by identity are read again too, as far ends.
+   */
+  changes(project: Project, since: string, outside: string[]): Promise<ChangesAnswer>;
+  /**
    * Needs 3, 4 and 7 for one Issue, open or closed, read live for its card
    * (ADR 0006), with the Mentions that Link Suggestions start from (need 8).
    * `locator` is its reference from anywhere, such as `owner/name#123`, or its
@@ -61,6 +70,27 @@ export type IssuePage =
       /** Where the next page starts, or `null` after the last. */
       next: string | null;
       /** What the page couldn't hold. */
+      unread: Unread;
+    }
+  | { kind: "not-found"; reason: string }
+  | CantAnswer;
+
+export type ChangesAnswer =
+  | {
+      kind: "changes";
+      /** The Project's open Issues that changed, each read whole. */
+      open: OpenIssue[];
+      /**
+       * The Issues that changed and aren't open in the Project any more —
+       * closed, moved out, or hidden from this login — and the Issues
+       * `outside` named, each as a Link's far end.
+       */
+      ends: FarEnd[];
+      /** The Closing Requests updated since, by reference: one an Issue holds that isn't among the Issues it closes now no longer closes it. */
+      requests: string[];
+      /** `false` when the read couldn't reach back to `since`, so a change may have been missed. */
+      caughtUp: boolean;
+      /** What the read couldn't give. */
       unread: Unread;
     }
   | { kind: "not-found"; reason: string }

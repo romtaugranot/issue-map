@@ -30,6 +30,13 @@ export function short(ref: string, project: string): string {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
+/** How long something has lasted, such as `3 min`, `3h` or `3d`. */
+export function age(ms: number): string {
+  if (ms < HOUR) return `${Math.floor(ms / 60_000)} min`;
+  if (ms < 2 * DAY) return `${Math.floor(ms / HOUR)}h`;
+  return `${Math.floor(ms / DAY)}d`;
+}
+
 /** How long before `now` something happened, both ISO dates, such as `2d ago`; the drawing module has no clock of its own. */
 export function ago(then: string, now: string): string {
   const ms = Math.max(0, Date.parse(now) - Date.parse(then));

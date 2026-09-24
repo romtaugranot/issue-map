@@ -7,7 +7,7 @@ import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { layout, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
-import { ago, count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
+import { age, ago, count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
 
 export type Command =
   | { kind: "overview" }
@@ -33,16 +33,29 @@ const PAGE = 15;
 /** Issues a page of one level of an outline. */
 const OUTLINE_PAGE = 10;
 
-export function draw(snapshot: Snapshot, command: Command): Drawing {
+/** A Snapshot older than it should be: the refresh a draw was due couldn't happen (ADR 0006). */
+export interface Stale {
+  ageMs: number;
+  /** Why it couldn't be refreshed. */
+  reason: string;
+}
+
+/** `stale` opens the drawing with a line saying how old its Snapshot is and why; a fresh one shows no age. */
+export function draw(snapshot: Snapshot, command: Command, stale?: Stale): Drawing {
+  const text = drawn(snapshot, command);
+  return { text: stale ? `⚠ read ${age(stale.ageMs)} ago — couldn't refresh it: ${stale.reason}\n${text}` : text };
+}
+
+function drawn(snapshot: Snapshot, command: Command): string {
   switch (command.kind) {
     case "overview":
-      return { text: overview(snapshot) };
+      return overview(snapshot);
     case "unlinked":
-      return { text: unlinkedPage(snapshot, layout(snapshot).unlinked, command.page).join("\n") };
+      return unlinkedPage(snapshot, layout(snapshot).unlinked, command.page).join("\n");
     case "group":
-      return { text: outline(snapshot, openGroup(layout(snapshot), command.group), command.page) };
+      return outline(snapshot, openGroup(layout(snapshot), command.group), command.page);
     case "under":
-      return { text: outline(snapshot, openUnder(snapshot, layout(snapshot), command.ref), command.page) };
+      return outline(snapshot, openUnder(snapshot, layout(snapshot), command.ref), command.page);
   }
 }
 

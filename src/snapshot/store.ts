@@ -2,11 +2,13 @@
  * The Snapshot store (ADR 0006): what's kept between draws, one Snapshot per
  * Tracker, Project and login. A first read saves itself a page at a time, so
  * an interrupted read resumes, but only a finished read is ever handed over
- * as a Snapshot: until then the store hands over progress.
+ * as a Snapshot: until then the store hands over progress. A draw is
+ * handed a Snapshot refreshed first when it's more than two minutes old.
  */
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { OpenIssue, Project, Tracker, Unread } from "../tracker/tracker.ts";
+import type { ChangesAnswer, FarEnd, Link, OpenIssue, Project, Tracker, Unread } from "../tracker/tracker.ts";
 import { SNAPSHOT_FORMAT, type Snapshot } from "./snapshot.ts";
 
 export interface SnapshotKey {
@@ -38,13 +40,46 @@ export type SnapshotState =
     }
   | { kind: "ready"; snapshot: Snapshot; ageMs: number };
 
-export type ReadOutcome = { kind: "done" } | { kind: "busy" } | { kind: "failed"; reason: string };
+/** The Tracker refused the login, or shows it no such Project: what the store kept of it is deleted (ADR 0006). */
+export type Refused = { kind: "refused"; reason: string };
+
+export type ReadOutcome = { kind: "done" } | { kind: "busy" } | { kind: "failed"; reason: string } | Refused;
+
+export type RefreshOutcome =
+  | { kind: "done"; caughtUp: boolean }
+  /** Another read or refresh of it is running. */
+  | { kind: "busy" }
+  /** There's no finished Snapshot to refresh. */
+  | { kind: "none" }
+  | { kind: "failed"; reason: string }
+  | Refused;
+
+/** What a draw is handed: a Snapshot with its age and, when it couldn't be refreshed, why; or no Snapshot yet. */
+export type ForDraw =
+  | Exclude<SnapshotState, { kind: "ready" }>
+  | {
+      kind: "ready";
+      snapshot: Snapshot;
+      ageMs: number;
+      /** Why it's older than two minutes: the refresh it was due couldn't happen. */
+      stale?: string;
+    }
+  | Refused;
 
 export interface SnapshotStore {
   state(key: SnapshotKey): Promise<SnapshotState>;
   /** Reads the Project in full, resuming an interrupted read; leaves it to another read already running. */
   read(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ReadOutcome>;
+  /** Brings a finished Snapshot up to date with only what changed since it was read. */
+  refresh(key: SnapshotKey, tracker: Tracker, project: Project): Promise<RefreshOutcome>;
+  /** The Snapshot to draw: refreshed first when it's more than two minutes old, or, when it can't be, as it is and why. */
+  forDraw(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ForDraw>;
 }
+
+/** How long a Snapshot is fresh; a draw refreshes one older than this first (ADR 0006). */
+const FRESH_MS = 2 * 60_000;
+/** How far before its last read a refresh reads changes from, since this machine's clock and the Tracker's can disagree. */
+const MARGIN_MS = 60_000;
 
 /** A first read part-way through. Its pages are kept one file each, so saving one doesn't rewrite the rest. */
 interface Progress {
@@ -55,6 +90,8 @@ interface Progress {
   /** Where the next page starts; `null` before the first page. */
   after: string | null;
   total: number;
+  /** When the first attempt started, in milliseconds since the epoch. */
+  startedAt: number;
   spentMs: number;
   /** What the saved pages couldn't hold. */
   unread: Unread;
@@ -108,14 +145,18 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           read: 0,
           after: null,
           total: project.issues === "off" ? 0 : project.issues.open,
+          startedAt: clock.now(),
           spentMs: 0,
           unread: {},
         };
         delete progress.stopped;
+        // A read with nothing saved yet starts now, whenever an earlier attempt did.
+        if (progress.pages === 0) progress.startedAt = clock.now();
         await save(at.progress, progress);
         for (;;) {
           const started = clock.now();
           const page = await tracker.openIssues(project, progress.after);
+          if (page.kind === "refused" || page.kind === "not-found") return await forget(at, progress.total, page.reason);
           if (page.kind !== "page") {
             progress.stopped = page.reason;
             await save(at.progress, progress);
@@ -139,6 +180,8 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           project: { id: project.id, path: project.path, url: project.url },
           login: key.login,
           readAt: new Date(clock.now()).toISOString(),
+          changesSince: new Date(progress.startedAt - MARGIN_MS).toISOString(),
+          caughtUp: true,
           issues: unique(issues),
           unread: progress.unread,
         };
@@ -149,7 +192,98 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
         await rm(at.lock, { force: true });
       }
     },
+
+    async refresh(key, tracker, project) {
+      const at = paths(key);
+      if (!(await lock(at.lock))) return { kind: "busy" };
+      try {
+        const snapshot = current(await readJson<Snapshot>(at.snapshot));
+        if (!snapshot) return { kind: "none" };
+        const started = clock.now();
+        const changes = await tracker.changes(project, snapshot.changesSince, outsideOf(snapshot));
+        if (changes.kind === "refused" || changes.kind === "not-found") return await forget(at, 0, changes.reason);
+        if (changes.kind !== "changes") return { kind: "failed", reason: changes.reason };
+        const refreshed: Snapshot = {
+          ...snapshot,
+          issues: applied(snapshot, changes),
+          unread: { ...changes.unread, ...snapshot.unread },
+          readAt: new Date(clock.now()).toISOString(),
+          changesSince: new Date(started - MARGIN_MS).toISOString(),
+          caughtUp: snapshot.caughtUp && changes.caughtUp,
+        };
+        await save(at.snapshot, refreshed);
+        return { kind: "done", caughtUp: refreshed.caughtUp };
+      } finally {
+        await rm(at.lock, { force: true });
+      }
+    },
+
+    async forDraw(key, tracker, project) {
+      const state = await this.state(key);
+      if (state.kind !== "ready" || state.ageMs <= FRESH_MS) return state;
+      const outcome = await this.refresh(key, tracker, project);
+      if (outcome.kind === "refused") return outcome;
+      const after = await this.state(key);
+      if (outcome.kind === "done" || after.kind !== "ready") return after;
+      return { ...after, stale: outcome.kind === "failed" ? outcome.reason : "another refresh of it is running" };
+    },
   };
+}
+
+/** The Outside Issues the Snapshot's Links reach that this login could read when it last looked. */
+function outsideOf({ issues, project }: Snapshot): string[] {
+  const ids = issues.flatMap((issue) => issue.links.flatMap(({ to }) => (to.readable && to.project !== project.path ? [to.id] : [])));
+  return [...new Set(ids)];
+}
+
+/** What a Link's far end is to this Issue, seen from the far end. */
+const MIRROR: Record<Link["role"], Link["role"]> = { blocker: "blocked", blocked: "blocker", parent: "child", child: "parent", related: "related" };
+
+/**
+ * The Snapshot's open Issues with what changed applied, oldest first. A Link
+ * is recorded at both its ends, but a Tracker may note a change at only one,
+ * so an Issue that didn't change takes its Links to one that did from the
+ * changed one's side. A Link to an Issue that closed or left is kept, with
+ * the far end as it is now. An Issue that didn't change no longer holds a
+ * Closing Request that changed, since one that still closes it would have
+ * marked it changed.
+ */
+function applied(snapshot: Snapshot, { open, ends, requests }: Extract<ChangesAnswer, { kind: "changes" }>): OpenIssue[] {
+  const changedOpen = new Set(open.map((issue) => issue.id));
+  const endsNow = new Map(ends.map((end) => [end.id, end]));
+  const changedRequests = new Set(requests);
+  const kept = new Map(
+    snapshot.issues
+      .filter((issue) => !changedOpen.has(issue.id) && !endsNow.has(issue.id))
+      .map((issue) => [
+        issue.id,
+        {
+          ...issue,
+          links: issue.links.flatMap(({ role, to }) => (changedOpen.has(to.id) ? [] : [{ role, to: endsNow.get(to.id) ?? to }])),
+          closingRequests: issue.closingRequests.filter((request) => !changedRequests.has(request.ref)),
+        },
+      ]),
+  );
+  for (const issue of open) {
+    const self: FarEnd = { id: issue.id, readable: true, open: true, project: snapshot.project.path, ref: `${snapshot.project.path}${issue.ref}`, title: issue.title, url: issue.url };
+    for (const { role, to } of issue.links) kept.get(to.id)?.links.push({ role: MIRROR[role], to: self });
+  }
+  return [...kept.values(), ...open].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+}
+
+type Paths = { snapshot: string; reading: string; progress: string };
+
+/**
+ * Deletes the Snapshot and every page read towards one, keeping only why,
+ * with none of the Project's Issues: the next read starts over.
+ */
+async function forget(at: Paths, total: number, reason: string): Promise<Refused> {
+  await rm(at.snapshot, { force: true });
+  await rm(at.reading, { recursive: true, force: true });
+  await mkdir(at.reading, { recursive: true, mode: 0o700 });
+  const empty: Progress = { format: SNAPSHOT_FORMAT, pages: 0, read: 0, after: null, total, startedAt: 0, spentMs: 0, unread: {} };
+  await save(at.progress, { ...empty, stopped: reason });
+  return { kind: "refused", reason };
 }
 
 /** A Snapshot or read saved in another format counts as none, so it is read again. */
@@ -165,8 +299,8 @@ function unique(issues: OpenIssue[]): OpenIssue[] {
 
 /** Takes the lock, or says another live process holds it. A lock whose process is gone is taken over. */
 async function lock(path: string): Promise<boolean> {
-  // Linked into place whole, so nobody ever reads a lock without its holder.
-  const mine = `${path}.${process.pid}.tmp`;
+  // Linked into place whole, so nobody ever reads a lock without its holder; named per attempt, since one process can try twice at once.
+  const mine = `${path}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(mine, JSON.stringify({ pid: process.pid }), { mode: 0o600 });
   try {
     for (let attempt = 0; attempt < 2; attempt++) {

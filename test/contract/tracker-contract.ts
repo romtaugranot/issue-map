@@ -1,12 +1,12 @@
 /**
  * One contract suite for every Tracker adapter (spec, Seam B), covering
  * needs 1, 2, 3, 4, 6 and 7 including their "can't" answers, for a whole
- * Project and for one Issue read for its card. Each adapter supplies
+ * Project, for only what changed in it, and for one Issue read for its card. Each adapter supplies
  * a Stage that stands a World up behind its own boundary.
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import type { FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
+import type { ChangesAnswer, FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
   path: string;
@@ -33,6 +33,12 @@ export interface IssueSpec {
   closedAs?: "completed" | "not planned" | "duplicate";
   /** When it closed, as an ISO date; the day after it was created by default. */
   closedAt?: string;
+  /**
+   * When it was last updated, as an ISO date; when it closed, or else when
+   * it was created, by default. A Link made or removed is left to the
+   * Tracker to mark its own way.
+   */
+  updatedAt?: string;
   /** This login can't read it, though a Link to it is recorded. */
   hidden?: boolean;
 }
@@ -50,12 +56,23 @@ export interface World {
   loggedInTo?: string[];
   /** Whether the well-known host can be reached. */
   network?: "up" | "down";
-  /** `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the Parent of b". */
-  links?: [IssueAddress, "blocks" | "parent", IssueAddress][];
+  /**
+   * `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the
+   * Parent of b". A fourth element is when the Link was made, as an ISO
+   * date; long ago by default.
+   */
+  links?: [IssueAddress, "blocks" | "parent", IssueAddress, string?][];
+  /** Links someone removed, each with when, as an ISO date. */
+  removedLinks?: [IssueAddress, "blocks" | "parent", IssueAddress, string][];
+  /** The Tracker keeps no record of what changed before this ISO date. */
+  changesKeptFrom?: string;
+  /** This login's rate limit is used up. */
+  rateLimited?: boolean;
   /** The login's name; `fixture-viewer` by default. */
   viewer?: string;
   /** Pull or merge requests that close an Issue when merged. */
-  closingRequests?: { closes: IssueAddress; number: number; author: string; draft?: boolean; state?: "open" | "closed" | "merged" }[];
+  /** `updatedAt` is when one was last updated, as an ISO date; long ago by default. */
+  closingRequests?: { closes: IssueAddress; number: number; author: string; draft?: boolean; state?: "open" | "closed" | "merged"; updatedAt?: string }[];
   /** `false` for a login that may read Issues but not pull or merge requests. */
   readsClosingRequests?: boolean;
   /** `[a, b]` reads "a names b in its text". */
@@ -75,6 +92,7 @@ export function trackerContract(stage: Stage): void {
   identifyContract(stage);
   resolveContract(stage);
   readContract(stage);
+  changesContract(stage);
   cardContract(stage);
 }
 
@@ -449,6 +467,128 @@ export function readContract(stage: Stage): void {
           const tracker = await trackerIn({ projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }], ...world });
           assert.equal((await tracker.openIssues(resolved.project, null)).kind, kind);
         }
+      });
+    });
+  });
+}
+
+export function changesContract(stage: Stage): void {
+  const { product, wellKnownHost } = stage;
+  const tools = "fixture-org/tools";
+  const plans = "fixture-org/plans";
+  /** When the Snapshot was last read; everything in a World is older unless it says otherwise. */
+  const since = "2026-09-20T00:00:00Z";
+  const after = "2026-09-21T00:00:00Z";
+  const six: IssueSpec[] = Array.from({ length: 6 }, (_, i) => ({ number: i + 1 }));
+
+  async function changes(world: World, outside: string[] = []): Promise<Extract<ChangesAnswer, { kind: "changes" }>> {
+    const answer = await changesIn(world, outside);
+    assert.equal(answer.kind, "changes", JSON.stringify(answer));
+    return answer as Extract<ChangesAnswer, { kind: "changes" }>;
+  }
+
+  async function changesIn(world: World, outside: string[] = []): Promise<ChangesAnswer> {
+    const tracker = await stage.arrange(world).kind.recognise(wellKnownHost);
+    assert.ok(tracker, `${product} recognises ${wellKnownHost}`);
+    const resolved = await tracker.resolveProject(tools);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    return tracker.changes((resolved as Extract<ProjectResolution, { kind: "project" }>).project, since, outside);
+  }
+
+  /** The identity the Tracker gives an Issue, as its card reads it. */
+  async function idOf(world: World, ref: string): Promise<string> {
+    const answer = await (await stage.arrange(world).kind.recognise(wellKnownHost))!.issue(ref);
+    assert.equal(answer.kind, "issue", JSON.stringify(answer));
+    return (answer as Extract<IssueAnswer, { kind: "issue" }>).issue.id;
+  }
+
+  const refs = (issues: OpenIssue[]) => issues.map((i) => i.ref).sort();
+  /** The ends of a Link, read with or without it: at least one end is enough, since a Snapshot records it at both. */
+  const readWith = (open: OpenIssue[], a: string, role: string, b: string) =>
+    open.some((i) => i.ref === `#${a}` && i.links.some((l) => l.role === role && l.to.readable && l.to.ref === `${tools}#${b}`));
+
+  describe(`${product} Tracker contract`, () => {
+    describe("needs 3, 4 and 7 again, for only what changed", () => {
+      test("reads the Issues updated since, open ones whole and closed ones as far ends, and no others", async () => {
+        const issues: IssueSpec[] = [...six];
+        issues[1] = { number: 2, title: "Import state from S3", updatedAt: after };
+        issues[2] = { number: 3, closed: true, closedAs: "not planned", closedAt: after };
+        const read = await changes({ projects: [{ path: tools, number: 1, open: 5, issues }] });
+        assert.deepEqual(read.open.map((i) => [i.ref, i.title]), [["#2", "Import state from S3"]]);
+        assert.deepEqual(read.ends.map((e) => e.readable && [e.ref, e.open, e.closedAs, e.closedAt]), [[`${tools}#3`, false, "not planned", after]]);
+        assert.equal(read.caughtUp, true);
+        assert.deepEqual(read.unread, {});
+      });
+
+      test("reads a Link made or removed since, though neither Issue's own update marks it", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 6, issues: six }],
+          links: [[`${tools}#1`, "blocks", `${tools}#2`, after], [`${tools}#3`, "blocks", `${tools}#4`]],
+          removedLinks: [[`${tools}#5`, "parent", `${tools}#6`, after]],
+        };
+        const { open } = await changes(world);
+        assert.ok(readWith(open, "1", "blocked", "2") || readWith(open, "2", "blocker", "1"), `the new Link: ${JSON.stringify(open)}`);
+        const removedFrom = open.filter((i) => i.ref === "#5" || i.ref === "#6");
+        assert.ok(removedFrom.length > 0 && removedFrom.every((i) => i.links.length === 0), `the removed Link: ${JSON.stringify(open)}`);
+        assert.equal(open.some((i) => i.ref === "#3" || i.ref === "#4"), false, "a Link made long ago reads nothing");
+      });
+
+      test("reads an Issue whose Closing Requests changed since, though its own update doesn't mark it", async () => {
+        const world: World = {
+          projects: [{ path: tools, number: 1, open: 6, issues: six }],
+          closingRequests: [
+            { closes: `${tools}#4`, number: 40, author: "fixture-bot", updatedAt: after },
+            { closes: `${tools}#5`, number: 41, author: "fixture-bot", state: "closed", updatedAt: after },
+            { closes: `${tools}#6`, number: 42, author: "fixture-bot" },
+          ],
+        };
+        const { open, requests } = await changes(world);
+        assert.deepEqual(refs(open), ["#4", "#5"]);
+        assert.deepEqual([...requests].sort(), [`${tools}#40`, `${tools}#41`], "so an Issue a request no longer closes can be told apart");
+        assert.deepEqual(open.find((i) => i.ref === "#4")!.closingRequests.map((r) => [r.ref, r.author]), [[`${tools}#40`, "fixture-bot"]]);
+        assert.deepEqual(open.find((i) => i.ref === "#5")!.closingRequests, []);
+      });
+
+      test("reads again the Issues outside the Project it's asked about, and says which it can't read any more", async () => {
+        const world = (hidden: boolean): World => ({
+          projects: [
+            { path: tools, number: 1, open: 1, issues: [{ number: 1 }] },
+            { path: plans, number: 2, open: 2, issues: [{ number: 7, title: "Q3 importer epic", closed: true, closedAt: after }, { number: 8, hidden }] },
+          ],
+        });
+        const [seven, eight] = [await idOf(world(false), `${plans}#7`), await idOf(world(false), `${plans}#8`)];
+        const { open, ends } = await changes(world(true), [seven, eight]);
+        assert.deepEqual(open, []);
+        const byId = new Map(ends.map((e) => [e.id, e]));
+        const read = byId.get(seven);
+        assert.deepEqual(read?.readable && [read.ref, read.title, read.open, read.closedAt], [`${plans}#7`, "Q3 importer epic", false, after]);
+        assert.deepEqual(byId.get(eight), { id: eight, readable: false });
+      });
+
+      test("says so when its record of what changed doesn't reach back far enough", async () => {
+        const world: World = { projects: [{ path: tools, number: 1, open: 6, issues: six }], changesKeptFrom: "2026-09-22T00:00:00Z" };
+        assert.equal((await changes(world)).caughtUp, false);
+      });
+
+      test("a login that can't read Closing Requests still reads what changed, and says why none are given", async () => {
+        const issues: IssueSpec[] = [...six];
+        issues[1] = { number: 2, updatedAt: after };
+        const read = await changes({ projects: [{ path: tools, number: 1, open: 6, issues }], readsClosingRequests: false });
+        assert.deepEqual(refs(read.open), ["#2"]);
+        assert.match(read.unread.closingRequests ?? "", /pull|merge/i);
+      });
+
+      test("refuses when the Tracker rejects the login, can't tell when it can't be reached or the rate limit is used up, and says when the Project is gone", async () => {
+        const project: ProjectSpec = { path: tools, number: 1, open: 6, issues: six };
+        const tracker = await stage.arrange({ projects: [project] }).kind.recognise(wellKnownHost);
+        const resolved = (await tracker!.resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
+        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"], [{ rateLimited: true }, "cant-tell"]] as const) {
+          const troubled = await stage.arrange({ projects: [project], ...trouble }).kind.recognise(wellKnownHost);
+          const answer = await troubled!.changes(resolved.project, since, []);
+          assert.equal(answer.kind, kind, JSON.stringify(trouble));
+        }
+        const gone = await tracker!.changes({ ...resolved.project, path: "fixture-org/gone" }, since, []);
+        assert.equal(gone.kind, "not-found");
       });
     });
   });

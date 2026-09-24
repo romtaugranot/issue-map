@@ -41,9 +41,17 @@ function ghApi(world: World, args: string[]): CliResult {
     return exited(4, "", "To get started with GitHub CLI, please run:  gh auth login\n");
   if (world.login === "refused")
     return exited(1, JSON.stringify({ message: "Bad credentials", documentation_url: "https://docs.github.com/rest", status: "401" }), "gh: Bad credentials (HTTP 401)\n");
+  if (world.rateLimited) {
+    const message = "API rate limit exceeded for user ID 1. If you reach out to GitHub Support for help, please include the request ID.";
+    return exited(1, JSON.stringify({ message, documentation_url: "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api", status: "403" }), `gh: ${message} (HTTP 403)\n`);
+  }
   const field = (name: string) => args.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
+  const list = (name: string) => args.filter((a) => a.startsWith(`${name}[]=`)).map((a) => a.slice(name.length + 3));
+  const rest = args.find((a) => a.startsWith("repos/"));
+  if (rest) return restApi(world, rest);
   const query = field("query") ?? "";
   if (/^\s*(query\s*)?\{\s*viewer\b/.test(query)) return exited(0, JSON.stringify({ data: { viewer: { login: world.viewer ?? "fixture-viewer" } } }));
+  if (query.includes("changed: nodes(ids:")) return nodesById(world, host, list("changed"), list("outside"));
   const path = `${field("owner")}/${field("name")}`;
   const spec = (world.projects ?? []).find((p) => [p.path, ...(p.oldPaths ?? [])].some((known) => known.toLowerCase() === path.toLowerCase()));
   if (!spec) {
@@ -51,6 +59,11 @@ function ghApi(world: World, args: string[]): CliResult {
     return exited(1, JSON.stringify({ data: { repository: null }, errors: [{ type: "NOT_FOUND", path: ["repository"], message }] }), `gh: ${message}\n`);
   }
   if (query.includes("issues(states: OPEN, first:")) return issuesPage(world, spec, host, field("after"));
+  if (query.includes("filterBy: {since:")) {
+    const since = field("since")!;
+    const changes = changedSince(world, spec, host, since, field("withIssues") === "true" ? (field("issuesAfter") ?? "0") : null, field("withPulls") === "true" ? (field("pullsAfter") ?? "0") : null);
+    return withOutside(world, host, changes, list("outside"));
+  }
   if (query.includes("issue(number:")) return oneIssue(world, spec, host, Number(field("number")));
   return exited(0, JSON.stringify({ data: { repository: { ...repository(spec, host), parent: spec.parent ? repository(spec.parent, host) : null } } }));
 }
@@ -97,6 +110,127 @@ function oneIssue(world: World, spec: ProjectSpec, host: string, number: number)
   return answer({ repository: { issue: node } }, errors);
 }
 
+/**
+ * What changed since `since`: the Issues updated since, oldest update first,
+ * and pull requests, most recently updated first, each with the Issues it
+ * closes. A stream is left out when its cursor is `null`.
+ */
+function changedSince(world: World, spec: ProjectSpec, host: string, since: string, issuesAfter: string | null, pullsAfter: string | null): CliResult {
+  const PAGE = 100;
+  const errors: GraphqlError[] = [];
+  const repository: Record<string, unknown> = {};
+  if (issuesAfter !== null) {
+    const updated = (spec.issues ?? [])
+      .filter((i) => !i.hidden && Date.parse(updatedAt(i)) >= Date.parse(since))
+      .sort((a, b) => Date.parse(updatedAt(a)) - Date.parse(updatedAt(b)));
+    const start = Number(issuesAfter);
+    const nodes = updated.slice(start, start + PAGE).map((issue, index) => changedNode(world, spec, host, issue, ["repository", "issues", "nodes", index], errors));
+    const next = start + PAGE < updated.length ? String(start + PAGE) : null;
+    repository.issues = { pageInfo: { hasNextPage: next !== null, endCursor: next ?? "end" }, nodes };
+  }
+  if (pullsAfter !== null) {
+    if (world.readsClosingRequests === false) {
+      errors.push({ type: "FORBIDDEN", path: ["repository", "pullRequests"], message: "Resource not accessible by personal access token" });
+      repository.pullRequests = null;
+    } else {
+      const pulls = (world.closingRequests ?? [])
+        .filter((r) => r.closes.startsWith(`${spec.path}#`))
+        .map((r) => ({ ...r, updatedAt: r.updatedAt ?? LONG_AGO }))
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+      const start = Number(pullsAfter);
+      const nodes = pulls.slice(start, start + PAGE).map((r) => {
+        const [path, n] = r.closes.split("#") as [string, string];
+        return { number: r.number, updatedAt: r.updatedAt, repository: { nameWithOwner: spec.path }, closingIssuesReferences: { nodes: [{ id: nodeId(path, Number(n)) }] } };
+      });
+      const next = start + PAGE < pulls.length ? String(start + PAGE) : null;
+      repository.pullRequests = { pageInfo: { hasNextPage: next !== null, endCursor: next ?? "end" }, nodes };
+    }
+  }
+  return answer({ repository }, errors);
+}
+
+/** An answer with the Outside Issues asked for alongside it, as far ends. */
+function withOutside(world: World, host: string, changes: CliResult, outside: string[]): CliResult {
+  if (changes.kind !== "exited") return changes;
+  const body = JSON.parse(changes.stdout) as { data: object; errors?: GraphqlError[] };
+  const nodes = JSON.parse((nodesById(world, host, [], outside) as Extract<CliResult, { kind: "exited" }>).stdout) as { data: { outside: unknown[] }; errors?: GraphqlError[] };
+  return answer({ ...body.data, outside: nodes.data.outside }, [...(body.errors ?? []), ...(nodes.errors ?? [])]);
+}
+
+/** Issues by identity: the changed ones read whole, the outside ones as far ends; `null`, with an error, for one this login can't read. */
+function nodesById(world: World, host: string, changed: string[], outside: string[]): CliResult {
+  const errors: GraphqlError[] = [];
+  const byId = (id: string) => {
+    for (const spec of world.projects ?? []) for (const issue of spec.issues ?? []) if (nodeId(spec.path, issue.number) === id) return { spec, issue };
+    return null;
+  };
+  const read = (field: string, ids: string[], node: (spec: ProjectSpec, issue: IssueSpec, at: (string | number)[]) => object) =>
+    ids.map((id, index) => {
+      const found = byId(id);
+      if (!found || found.issue.hidden) {
+        errors.push({ type: found ? "FORBIDDEN" : "NOT_FOUND", path: [field, index], message: `Could not resolve to a node with the global id of '${id}'` });
+        return null;
+      }
+      return node(found.spec, found.issue, [field, index]);
+    });
+  return answer(
+    {
+      changed: read("changed", changed, (spec, issue, at) => changedNode(world, spec, host, issue, at, errors)),
+      outside: read("outside", outside, (spec, issue) => endNode(spec.path, issue, host)),
+    },
+    errors,
+  );
+}
+
+/**
+ * The repository's issue-events feed, newest first, 100 a page: GitHub
+ * notes a Link made or removed here and on neither Issue's `updatedAt`.
+ * It begins with an event from long ago, unless the World keeps no record
+ * that far back.
+ */
+function restApi(world: World, rest: string): CliResult {
+  const url = new URL(rest, "https://api.invalid/");
+  const [, , owner, name] = url.pathname.split("/");
+  const spec = (world.projects ?? []).find((p) => p.path === `${owner}/${name}`);
+  if (!spec || !url.pathname.endsWith("/issues/events")) return exited(1, JSON.stringify({ message: "Not Found", status: "404" }), "gh: Not Found (HTTP 404)\n");
+  const event = (event: string, addr: string, at: string) => {
+    const [path, n] = addr.split("#") as [string, string];
+    return { id: 0, event, created_at: at, issue: { number: Number(n), node_id: nodeId(path, Number(n)) } };
+  };
+  const linkEvents = (a: string, kind: "blocks" | "parent", b: string, at: string, done: "added" | "removed") =>
+    kind === "blocks" ? [event(`blocked_by_${done}`, b, at), event(`blocking_${done}`, a, at)] : [event(`sub_issue_${done}`, a, at), event(`parent_issue_${done}`, b, at)];
+  const first = spec.issues?.[0];
+  const events = [
+    ...(first ? [event("labeled", `${spec.path}#${first.number}`, LONG_AGO)] : []),
+    ...(world.links ?? []).flatMap(([a, kind, b, at]) => (at && a.startsWith(`${spec.path}#`) ? linkEvents(a, kind, b, at, "added") : [])),
+    ...(world.removedLinks ?? []).flatMap(([a, kind, b, at]) => (a.startsWith(`${spec.path}#`) ? linkEvents(a, kind, b, at, "removed") : [])),
+  ]
+    .filter((e) => !world.changesKeptFrom || Date.parse(e.created_at) >= Date.parse(world.changesKeptFrom))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const page = Number(url.searchParams.get("page") ?? 1);
+  const size = Number(url.searchParams.get("per_page") ?? 30);
+  return exited(0, JSON.stringify(events.slice((page - 1) * size, page * size)));
+}
+
+/** An Issue read whole, open or closed, as a refresh reads it again. */
+function changedNode(world: World, spec: ProjectSpec, host: string, issue: IssueSpec, at: (string | number)[], errors: GraphqlError[]) {
+  return { ...issueNode(world, spec, host, issue, at, errors), state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: spec.path } };
+}
+
+function endNode(path: string, issue: IssueSpec, host: string) {
+  return { id: nodeId(path, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${path}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: path } };
+}
+
+const LONG_AGO = "2025-01-01T00:00:00Z";
+
+function updatedAt(issue: IssueSpec): string {
+  return issue.updatedAt ?? closedAt(issue) ?? createdAt(issue);
+}
+
+function createdAt(issue: IssueSpec): string {
+  return issue.createdAt ?? new Date(Date.UTC(2026, 0, issue.number)).toISOString();
+}
+
 type GraphqlError = { type: string; path: (string | number)[]; message: string };
 
 function stateReason(issue: IssueSpec): string | null {
@@ -124,7 +258,7 @@ function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSp
       errors.push({ type: "FORBIDDEN", path, message: "Resource not accessible by integration" });
       return null;
     }
-    return { id: nodeId(project, issue.number), number: issue.number, title: title(issue), url: `https://${host}/${project}/issues/${issue.number}`, state: issue.closed ? "CLOSED" : "OPEN", closedAt: closedAt(issue), stateReason: stateReason(issue), repository: { nameWithOwner: project } };
+    return endNode(project, issue, host);
   };
   // Asked for with `includeClosedPrs: false`, which leaves out closed pull requests but not merged ones.
   const closingPulls = (self: string, path: (string | number)[]) => {
@@ -156,7 +290,7 @@ function issueNode(world: World, spec: ProjectSpec, host: string, issue: IssueSp
     number: issue.number,
     title: title(issue),
     url: `https://${host}/${spec.path}/issues/${issue.number}`,
-    createdAt: issue.createdAt ?? new Date(Date.UTC(2026, 0, issue.number)).toISOString(),
+    createdAt: createdAt(issue),
     assignees: { nodes: (issue.assignees ?? []).map((login) => ({ login })) },
     milestone: issue.planned ? { title: "next", dueOn: issue.planned } : null,
     parent: parent ? end(parent, [...at, "parent"]) : null,

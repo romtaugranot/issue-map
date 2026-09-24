@@ -26,6 +26,8 @@ When the user asks what *you* would pick, give your opinion in the conversation:
 
 When the output says the Project is being read for the first time, that is all there is to show: the read carries on by itself, and running `issue-map map` again shows how far it has got, then the Map once it's done.
 
+The Map is drawn from a Snapshot, refreshed first when it's more than two minutes old. When it opens with a `⚠ read … ago` line, the Tracker couldn't be read and the Map is as old as it says; reprint that line with the rest, and asking again tries again. An Issue card is always read live, so it is never old.
+
 ## Moving along Links
 
 A card shows the Issue's name and URL, whether it is Blocked, its Links by kind under the Tracker's own names, its open Closing Requests, and how many other Issues mention it. Reprint the card itself exactly; the **Links to follow** block under it is for you, not the user. The card prints the Issue's URL, so never offer to open it in a browser.

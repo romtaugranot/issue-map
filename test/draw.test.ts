@@ -585,3 +585,27 @@ function groupLines(text: string): string[] {
   const end = lines.indexOf("", start);
   return lines.slice(start, end === -1 ? undefined : end);
 }
+
+describe("an old Snapshot (ADR 0006)", () => {
+  const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "blocks", 2]]);
+
+  test("a fresh Snapshot shows no age", () => {
+    assert.doesNotMatch(overview(s), /⚠|ago/);
+  });
+
+  test("one that couldn't be refreshed opens every drawing with one line saying how old it is and why", () => {
+    const stale = { ageMs: 3 * 3_600_000 + 5 * 60_000, reason: "couldn't reach github.com" };
+    const line = "⚠ read 3h ago — couldn't refresh it: couldn't reach github.com";
+    assert.equal(draw(s, { kind: "overview" }, stale).text, `${line}\n${overview(s)}`);
+    for (const command of [{ kind: "unlinked", page: 1 }, { kind: "group", group: 1, page: 1 }, { kind: "under", ref: "#1", page: 1 }] as const) {
+      assert.equal(draw(s, command, stale).text, `${line}\n${draw(s, command).text}`, command.kind);
+    }
+  });
+
+  test("its age is in minutes under an hour, hours under two days, then days", () => {
+    const aged = (ageMs: number) => draw(s, { kind: "overview" }, { ageMs, reason: "why" }).text.split("\n")[0];
+    assert.equal(aged(150_000), "⚠ read 2 min ago — couldn't refresh it: why");
+    assert.equal(aged(47 * 3_600_000), "⚠ read 47h ago — couldn't refresh it: why");
+    assert.equal(aged(3 * 86_400_000), "⚠ read 3d ago — couldn't refresh it: why");
+  });
+});
