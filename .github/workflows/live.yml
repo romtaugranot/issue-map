@@ -21,14 +21,16 @@ concurrency:
 
 env:
   GLAB_VERSION: "1.119.0"
+  # glab's published checksum for that version's linux_amd64 .deb; change both together.
+  GLAB_SHA256: "95a9ca105518dec7f70ee403d98501402a5fda154c406f4f4cd6696928d3a098"
 
 jobs:
   live:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -36,13 +38,14 @@ jobs:
       - name: Install glab
         run: |
           curl -fsSL -o glab.deb "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${GLAB_VERSION}/glab_${GLAB_VERSION}_linux_amd64.deb"
+          echo "$GLAB_SHA256  glab.deb" | sha256sum -c -
           sudo dpkg -i glab.deb
       # The namespaces test/live/fixtures.ts names, and nowhere else.
       - name: Name the fixture namespaces
         id: names
         run: node test/live/fixtures.ts names >> "$GITHUB_OUTPUT"
       # Read as the fixtures' GitHub App, never a personal login, installed on the main organisation.
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         id: app
         with:
           client-id: ${{ vars.FIXTURES_APP_CLIENT_ID }}
