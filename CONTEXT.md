@@ -75,7 +75,7 @@ _Avoid_: ready, available, actionable
 ### The Map
 
 **Map**:
-The drawing of one Project's open Issues joined by their Links, which the user moves through. It never holds another Project's Issues; they appear only as Outside Issues. Not the `wayfinder:map` issue that plans this effort.
+The drawing of one Project's open Issues joined by their Links, which the user moves through. It never holds another Project's Issues; they appear only as Outside Issues. Not the planning Issue, #1 in this repository, labelled `wayfinder:map`.
 _Avoid_: graph, board, tree
 
 **Snapshot**:
