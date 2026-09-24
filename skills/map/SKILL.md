@@ -7,12 +7,11 @@ description: The Map of this checkout's Project and its open Issues. Use when th
 
 The Map opens on the checkout's **Home Project**, and every command acts on the Project on screen: the Home Project until the user moves to another. Run every command in the checkout.
 
-**Reprint every output in your reply, exactly as printed.** The user doesn't see tool output, so what you don't reprint they never see — and the Map, an outline and a card are already cut to fit one screen. Never summarise one in a sentence of your own, reorder it or add Issues to it. This holds most of all:
+**Show every output by its line.** An output the user should see ends with a line such as `⟦issue-map 3f9a0c1b2d4e⟧`. Write that line in your reply, exactly and on a line of its own, where the output belongs: Claude Code shows the whole output in its place, exactly as printed. The user doesn't see tool output, so an output whose line you don't write they never see. Don't also reprint, summarise or describe it: the line is all of it. When the user asks for several things at once, write each output's line in turn; before asking with `AskUserQuestion`, write the card's line above the question. That is what **show** means below.
 
-- when the user asks for several things at once — reprint each command's output in turn, in full;
-- right before asking with `AskUserQuestion` — the card the picker is about goes in your reply above it, line for line, not described.
+Where the line can't show it — under `claude -p`, where `AskUserQuestion` isn't available either — show an output by reprinting it exactly as printed, without the line.
 
-The only exceptions are said where they apply: `start`'s and `suggest`'s output, and the blocks under a card or list that say they are for you.
+What `start` and `suggest` print has no line: it's for you, as said where they're described.
 
 - **The Map**: `issue-map map`, the overview of the Project on screen. Run it when the user types `map`.
 - **A Group's outline**: `issue-map group <n>`, where `n` is the Group's place in the overview's Group lines, counting from 1 at the top. It lists what sits at the Group's top, one level at a time. When the user picks a Group off the overview, open it by its place, even when they name it by the Issue on its line.
@@ -36,27 +35,27 @@ When the user asks what *you* would pick, give your opinion in the conversation:
 
 When the output says the Project is being read for the first time, that is all there is to show: the read carries on by itself, and running `issue-map map` again shows how far it has got, then the Map once it's done.
 
-The Map is drawn from a Snapshot, refreshed first when it's more than two minutes old. Drawing it starts a refresher that keeps the Home Project's Snapshot warm in the background, so the Map is usually drawn at once, and a full re-read runs in the background when one is due; the Map is drawn from the Snapshot there meanwhile, so there is never anything to wait for. The overview's header ends with the Project's band: `Promised`, or `Best effort` with a `⚠ Best effort` line saying why the Map is untested there and writes nothing. A `⚠` line may also name a Link kind the Map can't read in the Project, and when it can read none it draws no Map and says why. Reprint those lines as printed. When it opens with a `⚠ read … ago` line, the Tracker couldn't be read and the Map is as old as it says; reprint that line with the rest, and asking again tries again. An Issue card is always read live, so it is never old.
+The Map is drawn from a Snapshot, refreshed first when it's more than two minutes old. Drawing it starts a refresher that keeps the Home Project's Snapshot warm in the background, so the Map is usually drawn at once, and a full re-read runs in the background when one is due; the Map is drawn from the Snapshot there meanwhile, so there is never anything to wait for. The overview's header ends with the Project's band: `Promised`, or `Best effort` with a `⚠ Best effort` line saying why the Map is untested there and writes nothing. A `⚠` line may also name a Link kind the Map can't read in the Project, and when it can read none it draws no Map and says why. Show those lines as printed, with the rest. When it opens with a `⚠ read … ago` line, the Tracker couldn't be read and the Map is as old as it says; show that line with the rest, and asking again tries again. An Issue card is always read live, so it is never old.
 
 ## Moving along Links
 
-A card shows the Issue's name and URL, whether it is Blocked and whom it's assigned to, its Links by kind under the Tracker's own names, its open Closing Requests, and how many other Issues mention it. Reprint the card itself, line for line (see the top); only the **Links to follow** and **Choices** blocks under it are for you, not the user. The card prints the Issue's URL, so never offer to open it in a browser.
+A card shows the Issue's name and URL, whether it is Blocked and whom it's assigned to, its Links by kind under the Tracker's own names, its open Closing Requests, and how many other Issues mention it. Show the card itself; only the **Links to follow** and **Choices** blocks under it are for you, not the user. The card prints the Issue's URL, so never offer to open it in a browser.
 
-When the card has Links to follow, ask with `AskUserQuestion` which one to follow — first the card's **Choices** in the order printed, **Assign … to me** (see **Assigning an Issue to yourself**) and **Start work on …** (see **Starting work on an Issue**), then Links in the block's order up to three options in all, labelled with the Link's reference and with its description as the option's description, then a fourth option — **More Links** while any are left, otherwise **The Map**. **More Links** asks again with the next three. "Other" takes any target the user types, which `issue-map go '<target>'` moves to. Open the picked Issue's card with `issue-map issue '<label>'`, reprint it, and ask again from there; **The Map** runs `issue-map map`.
+When the card has Links to follow, ask with `AskUserQuestion` which one to follow — first the card's **Choices** in the order printed, **Assign … to me** (see **Assigning an Issue to yourself**) and **Start work on …** (see **Starting work on an Issue**), then Links in the block's order up to three options in all, labelled with the Link's reference and with its description as the option's description, then a fourth option — **More Links** while any are left, otherwise **The Map**. **More Links** asks again with the next three. "Other" takes any target the user types, which `issue-map go '<target>'` moves to. Open the picked Issue's card with `issue-map issue '<label>'`, show it, and ask again from there; **The Map** runs `issue-map map`.
 
 An Outside Issue's card has no Links to follow, since the Map hasn't read its Project, but under **Choices** it offers to open that Project's Map, and, while it's open, to start work on it. Ask with those choices, labelled as printed, and **The Map**; opening its Project's Map runs the command under it, which lands on the Issue's card in its own Project's Map, with its Links. A card with no Links to follow but with **Choices** asks with those and **The Map**; a card with neither asks nothing. Never offer a Closing Request or a Mention as a choice: a Closing Request isn't an Issue, and a Mention isn't a Link — the card only counts Mentions, which Link Suggestions are for.
 
-When `AskUserQuestion` isn't available, as under `claude -p`, reprint the card and stop.
+When `AskUserQuestion` isn't available, as under `claude -p`, show the card and stop.
 
 ## Assigning an Issue to yourself
 
 The Map's only write besides a confirmed Link: it assigns an open Issue of the Project on screen to the user. An unassigned Issue's card offers it under **Choices** as **Assign #n to me**, only where the Map writes — a `Promised` Project whose login may write, or where the Tracker can't say whether it may. Never offer it otherwise, and never assign any other way.
 
-Picking **Assign #n to me** in the card's picker is the user's one confirmation: its description says what will be written. When the user instead asks in words to take or assign an Issue, open its card if it isn't on screen; when the card offers the choice, confirm once with `AskUserQuestion` — the choice's label as a **yes** option with its description, and **No** — and run nothing on **No**. Don't ask twice. Run the command under the choice, `issue-map assign '<ref>'`, and reprint its output, which is a line saying what happened and the Issue's card as it is now.
+Picking **Assign #n to me** in the card's picker is the user's one confirmation: its description says what will be written. When the user instead asks in words to take or assign an Issue, open its card if it isn't on screen; when the card offers the choice, confirm once with `AskUserQuestion` — the choice's label as a **yes** option with its description, and **No** — and run nothing on **No**. Don't ask twice. Run the command under the choice, `issue-map assign '<ref>'`, and show its output, which is a line saying what happened and the Issue's card as it is now.
 
-It reads the Issue again before writing, so one someone took since isn't written to, and it writes once: when the Tracker refuses, it says why and changes nothing — reprint that, don't retry, and don't suggest another way to assign. A card with no **Assign** choice says whom the Issue is assigned to; when the user asks to take one assigned to someone else, say so from the card rather than assign it. Once assigned, the Issue is the user's own: the Map and Take next show it at once, marked `yours`. Nothing else starts: no branch, no comment.
+It reads the Issue again before writing, so one someone took since isn't written to, and it writes once: when the Tracker refuses, it says why and changes nothing — show that, don't retry, and don't suggest another way to assign. A card with no **Assign** choice says whom the Issue is assigned to; when the user asks to take one assigned to someone else, say so from the card rather than assign it. Once assigned, the Issue is the user's own: the Map and Take next show it at once, marked `yours`. Nothing else starts: no branch, no comment.
 
-When `AskUserQuestion` isn't available, as under `claude -p`, the user's own words asking for this very Issue to be assigned to them are the confirmation; otherwise reprint the card and don't assign.
+When `AskUserQuestion` isn't available, as under `claude -p`, the user's own words asking for this very Issue to be assigned to them are the confirmation; otherwise show the card and don't assign.
 
 ## Starting work on an Issue
 
@@ -80,11 +79,11 @@ The Map draws only the Links the Tracker records. When the user asks for Link Su
    EOF
    ```
 
-   It checks each one against the Tracker as it is now, and says why of any it doesn't offer: a quote that isn't word for word in its source, a source `suggest` didn't read, a kind the Project can't record, a Link already recorded, a Parent it would move an Issue from, a suggestion declined before. Reprint its list, less the **To confirm** block, which is for you. Don't propose again what it turned down.
+   It checks each one against the Tracker as it is now, and says why of any it doesn't offer: a quote that isn't word for word in its source, a source `suggest` didn't read, a kind the Project can't record, a Link already recorded, a Parent it would move an Issue from, a suggestion declined before. Show its list, less the **To confirm** block, which is for you. Don't propose again what it turned down.
 4. When it ends with **To confirm**, ask once with `AskUserQuestion`, `multiSelect: true`, the suggestions in their order: as few questions as hold them, at most four options each and never one alone (5 is 3 and 2), headed `Links 1–3` and so on, each option labelled as printed without its number, with its description. A single suggestion is one single-select question: its label, and **Decline**. Then run `issue-map confirm` with the numbers of those ticked, such as `issue-map confirm 1 3`; with none ticked, `issue-map confirm` alone. Ticking is the user's one confirmation. Those left unticked are declined and never suggested again, so when the user dismisses the picker without answering, run nothing.
-5. Reprint what `confirm` says. Each Link is read again before it's written, and once the Tracker refuses a write, the rest aren't tried: don't retry, and don't suggest another way to write them. A written Link is an ordinary Link: the Map draws it at once.
+5. Show what `confirm` says. Each Link is read again before it's written, and once the Tracker refuses a write, the rest aren't tried: don't retry, and don't suggest another way to write them. A written Link is an ordinary Link: the Map draws it at once.
 
-When the output says **Not offered to write** — a login that may only read, or a `Best effort` Project — reprint the list, say why, and ask nothing: the list is still worth reading. When `AskUserQuestion` isn't available, as under `claude -p`, reprint the list and stop; nothing is written or declined.
+When the output says **Not offered to write** — a login that may only read, or a `Best effort` Project — show the list, say why, and ask nothing: the list is still worth reading. When `AskUserQuestion` isn't available, as under `claude -p`, show the list and stop; nothing is written or declined.
 
 ## Moving to another Project
 
@@ -97,11 +96,11 @@ The user moves by typing a target, or with `go`, `back` and `home` — in the pr
 - **No Home Project**, when the checkout leads to no Tracker: the Map opens on `go`, so answer a request for the Map with `issue-map go` and its `--dir` flags.
 - To say **which Project is home**: away from it, the overview's `⌂ Home:` line names it; at home, it's the Project on screen.
 
-A move that can't open says why and leaves the user where they were; reprint that and ask nothing. Moving never changes the Home Project or what is kept warm for it. Away from home, everything works the same, on that Project's own band and login.
+A move that can't open says why and leaves the user where they were; show that and ask nothing. Moving never changes the Home Project or what is kept warm for it. Away from home, everything works the same, on that Project's own band and login.
 
 ## The status line
 
-When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and reprint what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing, unless the plugin has moved since, as an update moves it: then it points the status line at where the plugin is now. When the row goes blank after an update, run it again.
+When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and show what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing, unless the plugin has moved since, as an update moves it: then it points the status line at where the plugin is now. When the row goes blank after an update, run it again.
 
 The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
 

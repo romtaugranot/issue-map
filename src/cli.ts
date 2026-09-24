@@ -41,6 +41,7 @@ import { statusRow } from "./map/status.ts";
 import { homeRowHere } from "./status/line.ts";
 import { installStatusLine, userSettings } from "./status/install.ts";
 import { showCard, showMap } from "./map/show.ts";
+import { withLine } from "./show/shown.ts";
 import { assignToViewer } from "./map/assign.ts";
 import { startWork } from "./map/start.ts";
 import { confirm, offer, suggest, type Declines, type Pending, type PendingSuggestions, type Proposal } from "./map/suggest.ts";
@@ -84,7 +85,7 @@ async function main(argv: string[]): Promise<number> {
       return refresher(known, values.host, values.path, values.login);
     case "statusline":
       if (values.setup) {
-        console.log(await installStatusLine(userSettings(), fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url))));
+        console.log(await withLine(stateDir(), await installStatusLine(userSettings(), fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url)))));
       } else {
         const row = await homeRowHere(process.cwd());
         console.log(row || "No status line row: this isn't inside a git checkout.");
@@ -126,7 +127,7 @@ async function main(argv: string[]): Promise<number> {
     : { text: `No Home Project: ${cwd} isn't inside a git checkout.`, choices: [], others: [] };
   // A tie is asked before any Map is drawn.
   if (home.choices.length > 0) {
-    console.log(render(pickHome(home)));
+    console.log(render(await shown(pickHome(home))));
     return 0;
   }
 
@@ -175,8 +176,14 @@ async function main(argv: string[]): Promise<number> {
     },
     request,
   );
-  console.log(render(answer));
+  // What `start` and `suggest` print is for Claude to work from, not to show.
+  console.log(render(verb === "start" || verb === "suggest" ? answer : await shown(answer)));
   return 0;
+}
+
+/** The answer, its text kept to be shown exactly as printed (ADR 0009). */
+async function shown(answer: Answer): Promise<Answer> {
+  return { ...answer, text: await withLine(stateDir(), answer.text) };
 }
 
 /** `group`'s argument: a bare number is a Group's place on the overview, from 1; anything else names an Issue. */
