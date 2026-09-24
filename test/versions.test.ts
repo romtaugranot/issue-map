@@ -32,6 +32,11 @@ test("a run can be narrowed to some minors, in one edition or both", () => {
   assert.equal(only(matrix, "").length, 6, "no narrowing runs every job");
 });
 
+test("`ends` narrows a run to the oldest and newest promised minors, whichever those are that day", () => {
+  const matrix = gitlabMatrix({ ce: ["16.0.10-ce.0", "17.3.1-ce.0", "19.4.1-ce.0"], ee: ["16.0.10-ee.0", "17.3.1-ee.0", "19.5.0-ee.0"] }, "16.0");
+  assert.deepEqual(only(matrix, "ends").map((e) => `${e.version} ${e.edition}`), ["16.0.10 ce", "16.0.10 ee", "19.5.0 ee"]);
+});
+
 test("narrowing to a minor that isn't promised is refused rather than running nothing", () => {
   const matrix = gitlabMatrix({ ce: ["16.0.10-ce.0"], ee: ["16.0.10-ee.0"] }, "16.0");
   assert.throws(() => only(matrix, "15.11-ee"), /15\.11-ee/);
