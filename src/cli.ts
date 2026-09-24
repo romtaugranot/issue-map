@@ -327,7 +327,7 @@ function render({ text, links, choices, confirm }: Answer): string {
 
 /** The real host behind an SSH alias, read from the user's SSH config without connecting. */
 async function sshHostname(alias: string): Promise<string> {
-  const answer = await processCli("ssh", ["-G", alias]);
+  const answer = await processCli("ssh", ["-G", "--", alias]);
   if (answer.kind !== "exited" || answer.code !== 0) return alias;
   return /^hostname (\S+)$/m.exec(answer.stdout)?.[1] ?? alias;
 }

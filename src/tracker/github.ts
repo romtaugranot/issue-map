@@ -888,10 +888,17 @@ async function link(ctx: Ctx, from: string, kind: LinkKind, to: string): Promise
   return failure(wrote as Extract<CliResult, { kind: "exited" }>, said, host, `${b.owner}/${b.name}`);
 }
 
-/** A list is passed as one field per item, and an empty one as `key[]`. */
+/** The variables `gh api -F` converts to a number or boolean. */
+const TYPED = new Set(["number", "fromNumber", "toNumber", "withIssues", "withPulls"]);
+
+/**
+ * A list is passed as one field per item, and an empty one as `key[]`. Every
+ * other variable is passed raw with `-f`: `-F` would read a file for a value
+ * starting with `@`, such as a path someone typed.
+ */
 function graphql(cli: Cli, host: string, query: string, variables: Record<string, string | string[]>): Promise<CliResult> {
   const fields = Object.entries(variables).flatMap(([key, value]) => {
-    if (!Array.isArray(value)) return ["-F", `${key}=${value}`];
+    if (!Array.isArray(value)) return [TYPED.has(key) ? "-F" : "-f", `${key}=${value}`];
     return value.length === 0 ? ["-f", `${key}[]`] : value.flatMap((item) => ["-f", `${key}[]=${item}`]);
   });
   return cli("gh", ["api", "--hostname", host, "graphql", "-f", `query=${query}`, ...fields]);
