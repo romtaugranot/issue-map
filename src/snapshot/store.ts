@@ -4,10 +4,15 @@
  * an interrupted read resumes, but only a finished read is ever handed over
  * as a Snapshot: until then the store hands over progress. A draw is
  * handed a Snapshot refreshed first when it's more than two minutes old.
+ * A Snapshot is read in full again when a refresh couldn't prove it caught
+ * up, and otherwise weekly; that read runs beside refreshes of the Snapshot
+ * it replaces, which is drawn meanwhile. One refresher at a time may claim a
+ * Snapshot to keep it warm.
  */
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { ChangesAnswer, FarEnd, Link, OpenIssue, Project, Tracker, Unread } from "../tracker/tracker.ts";
 import { SNAPSHOT_FORMAT, type Snapshot } from "./snapshot.ts";
 
@@ -38,7 +43,13 @@ export type SnapshotState =
       /** Why the last attempt stopped, when it stopped rather than being killed. */
       stopped?: string;
     }
-  | { kind: "ready"; snapshot: Snapshot; ageMs: number };
+  | {
+      kind: "ready";
+      snapshot: Snapshot;
+      ageMs: number;
+      /** Whether it's due a full read that isn't running: a refresh couldn't prove it caught up, or the last full read started a week ago (ADR 0006). */
+      readAgain: boolean;
+    };
 
 /** The Tracker refused the login, or shows it no such Project: what the store kept of it is deleted (ADR 0006). */
 export type Refused = { kind: "refused"; reason: string };
@@ -61,6 +72,7 @@ export type ForDraw =
       kind: "ready";
       snapshot: Snapshot;
       ageMs: number;
+      readAgain: boolean;
       /** Why it's older than two minutes: the refresh it was due couldn't happen. */
       stale?: string;
     }
@@ -76,12 +88,26 @@ export interface SnapshotStore {
   forDraw(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ForDraw>;
   /** Deletes what's kept for a login the Tracker refused, keeping only why. */
   forget(key: SnapshotKey, reason: string): Promise<Refused>;
+  /**
+   * Takes the place of the one refresher that keeps it warm, or `null` while
+   * another holds it. The claim lapses unless renewed every few minutes, so a
+   * pid handed on to another process after a reboot doesn't hold it forever.
+   */
+  claimRefresher(key: SnapshotKey): Promise<{ renew(): Promise<void>; release(): Promise<void> } | null>;
+  /** Whether a live process is keeping it warm. */
+  refresherRunning(key: SnapshotKey): Promise<boolean>;
 }
 
 /** How long a Snapshot is fresh; a draw refreshes one older than this first (ADR 0006). */
 const FRESH_MS = 2 * 60_000;
+/** How often a Snapshot is read in full again, even when every refresh caught up, so drift can't build up unseen (ADR 0006). */
+const FULL_READ_EVERY_MS = 7 * 86_400_000;
 /** How far before its last read a refresh reads changes from, since this machine's clock and the Tracker's can disagree. */
 const MARGIN_MS = 60_000;
+/** How long a refresher's claim lasts unrenewed; it renews it every round. */
+const CLAIM_LAPSES_MS = 10 * 60_000;
+/** How often a full read that's done looks again for a refresh to finish before putting its Snapshot in place. */
+const LOCK_POLL_MS = 50;
 
 /** A first read part-way through. Its pages are kept one file each, so saving one doesn't rewrite the rest. */
 interface Progress {
@@ -98,6 +124,8 @@ interface Progress {
   /** What the saved pages couldn't hold. */
   unread: Unread;
   stopped?: string;
+  /** The attempt reading now; once it isn't this one's, what it read was deleted under it. */
+  attempt?: string;
 }
 
 export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
@@ -110,17 +138,31 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
       reading,
       progress: join(reading, "progress.json"),
       page: (n: number) => join(reading, `page-${n}.json`),
+      /** Held by a refresh, and by a full read while it puts its Snapshot in place. */
       lock: `${base}.lock`,
+      /** Held by a full read throughout, so it runs beside refreshes of the Snapshot it replaces. */
+      readLock: `${reading}.lock`,
+      /** Held by the refresher for as long as it runs. */
+      refresherLock: `${base}.refresher.lock`,
     };
+  };
+
+  /** Whether a live refresher holds the claim at `path` and renewed it lately. */
+  const renewed = async (path: string) => {
+    const claim = await readJson<{ renewedAt?: number }>(path);
+    return clock.now() - (claim?.renewedAt ?? 0) < CLAIM_LAPSES_MS && (await held(path));
   };
 
   return {
     async state(key) {
       const at = paths(key);
       const snapshot = current(await readJson<Snapshot>(at.snapshot));
-      if (snapshot) return { kind: "ready", snapshot, ageMs: clock.now() - Date.parse(snapshot.readAt) };
+      const running = await held(at.readLock);
+      if (snapshot) {
+        const due = !snapshot.caughtUp || clock.now() - Date.parse(snapshot.fullReadAt) >= FULL_READ_EVERY_MS;
+        return { kind: "ready", snapshot, ageMs: clock.now() - Date.parse(snapshot.readAt), readAgain: due && !running };
+      }
       const progress = current(await readJson<Progress>(at.progress));
-      const running = await held(at.lock);
       if (!progress && !running) return { kind: "none" };
       return {
         kind: "reading",
@@ -135,13 +177,13 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
     async read(key, tracker, project) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
-      if (!(await lock(at.lock))) return { kind: "busy" };
+      if (!(await lock(at.readLock))) return { kind: "busy" };
       try {
-        let progress = current(await readJson<Progress>(at.progress));
+        const saved = current(await readJson<Progress>(at.progress));
         // Pages saved in another format are read again.
-        if (!progress) await rm(at.reading, { recursive: true, force: true });
+        if (!saved) await rm(at.reading, { recursive: true, force: true });
         await mkdir(at.reading, { recursive: true, mode: 0o700 });
-        progress ??= {
+        const progress: Progress = saved ?? {
           format: SNAPSHOT_FORMAT,
           pages: 0,
           read: 0,
@@ -152,27 +194,43 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           unread: {},
         };
         delete progress.stopped;
+        const attempt = (progress.attempt = randomUUID());
         // A read with nothing saved yet starts now, whenever an earlier attempt did.
         if (progress.pages === 0) progress.startedAt = clock.now();
         await save(at.progress, progress);
         for (;;) {
           const started = clock.now();
           const page = await tracker.openIssues(project, progress.after);
-          if (page.kind === "refused" || page.kind === "not-found") return await forget(at, progress.total, page.reason);
+          if (page.kind === "refused" || page.kind === "not-found") {
+            const total = progress.total;
+            return await locked(at.lock, () => forget(at, total, page.reason));
+          }
           if (page.kind !== "page") {
             progress.stopped = page.reason;
             await save(at.progress, progress);
             return { kind: "failed", reason: page.reason };
           }
-          await save(at.page(progress.pages), page.issues);
-          progress.pages++;
-          progress.read += page.issues.length;
-          progress.total = page.total;
-          progress.unread = { ...page.unread, ...progress.unread };
-          progress.spentMs += clock.now() - started;
+          // Saved under the Snapshot's lock, so a refused login's pages are never saved after they're deleted.
+          const deleted = await locked(at.lock, async () => {
+            const deleted = await forgotten(at, attempt);
+            if (deleted) return deleted;
+            await save(at.page(progress.pages), page.issues);
+            progress.pages++;
+            progress.read += page.issues.length;
+            progress.total = page.total;
+            progress.unread = { ...page.unread, ...progress.unread };
+            progress.spentMs += clock.now() - started;
+            progress.after = page.next;
+            await save(at.progress, progress);
+            return null;
+          });
+          if (deleted) return deleted;
           if (page.next === null) break;
-          progress.after = page.next;
-          await save(at.progress, progress);
+        }
+        const switched = await otherLogin(tracker, key);
+        if (switched) {
+          await locked(at.lock, () => rm(at.reading, { recursive: true, force: true }));
+          return { kind: "failed", reason: switched };
         }
         const issues: OpenIssue[] = [];
         for (let n = 0; n < progress.pages; n++) issues.push(...((await readJson<OpenIssue[]>(at.page(n))) ?? []));
@@ -181,17 +239,24 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
           tracker: key.tracker,
           project: { id: project.id, path: project.path, url: project.url },
           login: key.login,
-          readAt: new Date(clock.now()).toISOString(),
+          readAt: new Date(progress.startedAt).toISOString(),
+          fullReadAt: new Date(progress.startedAt).toISOString(),
           changesSince: new Date(progress.startedAt - MARGIN_MS).toISOString(),
           caughtUp: true,
           issues: unique(issues),
           unread: progress.unread,
         };
-        await save(at.snapshot, snapshot);
+        // A refresh of the Snapshot this replaces may be running; its changes are read again from `changesSince`.
+        const replaced = await locked(at.lock, async () => {
+          const deleted = await forgotten(at, attempt);
+          if (!deleted) await save(at.snapshot, snapshot);
+          return deleted;
+        });
+        if (replaced) return replaced;
         await rm(at.reading, { recursive: true, force: true });
         return { kind: "done" };
       } finally {
-        await rm(at.lock, { force: true });
+        await rm(at.readLock, { force: true });
       }
     },
 
@@ -205,6 +270,8 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
         const changes = await tracker.changes(project, snapshot.changesSince, outsideOf(snapshot));
         if (changes.kind === "refused" || changes.kind === "not-found") return await forget(at, 0, changes.reason);
         if (changes.kind !== "changes") return { kind: "failed", reason: changes.reason };
+        const switched = await otherLogin(tracker, key);
+        if (switched) return { kind: "failed", reason: switched };
         const refreshed: Snapshot = {
           ...snapshot,
           issues: applied(snapshot, changes),
@@ -233,7 +300,21 @@ export function snapshotStore(dir: string, clock: Clock): SnapshotStore {
     async forget(key, reason) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
-      return forget(at, 0, reason);
+      return locked(at.lock, () => forget(at, 0, reason));
+    },
+
+    async claimRefresher(key) {
+      const at = paths(key);
+      await mkdir(at.dir, { recursive: true, mode: 0o700 });
+      if (!(await lock(at.refresherLock, { renewedAt: clock.now() }, renewed))) return null;
+      return {
+        renew: () => save(at.refresherLock, { pid: process.pid, renewedAt: clock.now() }),
+        release: () => rm(at.refresherLock, { force: true }),
+      };
+    },
+
+    async refresherRunning(key) {
+      return renewed(paths(key).refresherLock);
     },
   };
 }
@@ -294,6 +375,23 @@ async function forget(at: Paths, total: number, reason: string): Promise<Refused
   return { kind: "refused", reason };
 }
 
+/**
+ * Says so when the CLI now holds another login than the one it read for:
+ * what it read is never saved as this login's (ADR 0006). A switch and back
+ * during a full read goes unseen.
+ */
+async function otherLogin(tracker: Tracker, key: SnapshotKey): Promise<string | null> {
+  const { login } = await tracker.viewer();
+  return login !== undefined && login !== key.login ? `${tracker.host} now logs in as ${login}` : null;
+}
+
+/** Why what a full read had read was deleted under it, once the Tracker refused the login elsewhere; `null` while it's still there. */
+async function forgotten(at: Paths, attempt: string): Promise<Refused | null> {
+  const progress = await readJson<Progress>(at.progress);
+  if (progress?.attempt === attempt) return null;
+  return { kind: "refused", reason: progress?.stopped ?? "what was read of it was deleted" };
+}
+
 /** A Snapshot or read saved in another format counts as none, so it is read again. */
 function current<T extends { format: number }>(saved: T | null): T | null {
   return saved?.format === SNAPSHOT_FORMAT ? saved : null;
@@ -305,11 +403,24 @@ function unique(issues: OpenIssue[]): OpenIssue[] {
   return issues.filter((issue) => !seen.has(issue.id) && seen.add(issue.id));
 }
 
-/** Takes the lock, or says another live process holds it. A lock whose process is gone is taken over. */
-async function lock(path: string): Promise<boolean> {
+/** Runs `work` holding the lock, waiting for whoever holds it now; only a refresh or a Snapshot being put in place holds it, and neither for long. */
+async function locked<T>(path: string, work: () => Promise<T>): Promise<T> {
+  while (!(await lock(path))) await sleep(LOCK_POLL_MS);
+  try {
+    return await work();
+  } finally {
+    await rm(path, { force: true });
+  }
+}
+
+/**
+ * Takes the lock, or says another live process holds it. A lock whose
+ * process is gone is taken over, and so is one `holding` says isn't held.
+ */
+async function lock(path: string, stamp: object = {}, holding: (path: string) => Promise<boolean> = held): Promise<boolean> {
   // Linked into place whole, so nobody ever reads a lock without its holder; named per attempt, since one process can try twice at once.
   const mine = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  await writeFile(mine, JSON.stringify({ pid: process.pid }), { mode: 0o600 });
+  await writeFile(mine, JSON.stringify({ pid: process.pid, ...stamp }), { mode: 0o600 });
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -317,7 +428,7 @@ async function lock(path: string): Promise<boolean> {
         return true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        if (await held(path)) return false;
+        if (await holding(path)) return false;
         await rm(path, { force: true });
       }
     }

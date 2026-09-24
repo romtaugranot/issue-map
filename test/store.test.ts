@@ -50,6 +50,8 @@ function fakeTracker(
     changes?: ChangesAnswer;
     /** Changes each open Issue before it's listed. */
     shape?: (issue: OpenIssue) => OpenIssue;
+    /** The login the CLI holds; by default, the Snapshot's. */
+    login?: string;
   } = {},
 ): FakeTracker {
   const asked: (string | null)[] = [];
@@ -62,7 +64,7 @@ function fakeTracker(
     version: null,
     resolveProject: async () => ({ kind: "cant-tell", reason: "unused" }),
     issue: async () => ({ kind: "cant-tell", reason: "unused" }),
-    viewer: async () => ({ kind: "viewer", login: key.login }),
+    viewer: async () => ({ kind: "viewer", login: options.login ?? key.login }),
     async changes(_, since, outside) {
       refreshes.push({ since, outside });
       options.time?.advance(options.pageMs ?? 1000);
@@ -126,13 +128,15 @@ describe("the Snapshot store (ADR 0006)", () => {
     const state = await store.state(key);
     assert.equal(state.kind, "ready");
     const { snapshot, ageMs } = state as Extract<SnapshotState, { kind: "ready" }>;
-    assert.equal(ageMs, 45_000);
+    // The read took 3 s, and it's as old as its first page.
+    assert.equal(ageMs, 48_000);
     assert.deepEqual(snapshot, {
-      format: 4,
+      format: 5,
       tracker: "github.com",
       project: { id: project.id, path: project.path, url: project.url },
       login: "fixture-viewer",
-      readAt: "2026-09-23T10:00:03.000Z",
+      readAt: "2026-09-23T10:00:00.000Z",
+      fullReadAt: "2026-09-23T10:00:00.000Z",
       // The next refresh reads what changed from when this read started, less a minute.
       changesSince: "2026-09-23T09:59:00.000Z",
       caughtUp: true,
@@ -269,7 +273,8 @@ describe("refreshing a Snapshot for a draw (ADR 0006)", () => {
 
   test("a Snapshot under two minutes old is handed over without a refresh", async () => {
     const { store, time } = await readStore();
-    time.advance(119_000);
+    // The read took a second.
+    time.advance(118_000);
     const fake = fakeTracker(5, { time });
     const drawn = await store.forDraw(key, fake.tracker, project);
     assert.deepEqual(fake.refreshes, []);
@@ -297,7 +302,7 @@ describe("refreshing a Snapshot for a draw (ADR 0006)", () => {
     const drawn = await store.forDraw(key, unreachable.tracker, project);
     assert.equal(drawn.kind, "ready");
     const { snapshot, ageMs, stale } = drawn as Extract<typeof drawn, { kind: "ready" }>;
-    assert.deepEqual([ageMs, stale], [3 * 3_600_000 + 1000, "couldn't reach github.com"]);
+    assert.deepEqual([ageMs, stale], [3 * 3_600_000 + 2000, "couldn't reach github.com"]);
     assert.deepEqual(snapshot, before.kind === "ready" && before.snapshot);
     // Asking again tries again.
     time.advance(1000);
@@ -427,6 +432,114 @@ describe("refreshing a Snapshot for a draw (ADR 0006)", () => {
       assert.notEqual((await store.state(key)).kind, "ready");
       assert.deepEqual(titlesIn(dir), [], answer.kind);
     }
+  });
+});
+
+describe("reading a Snapshot again in full (ADR 0006)", () => {
+  /** A re-read of `count` open Issues whose second page waits until `release` is called. */
+  function heldReread(count: number, time: ReturnType<typeof clock>) {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let pages = 0;
+    const fake = fakeTracker(count, { time, onPage: async () => void (++pages === 2 && (await held)) });
+    return { ...fake, release };
+  }
+
+  test("a full read in progress never blocks a draw: the Snapshot there is refreshed and drawn meanwhile, then replaced", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time);
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    time.advance(121_000);
+    const reread = heldReread(150, time);
+    const reading = store.read(key, reread.tracker, project);
+    while (reread.asked.length < 2) await new Promise((resolve) => setImmediate(resolve));
+
+    const refresher = fakeTracker(5, { time });
+    const drawn = await store.forDraw(key, refresher.tracker, project);
+    assert.equal(refresher.refreshes.length, 1, "the refresh isn't held up by the full read");
+    assert.deepEqual(drawn.kind === "ready" && [drawn.snapshot.issues.length, drawn.ageMs, drawn.stale], [5, 0, undefined]);
+
+    reread.release();
+    assert.deepEqual(await reading, { kind: "done" });
+    const after = await store.state(key);
+    assert.equal(after.kind === "ready" && after.snapshot.issues.length, 150);
+  });
+
+  test("a Snapshot is due a full read once a refresh couldn't prove it caught up, until one finishes", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time);
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    const due = async () => {
+      const state = await store.state(key);
+      return state.kind === "ready" && state.readAgain;
+    };
+    assert.equal(await due(), false);
+    time.advance(121_000);
+    const behind: ChangesAnswer = { kind: "changes", open: [], ends: [], requests: [], caughtUp: false, unread: {} };
+    await store.refresh(key, fakeTracker(5, { time, changes: behind }).tracker, project);
+    assert.equal(await due(), true);
+
+    const reread = heldReread(150, time);
+    const reading = store.read(key, reread.tracker, project);
+    while (reread.asked.length < 2) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(await due(), false, "not while one is running");
+    reread.release();
+    await reading;
+    assert.equal(await due(), false);
+  });
+
+  test("otherwise a Snapshot is due a full read a week after the last one started", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time);
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    const refresher = fakeTracker(5, { time });
+    const due = async () => {
+      const state = await store.state(key);
+      return state.kind === "ready" && state.readAgain;
+    };
+    // The read and the refresh take a second each.
+    time.advance(7 * 86_400_000 - 3000);
+    await store.refresh(key, refresher.tracker, project);
+    assert.equal(await due(), false, "refreshes don't count as full reads");
+    time.advance(1000);
+    assert.equal(await due(), true);
+    // Drawn meanwhile: it's the full read that's due, not the Snapshot that's old.
+    const drawn = await store.forDraw(key, refresher.tracker, project);
+    assert.deepEqual(drawn.kind === "ready" && [drawn.stale, drawn.readAgain], [undefined, true]);
+  });
+
+  test("what's read after the CLI switched to another login is never saved as this login's", async () => {
+    const time = clock();
+    const store = snapshotStore(scratch(), time);
+    const switched = fakeTracker(7, { time, login: "someone-else" });
+    assert.deepEqual(await store.read(key, switched.tracker, project), { kind: "failed", reason: "github.com now logs in as someone-else" });
+    assert.notEqual((await store.state(key)).kind, "ready");
+
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    time.advance(121_000);
+    const changed: ChangesAnswer = { kind: "changes", open: [issue(6)], ends: [], requests: [], caughtUp: true, unread: {} };
+    const refreshed = await store.refresh(key, fakeTracker(5, { time, login: "someone-else", changes: changed }).tracker, project);
+    assert.deepEqual(refreshed, { kind: "failed", reason: "github.com now logs in as someone-else" });
+    const state = await store.state(key);
+    assert.equal(state.kind === "ready" && state.snapshot.issues.length, 5);
+  });
+
+  test("a login refused while a full read runs doesn't get its Snapshot back when the read finishes", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time);
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    time.advance(121_000);
+    const reread = heldReread(150, time);
+    const reading = store.read(key, reread.tracker, project);
+    while (reread.asked.length < 2) await new Promise((resolve) => setImmediate(resolve));
+
+    const refused = { kind: "refused", reason: "github.com refused this login: Bad credentials" } as const;
+    assert.deepEqual(await store.forDraw(key, fakeTracker(5, { time, changes: refused }).tracker, project), refused);
+    reread.release();
+    assert.deepEqual(await reading, refused);
+    assert.notEqual((await store.state(key)).kind, "ready");
+    assert.deepEqual(titlesIn(dir), []);
   });
 });
 

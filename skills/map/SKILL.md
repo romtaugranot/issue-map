@@ -26,7 +26,7 @@ When the user asks what *you* would pick, give your opinion in the conversation:
 
 When the output says the Project is being read for the first time, that is all there is to show: the read carries on by itself, and running `issue-map map` again shows how far it has got, then the Map once it's done.
 
-The Map is drawn from a Snapshot, refreshed first when it's more than two minutes old. When it opens with a `⚠ read … ago` line, the Tracker couldn't be read and the Map is as old as it says; reprint that line with the rest, and asking again tries again. An Issue card is always read live, so it is never old.
+The Map is drawn from a Snapshot, refreshed first when it's more than two minutes old. Drawing it starts a refresher that keeps the Home Project's Snapshot warm in the background, so the Map is usually drawn at once, and a full re-read runs in the background when one is due; the Map is drawn from the Snapshot there meanwhile, so there is never anything to wait for. When it opens with a `⚠ read … ago` line, the Tracker couldn't be read and the Map is as old as it says; reprint that line with the rest, and asking again tries again. An Issue card is always read live, so it is never old.
 
 ## Moving along Links
 
