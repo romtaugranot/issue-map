@@ -126,6 +126,8 @@ export interface SnapshotStore {
   claimRefresher(key: SnapshotKey): Promise<{ renew(): Promise<void>; release(): Promise<void> } | null>;
   /** Whether a live process is keeping it warm. */
   refresherRunning(key: SnapshotKey): Promise<boolean>;
+  /** How long since anyone drew its Project's Map or glanced at it for the status line, counted from the refresher's claim when nobody has yet. */
+  unlookedMs(key: SnapshotKey): Promise<number>;
   /**
    * What the status line shows of the Project `project` names by identity on
    * the Tracker at `tracker`, without reading a Snapshot or the Tracker. The
@@ -148,6 +150,10 @@ export const FRESH_MS = 2 * 60_000;
 const FULL_READ_EVERY_MS = 7 * 86_400_000;
 /** How far before its last read a refresh reads changes from, since this machine's clock and the Tracker's can disagree. */
 const MARGIN_MS = 60_000;
+/** How often a look is written down at most: the status line glances every few seconds. */
+const LOOK_EVERY_MS = 60_000;
+/** Where the last look at a Project's Map is written down, beside its Snapshots. */
+const LOOKED = ".looked.json";
 /** How long a refresher's claim lasts unrenewed; it renews it every round. */
 const CLAIM_LAPSES_MS = 10 * 60_000;
 /** How the refresher's claim on a login's Snapshot is named, after the login. */
@@ -202,6 +208,15 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     await save(at.snapshot, snapshot);
     if (!summarise) return rm(at.summary, { force: true });
     await save(at.summary, { format: SNAPSHOT_FORMAT, readAt: snapshot.readAt, line: summarise(snapshot) } satisfies Summary);
+  };
+
+  /** Writes down that someone looked at the Map of `project`, which keeps its refresher going. */
+  const look = async (tracker: string, project: string) => {
+    const path = join(projectDir(tracker, project), LOOKED);
+    const looked = await readJson<{ at: number }>(path);
+    if (clock.now() - (looked?.at ?? 0) < LOOK_EVERY_MS) return;
+    await mkdir(projectDir(tracker, project), { recursive: true, mode: 0o700 });
+    await save(path, { at: clock.now() });
   };
 
   /** Whether a live refresher holds the claim at `path` and renewed it lately. */
@@ -362,6 +377,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     },
 
     async forDraw(key, tracker, project) {
+      await look(key.tracker, key.project);
       const state = await this.state(key);
       if (state.kind !== "ready" || state.ageMs <= FRESH_MS) return state;
       const outcome = await this.refresh(key, tracker, project);
@@ -405,6 +421,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
       if (!(await lock(at.refresherLock, { renewedAt: clock.now() }, renewed))) return null;
+      if (!(await readJson<{ at: number }>(join(at.dir, LOOKED)))) await look(key.tracker, key.project);
       return {
         renew: () => save(at.refresherLock, { pid: process.pid, renewedAt: clock.now() }),
         release: () => rm(at.refresherLock, { force: true }),
@@ -413,6 +430,11 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
 
     async refresherRunning(key) {
       return renewed(paths(key).refresherLock);
+    },
+
+    async unlookedMs(key) {
+      const looked = await readJson<{ at: number }>(join(projectDir(key.tracker, key.project), LOOKED));
+      return clock.now() - (looked?.at ?? clock.now());
     },
 
     async glance(tracker, project) {
@@ -424,6 +446,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
         if ((!warm || renewedAt > warm.renewedAt) && (await renewed(path))) warm = { login: decodeURIComponent(name.slice(0, -REFRESHER_LOCK.length)), renewedAt };
       }
       if (!warm) return { kind: "none" };
+      await look(tracker, project);
       const at = paths({ tracker, project, login: warm.login });
       const summary = current(await readJson<Summary>(at.summary));
       if (summary) return { kind: "ready", line: summary.line, ageMs: clock.now() - Date.parse(summary.readAt) };

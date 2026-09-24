@@ -196,3 +196,33 @@ test("renews its claim every round, for as long as it runs", async () => {
   assert.ok(time.now() - Date.parse("2026-09-23T10:00:00Z") > 20 * 60_000, "longer than a claim lasts unrenewed");
   assert.equal(running, true);
 });
+
+test("stops once nobody has drawn the Map or looked at its status line for a day", async () => {
+  const { store, time, deps } = await warmable();
+  const start = time.now();
+  // The status line looks for the first two hours, then Claude Code closes.
+  const sleep = async (ms: number) => {
+    await time.sleep(ms);
+    if (time.now() - start < 2 * 3_600_000) await store.glance(key.tracker, key.project);
+  };
+  const why = await keepWarm({ ...deps, sleep }, fakeTracker(time).tracker, project.path, key);
+  assert.equal(why, "nobody has drawn the Map or looked at its status line for a day");
+  const hours = (time.now() - start) / 3_600_000;
+  assert.ok(hours >= 26 && hours < 26.1, `${hours} hours`);
+});
+
+test("a draw counts as a look, as the status line's does", async () => {
+  const { store, time, deps } = await warmable();
+  const start = time.now();
+  let drawn = false;
+  const sleep = async (ms: number) => {
+    await time.sleep(ms);
+    if (!drawn && time.now() - start >= 5 * 3_600_000) {
+      drawn = true;
+      await store.forDraw(key, fakeTracker(time).tracker, project);
+    }
+  };
+  await keepWarm({ ...deps, sleep }, fakeTracker(time).tracker, project.path, key);
+  const hours = (time.now() - start) / 3_600_000;
+  assert.ok(hours >= 29 && hours < 29.1, `${hours} hours`);
+});
