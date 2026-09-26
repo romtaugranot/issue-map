@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "mode": "live",
+  "toolchain": {
+    "language": "typescript",
+    "requiredBinaries": [
+      {
+        "name": "node",
+        "versionCommand": [
+          "node",
+          "--version"
+        ]
+      },
+      {
+        "name": "npm",
+        "versionCommand": [
+          "npm",
+          "--version"
+        ]
+      }
+    ]
+  },
+  "install": [
+    {
+      "argv": [
+        "npm",
+        "ci",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund"
+      ],
+      "cwd": ".",
+      "env": {},
+      "timeoutMs": 180000
+    }
+  ],
+  "verify": [
+    {
+      "id": "typecheck",
+      "command": {
+        "argv": [
+          "node",
+          "node_modules/typescript/bin/tsc",
+          "--diagnostics"
+        ],
+        "cwd": ".",
+        "env": {},
+        "timeoutMs": 120000
+      },
+      "costClass": "cpu",
+      "concurrencyClass": "parallel",
+      "trustworthy": {
+        "expectedExitCode": 0,
+        "assertions": [
+          {
+            "kind": "output-matches",
+            "stream": "stdout",
+            "pattern": "Files: +[1-9]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "tests",
+      "command": {
+        "argv": [
+          "node",
+          "--test",
+          "test/**/*.test.ts"
+        ],
+        "cwd": ".",
+        "env": {},
+        "timeoutMs": 180000
+      },
+      "costClass": "cpu",
+      "concurrencyClass": "parallel",
+      "trustworthy": {
+        "expectedExitCode": 0,
+        "assertions": [
+          {
+            "kind": "output-matches",
+            "stream": "stdout",
+            "pattern": "fail 0"
+          },
+          {
+            "kind": "output-matches",
+            "stream": "stdout",
+            "pattern": "pass [1-9]"
+          }
+        ]
+      }
+    }
+  ],
+  "forbidden": {
+    "commands": [],
+    "paths": []
+  },
+  "environment": {
+    "required": [],
+    "forbidden": [],
+    "overrides": {}
+  },
+  "singletons": [],
+  "guards": [],
+  "falseGreens": [],
+  "sensitiveLocations": [],
+  "docs": [],
+  "writeBack": {
+    "branchPrefix": "agent/",
+    "commitTrailers": []
+  },
+  "egressHosts": []
+}
