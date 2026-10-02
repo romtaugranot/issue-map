@@ -18,21 +18,21 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 > - #11 \[u2\] Keep the old parser working — unblocked 2d ago · #10 closed as not planned
 >
 > **Groups: 3** — largest first
-> - #4 \[p1\] Plan the release — 4 Issues, 1↗
-> - #1 \[b1\] Lay the foundation — 3 Issues
-> - ↗issue-map-fixtures-b/elsewhere#1 \[x1\] Publish the shared config — 1 Issue, 1↗
+> - #4 \[p1\] Plan the release — 4 Issues, 2 Unblocked, 1↗ Outside
+> - #1 \[b1\] Lay the foundation — 3 Issues, 1 Unblocked
+> - ↗issue-map-fixtures-b/elsewhere#1 \[x1\] Publish the shared config — 1 Issue, 0 Unblocked, 1↗ Outside
 >
 > **Unlinked: 6** — no Link to another open Issue. Ask to list them.
 
-`↗` marks an Outside Issue: an Issue in another Project that a Link reaches. It is drawn, and joins Issues into a Group, but the Map doesn't follow its own Links.
+`↗` marks an Outside Issue: an Issue in another Project that a Link reaches. It is drawn, and joins Issues into a Group, but the Map doesn't follow its own Links. Each Group line says how many of its Issues are Unblocked, counted as Take next counts them, so it agrees with the list above.
 
-Opening a Group lists what sits at its top, one level at a time:
+Opening a Group lists what sits at its top, one level at a time, each line with how many Unblocked Issues it and those beneath it hold:
 
-> **Group 1 of 3** · #4 \[p1\] Plan the release — 4 Issues, 1↗
+> **Group 1 of 3** · #4 \[p1\] Plan the release — 4 Issues, 2 Unblocked, 1↗ Outside
 >
 > **Under #4, alone at the top: 3** — most under it first
-> - #5 \[p2\] Write the release notes — 1 under it
-> - #6 \[p3\] Tag the build
+> - #5 \[p2\] Write the release notes — 1 under it · 1 Unblocked
+> - #6 \[p3\] Tag the build — 1 Unblocked
 > - ↗issue-map-fixtures/site#1 \[s1\] Update the website for the release
 >
 > _Name one to open the level below it · `map` for the Map_
@@ -101,9 +101,10 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | `refresh the Map` | The overview, its Snapshot refreshed now even if it's under two minutes old, so a Link you just recorded in the browser shows |
 | `what should I take next?` | The overview, pointing at Take next. Ask what Claude would pick and it says so separately, without reordering the list |
 | `open group 1` | The outline of the first Group on the overview |
+| `list the Groups` | Every Group, 15 a page, largest first, numbered as `open group <n>` takes them |
 | `what's under #5?` | The level beneath an Issue in its Group |
 | `open #2` | That Issue's card, read live, then a picker of its Links |
-| `more` | The next page of an outline, a card's Links or the Unlinked list |
+| `more` | The next page of an outline, a card's Links, the Group list or the Unlinked list |
 | `list the Unlinked Issues` | The Issues with no Link to another open Issue, 15 a page, newest first |
 | `assign #2 to me` | Asks once, then assigns the Issue to you |
 | `start work on #2` | Claude reads the Issue's body and comments and briefs you in about a dozen lines. No branch, no checkout, no code |

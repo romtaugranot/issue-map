@@ -7,6 +7,7 @@
  * `issue-map map`: draws the Map of the Project on screen.
  * `issue-map refresh`: refreshes the Snapshot of the Project on screen now, however fresh it is, then draws its Map; there is no full read on demand.
  * `issue-map unlinked [--page <n>]`: lists its Unlinked Issues, 15 a page, newest first.
+ * `issue-map groups [--page <n>]`: lists every Group, 15 a page, largest first, numbered by the place `group` opens it by.
  * `issue-map group <n | ref> [--page <n>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
@@ -49,7 +50,7 @@ import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
 
 /** The status line's process, where this plugin is now. */
 const STATUS_LINE = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
@@ -113,6 +114,7 @@ async function main(argv: string[]): Promise<number> {
     case "map":
     case "refresh":
     case "unlinked":
+    case "groups":
     case "back":
     case "suggest":
     case "offer":
@@ -154,7 +156,7 @@ async function main(argv: string[]): Promise<number> {
                 ? { kind: "offer", proposals: proposals! }
                 : verb === "confirm"
                   ? { kind: "confirm", picked }
-            : { kind: "view", view: verb === "issue" ? { kind: "card", ref: cardRef!, page } : verb === "map" || verb === "refresh" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening! };
+            : { kind: "view", view: verb === "issue" ? { kind: "card", ref: cardRef!, page } : verb === "map" || verb === "refresh" ? { kind: "overview" } : verb === "unlinked" || verb === "groups" ? { kind: verb, page } : opening! };
   const store = openStore();
   const suggesting = { store, pending: pendingOf(process.env.CLAUDE_CODE_SESSION_ID), declines: declinesOf() };
   const answer = await move(

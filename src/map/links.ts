@@ -124,7 +124,12 @@ function group(ids: string[], own: Map<string, OpenIssue>, outside: Map<string, 
 }
 
 /** How many of the Project's own Issues sit anywhere beneath a member of its Group. */
-export function under({ members, beneath }: Pick<Group, "members" | "beneath">, id: string): number {
+export function under(group: Pick<Group, "members" | "beneath">, id: string): number {
+  return ownBeneath(group, id).length;
+}
+
+/** The Project's own Issues anywhere beneath a member of its Group. */
+export function ownBeneath({ members, beneath }: Pick<Group, "members" | "beneath">, id: string): OpenIssue[] {
   const found = new Set<string>();
   const stack = [id];
   while (stack.length > 0) {
@@ -134,7 +139,10 @@ export function under({ members, beneath }: Pick<Group, "members" | "beneath">, 
       stack.push(next);
     }
   }
-  return [...found].filter((next) => members.get(next)!.kind === "issue").length;
+  return [...found].flatMap((next) => {
+    const member = members.get(next)!;
+    return member.kind === "issue" ? [member.issue] : [];
+  });
 }
 
 /** The Project's own Issues before Outside Issues, oldest first. */
