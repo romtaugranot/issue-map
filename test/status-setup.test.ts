@@ -1,7 +1,8 @@
 /**
  * Installing the status line (#40): a setup command writes it into the
  * user's Claude Code settings, wrapping a status line they already have;
- * removing it (#50) puts that one back.
+ * removing it (#50) puts that one back. An update that moves the plugin
+ * neither blanks the user's own rows nor needs setup run again (#56).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, mkdtempSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installStatusLine, removeStatusLine, userSettings } from "../src/status/install.ts";
+import { installStatusLine, removeStatusLine, repointStatusLine, userSettings } from "../src/status/install.ts";
 
 const ENTRY = "/opt/plugins/issue map/bin/issue-map-status-line";
 
@@ -41,7 +42,7 @@ test("wraps a status line the user already has rather than replacing it, keeping
   const said = await installStatusLine(path, ENTRY);
   assert.deepEqual(read(path).statusLine, {
     type: "command",
-    command: "'/opt/plugins/issue map/bin/issue-map-status-line' --wrap '~/.claude/statusline.sh --short'",
+    command: "'/opt/plugins/issue map/bin/issue-map-status-line' --wrap '~/.claude/statusline.sh --short' 2>/dev/null || sh -c '~/.claude/statusline.sh --short'",
     padding: 2,
   });
   assert.match(said, /wrapping yours/);
@@ -55,6 +56,32 @@ test("the wrapped command runs as the user's own did, quotes and all, then the M
   const outside = mkdtempSync(join(tmpdir(), "issue-map-elsewhere-"));
   const printed = execFileSync("sh", ["-c", command], { input: JSON.stringify({ workspace: { current_dir: outside } }) }).toString();
   assert.equal(printed, "it's mine\n", "outside a checkout, the Map adds no row");
+});
+
+test("with the plugin gone, as an update deletes the old one, the user's own status line still runs, given the same standard input", async () => {
+  const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: `cat; echo " it's mine"` } }));
+  await installStatusLine(path, join(mkdtempSync(join(tmpdir(), "issue-map-gone-")), "0.1.0/bin/issue-map-status-line"));
+  const { command } = read(path).statusLine as { command: string };
+  assert.equal(execFileSync("sh", ["-c", command], { input: "{}" }).toString(), "{} it's mine\n");
+});
+
+test("drawing the Map from where the plugin now lives points the status line there, still wrapping the user's own", async () => {
+  const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: "my-status", padding: 1 } }));
+  await installStatusLine(path, "/opt/plugins/issue-map/0.1.0/bin/issue-map-status-line");
+  await repointStatusLine(path, "/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line");
+  assert.deepEqual(read(path).statusLine, {
+    type: "command",
+    command: "'/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line' --wrap 'my-status' 2>/dev/null || sh -c 'my-status'",
+    padding: 1,
+  });
+});
+
+test("drawing the Map installs no status line, and leaves one that isn't the Map's alone", async () => {
+  for (const settings of [undefined, `{"statusLine": {"type": "command", "command": "my-status"}}`]) {
+    const path = settingsFile(settings);
+    await repointStatusLine(path, ENTRY);
+    assert.equal(existsSync(path) ? readFileSync(path, "utf8") : undefined, settings);
+  }
 });
 
 test("installing it again changes nothing, and doesn't wrap it twice", async () => {
@@ -72,7 +99,7 @@ test("installing it again from where the plugin now lives points it there, still
   const said = await installStatusLine(path, "/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line");
   assert.deepEqual(read(path).statusLine, {
     type: "command",
-    command: "'/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line' --wrap 'my-status'",
+    command: "'/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line' --wrap 'my-status' 2>/dev/null || sh -c 'my-status'",
     padding: 1,
   });
   assert.match(said, /now runs from/);
@@ -98,6 +125,12 @@ test("removing it after the plugin moved still puts back the status line it wrap
   const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: "my-status" } }));
   await installStatusLine(path, "/opt/plugins/issue-map/0.1.0/bin/issue-map-status-line");
   await installStatusLine(path, "/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line");
+  await removeStatusLine(path);
+  assert.deepEqual(read(path), { statusLine: { type: "command", command: "my-status" } });
+});
+
+test("removing one in the form #50 wrote still puts back the status line it wrapped", async () => {
+  const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: `'${ENTRY}' --wrap 'my-status'` } }));
   await removeStatusLine(path);
   assert.deepEqual(read(path), { statusLine: { type: "command", command: "my-status" } });
 });

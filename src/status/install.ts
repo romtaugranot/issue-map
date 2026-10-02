@@ -2,8 +2,10 @@
  * Installing the status line (#40). A plugin can't declare a status line,
  * and a user has just one (ADR 0001), so this writes it into the user's
  * Claude Code settings. A status line the user already has is wrapped, not
- * replaced: its rows come first, then the Map's. Removing it (#50) puts
- * back the one it wrapped.
+ * replaced: its rows come first, then the Map's, and should the plugin be
+ * gone, as an update deletes the old one, the shell runs it alone (#56).
+ * Drawing the Map points the status line at where the plugin is now.
+ * Removing it (#50) puts back the one it wrapped.
  */
 import { mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -14,6 +16,9 @@ const OURS = "issue-map-status-line";
 
 /** A word `quoted` quoted, at the start of a command. */
 const QUOTED = /^'(?:[^']|'\\'')*'/;
+
+/** What follows the entry in a command the Map wrote wrapping one: as #50 wrote it, or, since #56, with the shell's fallback to the wrapped command alone. */
+const WRAPPED = /^ --wrap ('(?:[^']|'\\'')*')(?: 2>\/dev\/null \|\| sh -c \1)?$/;
 
 /**
  * How often, in seconds, Claude Code re-runs a status line of the Map's
@@ -35,20 +40,37 @@ export async function installStatusLine(path: string, entry: string): Promise<st
 
   const { theirs, command } = statusLineIn(settings);
   if (command?.includes(OURS)) {
-    // A plugin update moves the entry, which would leave the status line blank: the entry, its first word, is pointed at where it is now.
-    const moved = QUOTED.exec(command)?.[0];
-    if (moved === undefined || moved === quoted(entry)) return `The status line is already installed in ${path}; nothing changed.`;
-    settings.statusLine = { ...theirs, command: `${quoted(entry)}${command.slice(moved.length)}` };
-    await save(path, settings);
+    if (!(await repoint(path, settings, entry))) return `The status line is already installed in ${path}; nothing changed.`;
     return `The status line in ${path} now runs from ${entry}.`;
   }
   settings.statusLine = command
-    ? { ...theirs, command: `${quoted(entry)} --wrap ${quoted(command)}` }
+    ? { ...theirs, command: wrapping(entry, quoted(command)) }
     : { type: "command", command: quoted(entry), refreshInterval: REFRESH_S };
   await save(path, settings);
   return command
     ? `The status line is installed in ${path}, wrapping yours: from the next message, your status line's rows come first, then the Home Project's Take next.`
     : `The status line is installed in ${path}: from the next message, it shows the Home Project's Take next, as the background refresher keeps it.`;
+}
+
+/** Points the Map's status line in the settings at `path`, when it is installed, at `entry`, as drawing the Map does once an update has moved the plugin; anything else is left alone. */
+export async function repointStatusLine(path: string, entry: string): Promise<void> {
+  const settings = await load(path);
+  if (typeof settings !== "string" && statusLineIn(settings).command?.includes(OURS)) await repoint(path, settings, entry);
+}
+
+/** Points the Map's status line command in `settings` at `entry`, saving them to `path`; whether that changed anything. */
+async function repoint(path: string, settings: Record<string, unknown>, entry: string): Promise<boolean> {
+  const { theirs, command } = statusLineIn(settings);
+  // The entry is its first word; one changed by hand past it keeps the rest as it is.
+  const moved = QUOTED.exec(command!)?.[0];
+  if (moved === undefined) return false;
+  const rest = command!.slice(moved.length);
+  const wrapped = WRAPPED.exec(rest)?.[1];
+  const now = wrapped === undefined ? `${quoted(entry)}${rest}` : wrapping(entry, wrapped);
+  if (now === command) return false;
+  settings.statusLine = { ...theirs, command: now };
+  await save(path, settings);
+  return true;
 }
 
 /** Takes the Map's row out of the status line in the settings at `path`, and says what it did: the status line it wrapped is put back as it was, or, when it wrapped none, the setting goes. */
@@ -59,7 +81,7 @@ export async function removeStatusLine(path: string): Promise<string> {
   const { theirs, command } = statusLineIn(settings);
   if (!command?.includes(OURS)) return `The Map's status line isn't installed in ${path}; nothing changed.`;
   const rest = command.slice(QUOTED.exec(command)?.[0].length ?? 0);
-  const wrapped = /^ --wrap ('(?:[^']|'\\'')*')$/.exec(rest)?.[1];
+  const wrapped = WRAPPED.exec(rest)?.[1];
   if (rest && wrapped === undefined) return `Didn't remove the status line: the one in ${path} isn't as the Map wrote it, so what was yours can't be told apart. Nothing changed.`;
   if (wrapped === undefined) delete settings.statusLine;
   else settings.statusLine = { ...theirs, command: wrapped.slice(1, -1).replaceAll(`'\\''`, "'") };
@@ -88,6 +110,11 @@ function statusLineIn(settings: Record<string, unknown>) {
   const theirs = settings.statusLine as { type?: unknown; command?: unknown } | undefined;
   const command = theirs?.type === "command" && typeof theirs.command === "string" && theirs.command.trim() ? theirs.command : null;
   return { theirs, command };
+}
+
+/** The entry wrapping `theirs`, already quoted, and should the entry be gone, `theirs` alone, run through the shell as the entry runs it. */
+function wrapping(entry: string, theirs: string): string {
+  return `${quoted(entry)} --wrap ${theirs} 2>/dev/null || sh -c ${theirs}`;
 }
 
 /** Quoted for the shell, whatever it holds. */

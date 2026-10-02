@@ -129,7 +129,7 @@ Under `claude -p` there are no pickers and no display hook: Claude reprints each
 - this session's trail for `back`, kept a month, the Projects you moved to lately, the last Home Project of each checkout, the Link Suggestions offered this session (references only, never an Issue's text) and those you declined;
 - `background.log`, what the background processes print.
 
-Outside that directory it writes only when you ask: `issue-map.home` in the checkout's local git config when you pick a Home Project among several, and `statusLine` in your Claude Code `settings.json` when you ask for the status line.
+Outside that directory it writes only when you ask: `issue-map.home` in the checkout's local git config when you pick a Home Project among several, and `statusLine` in your Claude Code `settings.json` when you ask for the status line; once it's there, drawing the Map after an update points it at where the plugin is now.
 
 **In the background**, drawing the Map starts a full read of a Project when one is due, and a refresher that keeps the Home Project's Snapshot warm, a few requests every 90 seconds. The refresher runs as a process of its own and carries on after Claude Code exits, until a day passes with nobody drawing the Map or glancing at its status line row, the login changes, the Tracker refuses it, or the Project's path leads elsewhere. To stop it sooner:
 
