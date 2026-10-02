@@ -7,10 +7,10 @@
  * A Snapshot is read in full again when a refresh couldn't prove it caught
  * up, and otherwise weekly; that read runs beside refreshes of the Snapshot
  * it replaces, which is drawn meanwhile. One refresher at a time may claim a
- * Snapshot to keep it warm. Beside each Snapshot it keeps a line summing it
- * up, for the status line, which has no time to read a large Snapshot.
- * What's kept of a Project nothing has touched for a month expires, unless
- * a refresher keeps it warm.
+ * Snapshot to keep it warm; a claim of another version is taken over. Beside
+ * each Snapshot it keeps a line summing it up, for the status line, which
+ * has no time to read a large Snapshot. What's kept of a Project nothing has
+ * touched for a month expires, unless a refresher keeps it warm.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -130,8 +130,10 @@ export interface SnapshotStore {
    * refresher has taken the claim over, and `release` leaves that one's claim.
    */
   claimRefresher(key: SnapshotKey): Promise<{ renew(): Promise<boolean>; release(): Promise<void> } | null>;
-  /** Whether a live process is keeping it warm. */
+  /** Whether a live process of this version of the plugin is keeping it warm; one of another version is taken over by the next claim (#55). */
   refresherRunning(key: SnapshotKey): Promise<boolean>;
+  /** Whether a newer version of the plugin saved its Snapshot, or a read towards one, in a format this one can't read: then it's left to that version (#55). */
+  savedByNewer(key: SnapshotKey): Promise<boolean>;
   /** How long since anyone drew its Project's Map or glanced at it for the status line, counted from the refresher's claim when nobody has yet. */
   unlookedMs(key: SnapshotKey): Promise<number>;
   /**
@@ -149,6 +151,9 @@ interface Summary {
   readAt: string;
   line: string;
 }
+
+/** The plugin's version, as its manifest says, stamped on a refresher's claim with the Snapshot format. */
+export const PLUGIN_VERSION: string = JSON.parse(readFileSync(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
 
 /** How long a Snapshot is fresh; a draw refreshes one older than this first (ADR 0006). */
 export const FRESH_MS = 2 * 60_000;
@@ -196,6 +201,7 @@ interface Progress {
 }
 
 export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOptions = {}): SnapshotStore {
+  const stamp: Stamp = { version: PLUGIN_VERSION, format: SNAPSHOT_FORMAT };
   const projectDir = (tracker: string, project: string) => join(dir, "snapshots", safe(tracker), safe(project));
   const paths = (key: SnapshotKey) => {
     const base = join(projectDir(key.tracker, key.project), safe(key.login));
@@ -280,6 +286,8 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       const reader = await lock(at.readLock, clock);
       if (!reader) return { kind: "busy" };
       try {
+        // Saved over, it would be read again by that version in turn.
+        if (await this.savedByNewer(key)) return { kind: "failed", reason: "a newer version of the plugin keeps this Snapshot" };
         const saved = current(await readJson<Progress>(at.progress));
         // Pages saved in another format are read again.
         if (!saved) await rm(at.reading, { recursive: true, force: true });
@@ -451,7 +459,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     async claimRefresher(key) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
-      const claim = await lock(at.refresherLock, clock);
+      const claim = await lock(at.refresherLock, clock, stamp);
       if (!claim) return null;
       if (!(await readJson<{ at: number }>(join(at.dir, LOOKED)))) await look(key.tracker, key.project);
       return {
@@ -461,7 +469,13 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     },
 
     async refresherRunning(key) {
-      return held(paths(key).refresherLock, clock);
+      return held(paths(key).refresherLock, clock, stamp);
+    },
+
+    async savedByNewer(key) {
+      const at = paths(key);
+      const formats = [await readJson<Snapshot>(at.snapshot), await readJson<Progress>(at.progress)].map((saved) => saved?.format ?? 0);
+      return formats.some((format) => format > SNAPSHOT_FORMAT);
     },
 
     async unlookedMs(key) {
@@ -597,8 +611,14 @@ async function locked<T>(path: string, clock: Clock, work: () => Promise<T>): Pr
   }
 }
 
-/** What a lock holds: who took it, which taking it was, when it was taken or last renewed, and on which boot. */
-interface Holder {
+/** The version of the plugin, and the Snapshot format, a refresher's claim was taken by. */
+interface Stamp {
+  version: string;
+  format: number;
+}
+
+/** What a lock holds: who took it, which taking it was, when it was taken or last renewed, on which boot, and, for a refresher's claim, by which version. */
+interface Holder extends Partial<Stamp> {
   pid: number;
   id: string;
   at: number;
@@ -613,11 +633,11 @@ const holding = new Set<string>();
  * nobody holds any more is moved aside, and taken over only if what moved is
  * the one found not held, so two takers of one stale lock can't both win.
  */
-async function lock(path: string, clock: Clock): Promise<string | null> {
+async function lock(path: string, clock: Clock, stamp?: Stamp): Promise<string | null> {
   const id = randomUUID();
   // Linked into place whole, so nobody ever reads a lock without its holder.
   const mine = `${path}.${id}.tmp`;
-  await writeFile(mine, JSON.stringify({ pid: process.pid, id, at: clock.now(), boot: bootId() } satisfies Holder), { mode: 0o600 });
+  await writeFile(mine, JSON.stringify({ pid: process.pid, id, at: clock.now(), boot: bootId(), ...stamp } satisfies Holder), { mode: 0o600 });
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -628,7 +648,7 @@ async function lock(path: string, clock: Clock): Promise<string | null> {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
       const found = await readJson<Holder>(path);
-      if (found && alive(found, clock)) return null;
+      if (found && alive(found, clock, stamp)) return null;
       const aside = `${path}.${randomUUID()}.stale`;
       try {
         await rename(path, aside);
@@ -669,13 +689,18 @@ async function unlock(path: string, id: string): Promise<void> {
   if ((await readJson<Holder>(path))?.id === id) await rm(path, { force: true });
 }
 
-async function held(path: string, clock: Clock): Promise<boolean> {
+async function held(path: string, clock: Clock, stamp?: Stamp): Promise<boolean> {
   const found = await readJson<Holder>(path);
-  return found !== null && alive(found, clock);
+  return found !== null && alive(found, clock, stamp);
 }
 
-/** Whether the lock's holder can still be running. Its pid alone can't say, since another process may have that pid now. */
-function alive({ pid, id, at, boot }: Holder, clock: Clock): boolean {
+/**
+ * Whether the lock's holder can still be running, and, given a stamp, holds
+ * it as that version: one stamped by another, or by none, counts as gone. Its
+ * pid alone can't say, since another process may have that pid now.
+ */
+function alive({ pid, id, at, boot, version, format }: Holder, clock: Clock, stamp?: Stamp): boolean {
+  if (stamp && (version !== stamp.version || format !== stamp.format)) return false;
   const thisBoot = bootId();
   if (boot && thisBoot && boot !== thisBoot) return false;
   if (!(clock.now() - at < LOCK_LAPSES_MS)) return false;

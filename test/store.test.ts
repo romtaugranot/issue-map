@@ -9,7 +9,8 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { snapshotStore, type SnapshotKey, type SnapshotState } from "../src/snapshot/store.ts";
+import { SNAPSHOT_FORMAT } from "../src/snapshot/snapshot.ts";
+import { PLUGIN_VERSION, snapshotStore, type SnapshotKey, type SnapshotState } from "../src/snapshot/store.ts";
 import type { CapabilitiesAnswer, ChangesAnswer, FarEnd, IssuePage, Link, OpenIssue, Project, Tracker, Unread } from "../src/tracker/tracker.ts";
 import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
 
@@ -753,6 +754,53 @@ function titlesIn(dir: string): string[] {
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true, recursive: true }).map((e) => join(e.parentPath, e.name));
 }
+
+describe("another version of the plugin against the same state directory (#55)", () => {
+  const projectDir = (dir: string) => join(dir, "snapshots", "github.com", encodeURIComponent(project.id));
+
+  /** Rewrites what's saved at `file` as a newer version of the plugin would save it. */
+  function newer(file: string) {
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), format: SNAPSHOT_FORMAT + 1 }));
+  }
+
+  test("a full read refuses to overwrite a Snapshot, or the pages of a read, saved in a newer format, and asks the Tracker nothing", async () => {
+    const dir = scratch();
+    const store = snapshotStore(dir, clock());
+    await store.read(key, fakeTracker(5).tracker, project);
+    const snapshot = join(projectDir(dir), `${key.login}.json`);
+    newer(snapshot);
+    const saved = readFileSync(snapshot, "utf8");
+    const again = fakeTracker(5);
+    assert.deepEqual(await store.read(key, again.tracker, project), { kind: "failed", reason: "a newer version of the plugin keeps this Snapshot" });
+    assert.deepEqual([again.asked, again.capabilitiesAsked()], [[], 0]);
+    assert.equal(readFileSync(snapshot, "utf8"), saved);
+
+    const other = { ...key, login: "fixture-other" };
+    await store.read(other, fakeTracker(250, { login: other.login, fail: { at: "100", answer: { kind: "cant-tell", reason: "couldn't reach github.com" } } }).tracker, project);
+    newer(join(projectDir(dir), `${other.login}.reading`, "progress.json"));
+    assert.equal((await store.read(other, fakeTracker(250, { login: other.login }).tracker, project)).kind, "failed");
+    assert.ok(readdirSync(join(projectDir(dir), `${other.login}.reading`)).includes("page-0.json"), "the newer read's pages are left");
+  });
+
+  test("a refresher's claim stamped by another version, or by none, doesn't hold it: the next claim takes it over", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time);
+    mkdirSync(projectDir(dir), { recursive: true });
+    const claim = join(projectDir(dir), `${key.login}.refresher.lock`);
+    const live = { pid: process.ppid, id: "left-by-another-version", at: time.now(), boot: null };
+    for (const stamp of [{}, { version: "0.0.0-another", format: SNAPSHOT_FORMAT }, { version: PLUGIN_VERSION, format: SNAPSHOT_FORMAT - 1 }]) {
+      writeFileSync(claim, JSON.stringify({ ...live, ...stamp }));
+      assert.equal(await store.refresherRunning(key), false, JSON.stringify(stamp));
+      const ours = await store.claimRefresher(key);
+      assert.ok(ours, JSON.stringify(stamp));
+      assert.equal(await store.refresherRunning(key), true);
+      await ours.release();
+    }
+    writeFileSync(claim, JSON.stringify({ ...live, version: PLUGIN_VERSION, format: SNAPSHOT_FORMAT }));
+    assert.equal(await store.claimRefresher(key), null, "one of this version holds it");
+  });
+});
 
 describe("what nobody draws expires (#58)", () => {
   const month = 30 * 86_400_000;

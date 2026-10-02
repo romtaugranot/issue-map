@@ -141,7 +141,7 @@ Outside that directory it writes only when you ask: `issue-map.home` in the chec
 pkill -f 'src/cli.ts refresher'
 ```
 
-Drawing the Map again starts it again.
+Drawing the Map again starts it again, and after an update replaces one of the version before.
 
 Each `gh` or `glab` call is stopped after 60 seconds, or 5 minutes for a page of a full read, and a full read after 3 hours; the Map then says the Tracker didn't answer, keeps drawing from the Snapshot, and tries again on the next draw or refresher round. A stopped full read resumes from its last page. To stop a stuck full read sooner:
 
