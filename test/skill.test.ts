@@ -1,7 +1,7 @@
 /**
  * The Map skill's allowed-tools (#78): every read-only command the skill runs
  * is pre-allowed, and no write matches, so assigning, confirming Link
- * Suggestions and setting up or removing the status line still prompt.
+ * Suggestions and removing an old status line still prompt.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ const commands = [...body.matchAll(/`(issue-map [^`]*)`/g)].map(([, command]) =>
   command!.replace(/<n>/g, "2").replace(/'<[^>]*>'/g, "'#12'"),
 );
 const OFFER = "issue-map offer <<'EOF'\n[{\"from\": \"#12\", \"kind\": \"blocks\", \"to\": \"#5\", \"quote\": \"Blocked by #12\", \"source\": \"#5\"}]\nEOF";
-const isWrite = (command: string) => /^issue-map (assign|confirm)\b|^issue-map statusline .*--(setup|remove)\b/.test(command);
+const isWrite = (command: string) => /^issue-map (assign|confirm)\b|^issue-map statusline .*--remove\b/.test(command);
 
 test("every read-only command the skill runs is pre-allowed, so moving from card to card raises no prompt", () => {
   const reads = [...commands.filter((command) => !isWrite(command)), OFFER, "issue-map groups", "issue-map groups --page 2", "issue-map next", "issue-map next --page 2", "issue-map taken", "issue-map taken --page 2", "issue-map issue '#12' --page 2", "issue-map map --pick 'https://github.com/o/r'"];
@@ -37,13 +37,12 @@ test("every read-only command the skill runs is pre-allowed, so moving from card
   for (const command of reads) assert.ok(allowed(command), `${command} would prompt`);
 });
 
-test("assigning, confirming Link Suggestions and setting up or removing the status line still prompt", () => {
+test("assigning, confirming Link Suggestions and removing an old status line still prompt", () => {
   const writes = [
     ...commands.filter(isWrite),
     "issue-map assign '#12' --pick 'https://github.com/o/r'",
-    "issue-map statusline --setup --pick 'https://github.com/o/r'",
     "issue-map statusline --pick 'https://github.com/o/r' --remove",
   ];
-  for (const verb of ["assign '#12'", "confirm", "confirm 1 3", "statusline --setup", "statusline --remove"]) assert.ok(writes.includes(`issue-map ${verb}`), verb);
+  for (const verb of ["assign '#12'", "confirm", "confirm 1 3", "statusline --remove"]) assert.ok(writes.includes(`issue-map ${verb}`), verb);
   for (const command of writes) assert.ok(!allowed(command), `${command} is pre-allowed`);
 });

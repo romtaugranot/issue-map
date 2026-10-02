@@ -1,6 +1,6 @@
 ---
 name: map
-description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, to refresh the Map, their Home Project, a Group, a Picture of one, the whole Map as an HTML page in a browser or as a claude.ai Artifact, or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; to move to another Project, `go`, `back` or `home`; or to set up or remove the Map's status line.
+description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, to refresh the Map, their Home Project, a Group, a Picture of one, the whole Map as an HTML page in a browser or as a claude.ai Artifact, or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; to move to another Project, `go`, `back` or `home`; or about the Map's status line, or to take out the one an earlier version set up.
 allowed-tools:
   - Bash(issue-map map *)
   - Bash(issue-map refresh *)
@@ -47,7 +47,7 @@ What `start` and `suggest` print has no line: it's for you, as said where they'r
 - **Every Group**, 15 a page, largest first, as the overview orders them: `issue-map groups`, and `issue-map groups --page <n>` when the user says `more` or asks for a page. Run it when the user asks to list the Groups, or for the rest of them past the overview's `… N more Groups`.
 - **The Unlinked Issues**, 15 a page, newest first: `issue-map unlinked`, and `issue-map unlinked --page <n>` when the user says `more` or asks for a page.
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
-- **The status line**: `issue-map statusline --setup`, and `issue-map statusline --remove` — see **The status line**.
+- **The status line**: `issue-map statusline --remove` — see **The status line**.
 
 **What the marks mean**, for when the user asks: `↗` marks an Outside Issue, one in another Project that a Link reaches, drawn but not followed; `1↗ Outside` on a Group line counts them. `▶4 wait on it` on a Take next line says 4 open Issues wait on that Issue; `▶4 wait on it, via #3` says it stands in for its Parent #3, and the 4 wait on #3. `N Unblocked` on a Group line or an outline entry counts the Unblocked Issues there as Take next counts them, those it lists and those taken by others, so it always agrees with the overview.
 
@@ -140,9 +140,9 @@ A move that can't open says why and leaves the user where they were; show that a
 
 ## The status line
 
-When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and show what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing. An update moves the plugin; the next time the Map is drawn, it points the status line at where the plugin is now, so there's no need to run it again. Until then, a status line it wraps still shows its own rows.
+The plugin pins the Map's row under the prompt as a line of its own, beside any status line the user has, with nothing to set up; it goes when the plugin is disabled or uninstalled. When the user asks for the Map in their status line, or for what to take next always on screen, tell them so. If they don't see it, their Claude Code doesn't load plugins' hooks modules: it's too old, or hooks are turned off (`disableAllHooks`, `allowManagedHooksOnly` or a policy). Under `claude -p` there is no status line.
 
-When the user asks to take the Map out of their status line, or before they uninstall the plugin, run `issue-map statusline --remove` and show what it says: a status line it wrapped is put back as it was; otherwise the status line setting goes. When the Map's status line isn't installed, it changes nothing and says so.
+Version 0.1.0 wrote the status line into the user's Claude Code settings instead, and while that one is still there the row ends by saying how to take it out. When the user asks to take the Map out of their status line, run `issue-map statusline --remove` and show what it says: a status line it wrapped is put back as it was; otherwise the status line setting goes. When there is none, it changes nothing and says so. The plugin's own line stays until the plugin is disabled.
 
 The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead; in a checkout with no remote, or only remotes on hosts known to run no Tracker, such as bitbucket.org, it shows nothing. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
 

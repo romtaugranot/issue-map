@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # The status line's row, kept apart from the CLI so it loads only what it needs.
-# Below Node 22.18 the Map's row is left out, and a wrapped status line still runs.
+# Below Node 22.18 there's no row.
 found=$(node --version 2>/dev/null)
 IFS=. read -r major minor _ <<<"${found#v}"
 if (( major < 22 || major == 22 && minor < 18 )); then
   echo "Issue Map needs Node.js 22.18 or later; found ${found:-none}" >&2
-  [[ $1 == --wrap ]] && sh -c "$2" 2>/dev/null
   exit 0
 fi
 exec node "$(dirname "$(realpath "$0")")/../src/status-line.ts" "$@"

@@ -56,7 +56,7 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 ## Requirements
 
 - Linux, or macOS 13 or later. On Windows, run Claude Code under WSL: the plugin is untested on Windows itself. The build runs its tests on Linux.
-- Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.)
+- Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.) The status line also needs a build that loads plugins' hooks modules, which are early access; it's tested on 2.1.287. Without one, everything else works and there is no status line.
 - Node.js 22.18 or later on your `PATH`. The plugin is TypeScript that Node runs directly, with no runtime dependencies, and a release holds only what it runs, so there is nothing to install or build.
 - `bash`, which the plugin's entry points are written in, and `git`, which it reads the checkout's remotes with.
 - For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing a Link or assigning needs the triage role or above in the Project, and the `repo` scope on a classic token. `gh` 2.81 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
@@ -89,7 +89,7 @@ cd path/to/your/checkout
 claude --plugin-dir ~/issue-map
 ```
 
-Permissions: the Map's skill pre-approves only its read-only commands — drawing the Map, opening Groups and Issue cards, moving, `back`, `home`, `start`, `suggest`, `offer` and printing the status line's row — so following Links from card to card raises no prompt. Claude Code asks once to use the skill, since it pre-approves commands, and the approval lasts for that request. Assigning an Issue, confirming Link Suggestions and setting up or removing the status line still ask every time: each writes, and the prompt is a second check that the write is yours, not something an Issue's text talked Claude into.
+Permissions: the Map's skill pre-approves only its read-only commands — drawing the Map, opening Groups and Issue cards, moving, `back`, `home`, `start`, `suggest`, `offer` and printing the status line's row — so following Links from card to card raises no prompt. Claude Code asks once to use the skill, since it pre-approves commands, and the approval lasts for that request. Assigning an Issue, confirming Link Suggestions and removing an old status line still ask every time: each writes, and the prompt is a second check that the write is yours, not something an Issue's text talked Claude into.
 
 ## Using it
 
@@ -121,10 +121,9 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | `go owner/repo`, `go <URL>`, `go ../other-checkout` | Moves to another Project, or to an Issue inside its own Project's Map; asks which when more than one Tracker holds it. `go` alone offers nearby Projects |
 | `back` | One step back along this session's trail |
 | `home` | Back to the Home Project's overview; on it, offers to pick the Home Project again |
-| `put the Map in my status line` | Adds a row with the Home Project's first Issue in Take next to your status line, after the rows of any status line you already have |
-| `take the Map out of my status line` | Removes that row: a status line you already had is put back as it was |
+| `take the Map out of my status line` | Removes the status line 0.1.0 wrote into your settings: a status line you already had is put back as it was |
 
-The status line's row looks like this, and never reads the Tracker itself:
+The plugin pins a status line of its own under the prompt, beside yours, with nothing to set up: the Home Project's first Issue in Take next. It looks like this, and never reads the Tracker itself:
 
 ```text
 ◆ issue-map-fixtures/map · Take next: 6 · #1 [b1] Lay the foundation — ▶2 wait on it
@@ -150,7 +149,7 @@ Where the display hook doesn't run in a session — hooks disabled, only managed
 
 Both variables must be absolute paths. One that is empty or relative is ignored, as if unset, so private Issue titles never land in your working tree.
 
-Outside that directory it writes only when you ask: `issue-map.home` in the checkout's local git config when you pick a Home Project among several, and `statusLine` in your Claude Code `settings.json` when you ask for the status line; once it's there, drawing the Map after an update points it at where the plugin is now.
+Outside that directory it writes only when you ask: `issue-map.home` in the checkout's local git config when you pick a Home Project among several, and `statusLine` in your Claude Code `settings.json` when you ask it to take out the status line 0.1.0 wrote there.
 
 **In the background**, drawing the Map starts a full read of a Project when one is due, and a refresher that keeps the Home Project's Snapshot warm, a few requests every 90 seconds. The refresher runs as a process of its own and carries on after Claude Code exits, until a day passes with nobody drawing the Map or glancing at its status line row, the login changes, the Tracker refuses it, or the Project's path leads elsewhere. To stop it sooner:
 
@@ -172,7 +171,7 @@ pkill -f 'src/cli.ts read'
 
 ## Uninstall
 
-1. Take the Map out of your status line first, while the plugin is still there to do it: say `take the Map out of my status line`, or run `issue-map statusline --remove`. A status line you had before is put back as it was; otherwise the `statusLine` setting is removed. Uninstalling the plugin first would leave your status line running a command that's gone.
+1. If you set up the status line under 0.1.0 and haven't taken it out, do that first, while the plugin is still there to do it: say `take the Map out of my status line`, or run `issue-map statusline --remove`. A status line you had before is put back as it was; otherwise the `statusLine` setting is removed. The plugin's own status line goes with the plugin.
 2. Uninstall the plugin: `/plugin uninstall issue-map@issue-map`.
 3. Stop the background processes:
 
@@ -195,6 +194,7 @@ pkill -f 'src/cli.ts read'
 ## Troubleshooting
 
 - **Claude's reply shows a bare line such as `⟦issue-map 3f9a0c1b2d4e⟧` instead of the output.** The display hook isn't running. It needs Claude Code 2.1.152 or later, hooks not turned off (`disableAllHooks`) or limited to managed ones (`allowManagedHooksOnly`), and Node.js 22.18 or later on the `PATH` Claude Code runs hooks with, which isn't always your shell's. The next command notices, and Claude reprints each output from then on.
+- **There's no status line.** The plugin pins it through a hooks module, which needs a Claude Code build that loads them, with hooks not turned off (`disableAllHooks`), limited to managed ones (`allowManagedHooksOnly`) or refused by a policy. There's none under `claude -p`.
 - **The first Map of a large Project takes minutes.** The first read pages through every open Issue and its Links, and the Map draws only once it's done; meanwhile, asking for the Map shows how far it's got and about how long is left. That read, and the full read each Snapshot gets again weekly or sooner, spend your login's API rate limit; when it runs out, the Map says so, and asking again later resumes the read where it stopped.
 - **Something in the background seems stuck or silent.** What the full reads and the refresher print goes to `background.log` in the [state directory](#what-it-writes-and-what-it-keeps).
 - **Claude doesn't pick the Map up from what you say.** Invoke its skill by name: `/issue-map:map`, followed by what you want.
@@ -227,7 +227,7 @@ The floors come from the adapters, which the matrix and the schema checks read t
 
 Three tiers, as [ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md) sets out:
 
-- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, and every query checked against the recorded GitHub and GitLab schemas. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
+- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, every query checked against the recorded GitHub and GitLab schemas, and the hooks module that pins the status line run by `claude plugin test` on the pinned Claude Code build. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
 
   ```sh
   npm ci
@@ -240,7 +240,7 @@ Three tiers, as [ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md) sets
 
 ## Design notes
 
-[CONTEXT.md](CONTEXT.md) is the glossary: what an Issue, a Link, a Group, Take next and the rest mean here, and the words avoided for each. [docs/adr](docs/adr) holds the decisions and what was weighed against them, from why the Map lives inside Claude Code ([ADR 0001](docs/adr/0001-build-new-inside-claude-code.md)) and draws only recorded Links ([ADR 0002](docs/adr/0002-draw-only-recorded-links.md)) to why it reaches the screen through a display hook ([ADR 0009](docs/adr/0009-show-output-through-a-display-hook.md)).
+[CONTEXT.md](CONTEXT.md) is the glossary: what an Issue, a Link, a Group, Take next and the rest mean here, and the words avoided for each. [docs/adr](docs/adr) holds the decisions and what was weighed against them, from why the Map lives inside Claude Code ([ADR 0001](docs/adr/0001-build-new-inside-claude-code.md)) and draws only recorded Links ([ADR 0002](docs/adr/0002-draw-only-recorded-links.md)) to why it reaches the screen through a display hook ([ADR 0009](docs/adr/0009-show-output-through-a-display-hook.md)) and pins its own status line ([ADR 0011](docs/adr/0011-the-status-line-is-the-plugins-own.md)).
 
 ## Licence
 
