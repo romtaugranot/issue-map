@@ -9,6 +9,7 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { CALL_SECONDS, PAGE_SECONDS } from "../../src/tracker/boundary.ts";
 import type { CapabilitiesAnswer, ChangesAnswer, FarEnd, IssueAnswer, IssueRead, OpenIssue, Project, ProjectResolution, Thread, Tracker, TrackerKind, Unread } from "../../src/tracker/tracker.ts";
 
 export interface ProjectSpec {
@@ -67,8 +68,12 @@ export interface World {
   cli?: "installed" | "missing";
   /** Hosts besides the well-known one that the CLI holds a login for. */
   loggedInTo?: string[];
-  /** Whether the well-known host can be reached. */
-  network?: "up" | "down";
+  /**
+   * Whether the well-known host can be reached. `hangs`: each request
+   * reaches it and does what it asks, but the CLI never exits, so it's
+   * killed once its time is up.
+   */
+  network?: "up" | "down" | "hangs";
   /**
    * `[a, "blocks", b]` reads "a Blocks b"; `[a, "parent", b]` reads "a is the
    * Parent of b"; `[a, "related", b]` reads "a is Related to b". A fourth
@@ -406,6 +411,11 @@ export function readContract(stage: Stage): void {
         assert.equal((await (await trackerIn({ network: "down" })).viewer()).kind, "cant-tell");
       });
 
+      test("can't tell when the CLI never answers, and says how long it waited", async () => {
+        const answer = await (await trackerIn({ network: "hangs" })).viewer();
+        assert.deepEqual([answer.kind, (answer as { reason: string }).reason], ["cant-tell", `${wellKnownHost} didn't answer in ${CALL_SECONDS} s`]);
+      });
+
       test("when the Tracker can't be reached or refuses the login, still names the login the CLI holds, read without the network", async () => {
         for (const [trouble, kind] of [[{ network: "down" }, "cant-tell"], [{ rateLimited: true }, "cant-tell"], [{ login: "refused" }, "refused"]] as const) {
           const { kind: trackerKind, requests } = stage.arrange({ viewer: "fixture-bot", ...trouble });
@@ -631,6 +641,13 @@ export function readContract(stage: Stage): void {
           assert.equal((await tracker.openIssues(resolved.project, null)).kind, kind);
         }
       });
+
+      test("waits longer for a page than for other calls before saying the Tracker didn't answer", async () => {
+        const world: World = { projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }] };
+        const resolved = await project(world, tools);
+        const page = await (await trackerIn({ ...world, network: "hangs" })).openIssues(resolved.project, null);
+        assert.deepEqual(page, { kind: "cant-tell", reason: `${wellKnownHost} didn't answer in ${PAGE_SECONDS} s` });
+      });
     });
   });
 }
@@ -751,7 +768,7 @@ export function changesContract(stage: Stage): void {
         const project: ProjectSpec = { path: tools, number: 1, open: 6, issues: six };
         const tracker = await stage.arrange({ projects: [project] }).kind.recognise(wellKnownHost);
         const resolved = (await tracker!.resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
-        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"], [{ rateLimited: true }, "cant-tell"]] as const) {
+        for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"], [{ network: "hangs" }, "cant-tell"], [{ rateLimited: true }, "cant-tell"]] as const) {
           const troubled = await stage.arrange({ projects: [project], ...trouble }).kind.recognise(wellKnownHost);
           const answer = await troubled!.changes(resolved.project, since, []);
           assert.equal(answer.kind, kind, JSON.stringify(trouble));
@@ -1049,6 +1066,11 @@ export function assignContract(stage: Stage): void {
           assert.equal((await (await trackerIn(trouble)).assign(`${tools}#1`, "fixture-viewer")).kind, kind, JSON.stringify(trouble));
         }
       });
+
+      test("can't tell, rather than waiting forever, when the write reaches the Tracker but the CLI never answers", async () => {
+        const answer = await (await trackerIn({ network: "hangs" })).assign(`${tools}#1`, "fixture-viewer");
+        assert.deepEqual(answer, { kind: "cant-tell", reason: `${wellKnownHost} didn't answer in ${CALL_SECONDS} s` });
+      });
     });
   });
 }
@@ -1251,6 +1273,11 @@ export function linkContract(stage: Stage): void {
         for (const [trouble, kind] of [[{ login: "refused" }, "refused"], [{ network: "down" }, "cant-tell"]] as const) {
           assert.equal((await (await trackerIn(trouble)).link(`${tools}#1`, "blocks", `${tools}#2`)).kind, kind, JSON.stringify(trouble));
         }
+      });
+
+      test("can't tell, rather than waiting forever, when the CLI never answers", async () => {
+        const answer = await (await trackerIn({ network: "hangs" })).link(`${tools}#1`, "blocks", `${tools}#2`);
+        assert.deepEqual(answer, { kind: "cant-tell", reason: `${wellKnownHost} didn't answer in ${CALL_SECONDS} s` });
       });
     });
   });

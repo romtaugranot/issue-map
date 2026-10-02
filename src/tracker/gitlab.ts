@@ -5,7 +5,7 @@
  * for the fields its version has; what an older one's GraphQL leaves out,
  * its REST API fills in.
  */
-import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
+import { atLeast, hostNamed, PAGE_SECONDS, parseJson as parse, type AdapterDeps, type Cli, type CliResult } from "./boundary.ts";
 import type { AssignAnswer, CantAnswer, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, KindAnswer, LinkAnswer, LinkKind, Mention, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
 const PRODUCT = "GitLab";
@@ -197,7 +197,7 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
   const { cli, http, env } = deps;
   const tokenHost = hostGlabTakes(env);
   // glab sends its environment token to any host; it goes only to the one it was issued for.
-  const glabAt = (host: string): Cli => (command, args) => cli(command, args, host === tokenHost ? [] : FOR_ONE_HOST);
+  const glabAt = (host: string, seconds?: number): Cli => (command, args) => cli(command, args, host === tokenHost ? [] : FOR_ONE_HOST, seconds);
   const envTokenFor = (host: string) => host === tokenHost && [...TOKEN_VARIABLES, "CI_JOB_TOKEN"].some((name) => env[name]);
 
   /** A host found only by probing is never read: it could be any server that answers like GitLab. */
@@ -210,7 +210,7 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
       untested: untested(version),
       resolveProject: async (path) => (loginIsFor ? resolveProject(ctx, path) : noLogin(host)),
       viewer: async () => (loginIsFor ? viewer(ctx) : noLogin(host)),
-      openIssues: async (project, after) => (loginIsFor ? openIssues(ctx, project, after) : noLogin(host)),
+      openIssues: async (project, after) => (loginIsFor ? openIssues({ ...ctx, cli: glabAt(host, PAGE_SECONDS) }, project, after) : noLogin(host)),
       changes: async (project, since, outside) => (loginIsFor ? changes(ctx, project, since, outside) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? issue(ctx, locator) : noLogin(host)),
       capabilities: async (project) => (loginIsFor ? capabilities(ctx, project) : noLogin(host)),
@@ -1340,6 +1340,7 @@ async function rest(ctx: Ctx, endpoint: string, what: string): Promise<{ json: u
 function failure(ctx: Ctx, answer: Extract<CliResult, { kind: "exited" }>, body: Record<string, unknown> | null, what: string): Failure {
   const said = `${answer.stderr}\n${answer.stdout}`;
   const { host } = ctx;
+  if (answer.timedOut) return { kind: "cant-tell", reason: `${host} didn't answer in ${answer.timedOut} s` };
   if (/\b401\b|unauthorized|invalid[_ ]token/i.test(said)) {
     return { kind: "refused", reason: `${host} refused this login — run \`glab auth login --hostname ${host}\`` };
   }

@@ -2,15 +2,22 @@
 import { execFile } from "node:child_process";
 
 export type CliResult =
-  | { kind: "exited"; code: number; stdout: string; stderr: string }
+  /** `timedOut`: it hadn't exited after that many seconds, so it was killed and its output dropped. */
+  | { kind: "exited"; code: number; stdout: string; stderr: string; timedOut?: number }
   | { kind: "missing" };
 
 /**
  * Runs a Tracker's CLI. `unset` names environment variables it runs
  * without, such as a token issued for another host than the one it's
- * pointed at.
+ * pointed at; `seconds`, how long it may take, `CALL_SECONDS` unless said.
  */
-export type Cli = (command: string, args: string[], unset?: string[]) => Promise<CliResult>;
+export type Cli = (command: string, args: string[], unset?: string[], seconds?: number) => Promise<CliResult>;
+
+/** How long one CLI call may take before it's killed: generous, so only a hung one is. */
+export const CALL_SECONDS = 60;
+
+/** How long a page of a full read may take: on a large Project one can take far longer to answer. */
+export const PAGE_SECONDS = 300;
 
 export type HttpResult =
   | { kind: "response"; status: number; headers: Record<string, string>; body: string }
@@ -52,12 +59,14 @@ export function parseJson(text: string): Record<string, unknown> | null {
   }
 }
 
-export const processCli: Cli = (command, args, unset = []) =>
+export const processCli: Cli = (command, args, unset = [], seconds = CALL_SECONDS) =>
   new Promise((resolve) => {
     const env = { ...process.env };
     for (const name of unset) delete env[name];
-    execFile(command, args, { maxBuffer: 64 * 1024 * 1024, env }, (error, stdout, stderr) => {
+    execFile(command, args, { maxBuffer: 64 * 1024 * 1024, env, timeout: seconds * 1000, killSignal: "SIGKILL" }, (error, stdout, stderr) => {
       if (error && (error as NodeJS.ErrnoException).code === "ENOENT") return resolve({ kind: "missing" });
+      // Only the timeout kills it.
+      if (error?.killed) return resolve({ kind: "exited", code: 1, stdout: "", stderr: "", timedOut: seconds });
       const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
       resolve({ kind: "exited", code, stdout, stderr });
     });

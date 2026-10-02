@@ -1,5 +1,5 @@
 /** The GitHub adapter: reads through `gh`'s login and its raw-API call (ADR 0001). */
-import { atLeast, hostNamed, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
+import { atLeast, hostNamed, PAGE_SECONDS, parseJson as parse, type AdapterDeps, type Cli } from "./boundary.ts";
 import type { CliResult } from "./boundary.ts";
 import type { AssignAnswer, CantAnswer, Capabilities, CapabilitiesAnswer, ChangesAnswer, ClosingRequest, FarEnd, Identification, IssueAnswer, IssuePage, LinkAnswer, LinkKind, Mention, NamedLink, OpenIssue, Project, ProjectResolution, ThreadAnswer, Tracker, TrackerKind, KindAnswer, Unread, ViewerAnswer, WriteAnswer } from "./tracker.ts";
 
@@ -284,7 +284,8 @@ export function github(deps: AdapterDeps): TrackerKind {
    * answers like GitHub.
    */
   const trackerAt = (host: string, ghes: Ctx["ghes"], loginIsFor: boolean): Tracker => {
-    const cliHere: Cli = (command, args) => cli(command, args, foreignTokens(env, host));
+    const cliFor = (seconds?: number): Cli => (command, args) => cli(command, args, foreignTokens(env, host), seconds);
+    const cliHere = cliFor();
     // Asked once, before the first read that needs it; asked again after a failure.
     let schema: Promise<Has | Failure> | undefined;
     const withSchema = async <T>(read: (ctx: Ctx) => Promise<T>): Promise<T | Failure> => {
@@ -303,7 +304,7 @@ export function github(deps: AdapterDeps): TrackerKind {
       untested: untested(ghes),
       resolveProject: async (path) => (loginIsFor ? resolveProject(cliHere, host, path) : noLogin(host)),
       viewer: async () => (loginIsFor ? viewer(cliHere, host) : noLogin(host)),
-      openIssues: async (project, after) => (loginIsFor ? withSchema((ctx) => openIssues(ctx, project, after)) : noLogin(host)),
+      openIssues: async (project, after) => (loginIsFor ? withSchema((ctx) => openIssues({ ...ctx, cli: cliFor(PAGE_SECONDS) }, project, after)) : noLogin(host)),
       changes: async (project, since, outside) => (loginIsFor ? withSchema((ctx) => changes(ctx, project, since, outside)) : noLogin(host)),
       issue: async (locator) => (loginIsFor ? withSchema((ctx) => issue(ctx, locator)) : noLogin(host)),
       capabilities: async (project) => (loginIsFor ? withSchema((ctx) => capabilities(ctx, project)) : noLogin(host)),
@@ -914,6 +915,7 @@ function ghMissing(host: string): CantAnswer {
 
 /** Why a `gh` call didn't answer: no login, a refused login, no such Project, or no answer at all. */
 function failure(answer: Extract<CliResult, { kind: "exited" }>, body: Record<string, unknown> | null, host: string, what: string): CantAnswer | { kind: "not-found"; reason: string } {
+  if (answer.timedOut) return { kind: "cant-tell", reason: `${host} didn't answer in ${answer.timedOut} s` };
   if (answer.code === 4) {
     return { kind: "refused", reason: `not logged in to ${host} — run \`gh auth login --hostname ${host}\`` };
   }
