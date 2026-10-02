@@ -102,11 +102,11 @@ A move that can't open says why and leaves the user where they were; show that a
 
 ## The status line
 
-When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and show what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing, unless the plugin has moved since, as an update moves it: then it points the status line at where the plugin is now. When the row goes blank after an update, run it again.
+When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and show what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing. An update moves the plugin; the next time the Map is drawn, it points the status line at where the plugin is now, so there's no need to run it again. Until then, a status line it wraps still shows its own rows.
 
 When the user asks to take the Map out of their status line, or before they uninstall the plugin, run `issue-map statusline --remove` and show what it says: a status line it wrapped is put back as it was; otherwise the status line setting goes. When the Map's status line isn't installed, it changes nothing and says so.
 
-The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
+The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead; in a checkout with no remote, or only remotes on hosts known to run no Tracker, such as bitbucket.org, it shows nothing. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
 
 ## Choices
 

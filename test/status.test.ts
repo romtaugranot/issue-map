@@ -76,12 +76,13 @@ describe("the status line's row", () => {
 const home: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 250 } };
 
 /** A checkout at `/work/tools` whose Home Project is `home`, and what the store holds of each Project, by Tracker and identity. */
-function deps(glances: Record<string, Glance>, options: { home?: Project | null } = {}): StatusDeps & { asked: string[] } {
+function deps(glances: Record<string, Glance>, options: { home?: Project | null; remotes?: string[] } = {}): StatusDeps & { asked: string[] } {
   const asked: string[] = [];
   return {
     asked,
     checkoutRoot: async (dir) => (dir.startsWith("/work/tools") ? "/work/tools" : null),
     lastHome: async (root) => (root === "/work/tools" && options.home !== null ? (options.home ?? home) : undefined),
+    remotes: async () => options.remotes ?? ["git@github.com:fixture-org/tools.git"],
     store: {
       async glance(tracker, project) {
         asked.push(`${tracker} ${project}`);
@@ -121,6 +122,12 @@ describe("the status line", () => {
 
   test("before the Home Project is known, asks for the Map", async () => {
     assert.equal(await homeRow(deps({}, { home: null }), "/work/tools"), "◆ No Home Project yet · ask for the Map");
+  });
+
+  test("in a checkout whose remotes lead to no Tracker, shows nothing rather than asking for the Map", async () => {
+    for (const remotes of [[], ["/srv/git/tools.git"], ["git@bitbucket.org:fixture-org/tools.git"], ["https://gitea.com/fixture-org/tools.git", "https://codeberg.org/fixture-org/tools"]]) {
+      assert.equal(await homeRow(deps({}, { home: null, remotes }), "/work/tools"), "", remotes.join(" "));
+    }
   });
 
   test("outside a git checkout, shows nothing", async () => {

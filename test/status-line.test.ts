@@ -88,7 +88,7 @@ describe("the status line on the largest recorded Project, gitlab-org/gitlab", (
   test(`is worked out within ${BUDGET_MS} ms, never reading the Snapshot`, async () => {
     const store = snapshotStore(warm.state, { now: Date.now });
     const started = performance.now();
-    const row = await homeRow({ checkoutRoot, lastHome: (root) => lastHomeOf(root, warm.state).get(), store }, warm.checkout);
+    const row = await homeRow({ checkoutRoot, lastHome: (root) => lastHomeOf(root, warm.state).get(), remotes: async () => [], store }, warm.checkout);
     const ms = performance.now() - started;
     // Kept when the Snapshot was saved, so fresh; the recording dates no closed blocker, so when it was read changes nothing else.
     assert.equal(row, warm.row);

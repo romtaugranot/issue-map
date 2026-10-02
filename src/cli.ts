@@ -39,7 +39,7 @@ import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { statusRow } from "./map/status.ts";
 import { homeRowHere } from "./status/line.ts";
-import { installStatusLine, removeStatusLine, userSettings } from "./status/install.ts";
+import { installStatusLine, removeStatusLine, repointStatusLine, userSettings } from "./status/install.ts";
 import { showCard, showMap } from "./map/show.ts";
 import { withLine } from "./show/shown.ts";
 import { assignToViewer } from "./map/assign.ts";
@@ -50,6 +50,9 @@ import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Posi
 
 const USAGE =
   "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
+
+/** The status line's process, where this plugin is now. */
+const STATUS_LINE = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -89,10 +92,10 @@ async function main(argv: string[]): Promise<number> {
       if (values.remove) {
         console.log(await withLine(stateDir(), await removeStatusLine(userSettings())));
       } else if (values.setup) {
-        console.log(await withLine(stateDir(), await installStatusLine(userSettings(), fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url)))));
+        console.log(await withLine(stateDir(), await installStatusLine(userSettings(), STATUS_LINE)));
       } else {
         const row = await homeRowHere(process.cwd());
-        console.log(row || "No status line row: this isn't inside a git checkout.");
+        console.log(row || "No status line row: this isn't inside a git checkout, or no remote of it leads to a Tracker.");
       }
       return 0;
     case "group":
@@ -161,7 +164,9 @@ async function main(argv: string[]): Promise<number> {
       recents: recents(),
       checkouts: localCheckouts({ trackers: known, env: process.env, sshHostname }, cwd),
       now: Date.now,
-      showMap(tracker, project, command: Command, at) {
+      async showMap(tracker, project, command: Command, at) {
+        // An update moves the plugin, so the status line follows it here.
+        await repointStatusLine(userSettings(), STATUS_LINE).catch(() => {});
         const startRead = () => detach(["read", "--host", tracker.host, "--path", project.path]);
         // Only the Home Project is kept warm.
         const startRefresher = async ({ login }: SnapshotKey) => {
