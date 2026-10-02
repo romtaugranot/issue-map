@@ -21,7 +21,7 @@ import { link, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } fro
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { KEPT_MS } from "../state.ts";
+import { KEPT_MS, writeWhole } from "../state.ts";
 import type { ChangesAnswer, FarEnd, Link, OpenIssue, Project, Support, Tracker, Unread } from "../tracker/tracker.ts";
 import { SNAPSHOT_FORMAT, type Snapshot } from "./snapshot.ts";
 
@@ -130,6 +130,8 @@ export interface SnapshotStore {
    * unless it has that end already.
    */
   linked(key: SnapshotKey, ends: { issue: string; link: Link }[]): Promise<void>;
+  /** Writes the HTML Picture beside the Snapshot, replacing the last, and says where; it's deleted with the Snapshot (ADR 0010). */
+  page(key: SnapshotKey, html: string): Promise<string>;
   /** Deletes what's kept for a login the Tracker refused, keeping only why. */
   forget(key: SnapshotKey, reason: string): Promise<Refused>;
   /**
@@ -223,6 +225,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       snapshot: `${base}.json`,
       summary: `${base}.summary.json`,
       refreshed: `${base}.refreshed.json`,
+      picture: `${base}.picture.html`,
       reading,
       progress: join(reading, "progress.json"),
       page: (n: number) => join(reading, `page-${n}.json`),
@@ -512,6 +515,13 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       });
     },
 
+    async page(key, html) {
+      const at = paths(key);
+      await mkdir(at.dir, { recursive: true, mode: 0o700 });
+      await writeWhole(at.picture, html);
+      return at.picture;
+    },
+
     async forget(key, reason) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
@@ -618,7 +628,7 @@ function applied(snapshot: Snapshot, { open, ends, requests }: Extract<ChangesAn
   return [...kept.values(), ...open].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
-type Paths = { snapshot: string; summary: string; refreshed: string; reading: string; progress: string };
+type Paths = { snapshot: string; summary: string; picture: string; refreshed: string; reading: string; progress: string };
 
 /**
  * Deletes the Snapshot and every page read towards one, keeping only why,
@@ -627,6 +637,7 @@ type Paths = { snapshot: string; summary: string; refreshed: string; reading: st
 async function forget(at: Paths, total: number, reason: string): Promise<Refused> {
   await rm(at.snapshot, { force: true });
   await rm(at.summary, { force: true });
+  await rm(at.picture, { force: true });
   await rm(at.refreshed, { force: true });
   await rm(at.reading, { recursive: true, force: true });
   await mkdir(at.reading, { recursive: true, mode: 0o700 });

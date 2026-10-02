@@ -7,13 +7,16 @@
  * age and why when it can't be; one due a full read again is drawn while
  * that read runs in the background. A Project where the Map can read no Link
  * kind is refused before a first read starts. An Issue card reads its Issue live instead,
- * so it opens even during a first read (ADR 0006).
+ * so it opens even during a first read (ADR 0006). The HTML Picture is drawn
+ * from the same Snapshot, written beside it, and said where (ADR 0010).
  */
 import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/store.ts";
 import type { CantAnswer, IssueRead, Project, Tracker } from "../tracker/tracker.ts";
 import { bandOf, refusal } from "./band.ts";
 import { drawCard, type Card, type CardContext } from "./card.ts";
-import { draw, drawProgress, type Command, type Drawing } from "./draw.ts";
+import type { Snapshot } from "../snapshot/snapshot.ts";
+import { draw, drawProgress, type Command, type Context, type Drawing } from "./draw.ts";
+import { htmlPicture, pageSaid } from "./page.ts";
 import { OUTSIDE } from "./text.ts";
 
 export interface ShowDeps {
@@ -35,8 +38,11 @@ export interface Shown extends Drawing {
   drew: "map" | "progress" | "nothing";
 }
 
+/** A drawing of the Map: one in the conversation, or the HTML Picture of it all. */
+export type MapCommand = Command | { kind: "html" };
+
 /** `home` names the Home Project while the Project drawn isn't it; `refresh` refreshes its Snapshot first however fresh it is. */
-export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: Command, { home, refresh }: { home?: string; refresh?: boolean } = {}): Promise<Shown> {
+export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: MapCommand, { home, refresh }: { home?: string; refresh?: boolean } = {}): Promise<Shown> {
   const nothing = (text: string): Shown => ({ text, drew: "nothing" });
   const map = (text: string): Shown => ({ text, drew: "map" });
   // With no Tracker to say who the viewer is, the login the CLI holds reads its own Snapshot, and no other.
@@ -49,14 +55,20 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     return nothing(`No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`);
   }
   if (viewer.kind === "viewer") await deps.startRefresher(key);
+  /** The drawing's text; the HTML Picture is written, and said where, unless the Project is Refused, which the overview says. */
+  const drawn = async (snapshot: Snapshot, context: Context): Promise<string> => {
+    if (command.kind !== "html") return draw(snapshot, command, context).text;
+    if (bandOf(snapshot.support).kind === "refused") return draw(snapshot, { kind: "overview" }).text;
+    return pageSaid(await deps.store.page(key, htmlPicture(snapshot, context)));
+  };
   const drawable = await deps.store.forDraw(key, tracker, project, refresh);
   if (drawable.kind === "refused") return nothing(`No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`);
   if (drawable.kind === "ready") {
     const { snapshot, ageMs, stale, readAgain } = drawable;
     // Minutes on a large Project, so it never holds up the draw: this Snapshot is drawn meanwhile.
     if (readAgain) deps.startRead();
-    const drawing = draw(snapshot, command, { ...(stale === undefined ? {} : { stale: { ageMs, reason: stale } }), ...(home === undefined ? {} : { home }) });
-    return bandOf(snapshot.support).kind === "refused" ? nothing(drawing.text) : map(drawing.text);
+    const text = await drawn(snapshot, { ...(stale === undefined ? {} : { stale: { ageMs, reason: stale } }), ...(home === undefined ? {} : { home }) });
+    return bandOf(snapshot.support).kind === "refused" ? nothing(text) : map(text);
   }
   if (drawable.kind === "none") {
     // Minutes of reading would draw nothing on a Project that's Refused, so it's asked first; a Tracker that can't say is left to the read.
@@ -71,7 +83,7 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     state = await deps.store.state(key);
   }
   if (state.kind === "ready") {
-    const text = draw(state.snapshot, command, home === undefined ? {} : { home }).text;
+    const text = await drawn(state.snapshot, home === undefined ? {} : { home });
     return bandOf(state.snapshot.support).kind === "refused" ? nothing(text) : map(text);
   }
   return { text: drawProgress(project.path, progress(state, project)).text, drew: "progress" };

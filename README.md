@@ -106,6 +106,7 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | `who has the ones taken by others?` | The Unblocked Issues left out of Take next because someone else has them, each with its assignees or its Closing Request's author, 15 a page |
 | `open group 1` | The outline of the first Group on the overview |
 | `draw group 1` | The first Group drawn whole, each Issue on a row under its Parent or the Issue that Blocks it, when it holds about 25 Issues or fewer; a larger one opens as its outline |
+| `show the whole Map in a browser` | One read-only HTML page of the whole Map: Take next, every Group as a tile to open, and the Unlinked Issues. Each Issue has a copy button for its URL, which you paste back here to open its card. It opens in your browser; over SSH it prints the path and an `scp` command to fetch it, and in a cloud or Remote Control session it says the page can't reach your device |
 | `list the Groups` | Every Group, 15 a page, largest first, numbered as `open group <n>` takes them |
 | `what's under #5?` | The level beneath an Issue in its Group |
 | `open #2` | That Issue's card, read live, then a picker of its Links |
@@ -141,6 +142,7 @@ Where the display hook doesn't run in a session — hooks disabled, only managed
 - this session's trail for `back`, kept a month;
 - the 10 Projects you moved to last, and the last Home Project of each checkout, each kept until replaced;
 - the Link Suggestions offered in each session (references only, never an Issue's text), kept until that session's next offer replaces them, and those you declined, kept so they aren't offered again;
+- the HTML Picture of a Project, when you ask for one: a page holding its open Issue titles, one per Tracker, Project and login, replaced by the next you ask for, and deleted with the Snapshot it was drawn from;
 - `background.log`, what the background processes print: past a megabyte it's moved to `background.log.1`, replacing the one there.
 
 Both variables must be absolute paths. One that is empty or relative is ignored, as if unset, so private Issue titles never land in your working tree.
@@ -161,7 +163,7 @@ Each `gh` or `glab` call is stopped after 60 seconds, or 5 minutes for a page of
 pkill -f 'src/cli.ts read'
 ```
 
-**Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host, or to a host you name with `go`, to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
+**Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host, or to a host you name with `go`, to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read. The HTML Picture sends and fetches nothing: it's one file with nothing to load, and its policy forbids every request; only the Tracker links you click on it leave the page.
 
 **To the model provider**, Issue text goes wherever the conversation goes. Claude reads what each command prints, so the titles of the Issues it shows reach your model provider, as everything in a Claude Code conversation does; so do an Issue's body and comments when you start work on it or ask for Link Suggestions. A host you type into `go` gets the requests above, unless the Map knows it by name, whether or not it runs a Tracker.
 

@@ -14,8 +14,7 @@ import { checkoutRoot, gitCheckout } from "../home/checkout.ts";
 import { issueCount, likelyHome, resolveHome, type Choice as HomeChoice, type HomeAnswer, type HomeDeps } from "../home/home.ts";
 import { remoteAddress, type Address } from "../home/remote-address.ts";
 import type { Card, Choice as LinkChoice } from "../map/card.ts";
-import type { Command } from "../map/draw.ts";
-import { typedRef, type Shown, type ShownCard } from "../map/show.ts";
+import { typedRef, type MapCommand, type Shown, type ShownCard } from "../map/show.ts";
 import type { Offer, OnScreen, Proposal } from "../map/suggest.ts";
 import { ago, plainTitle, plural, short } from "../map/text.ts";
 import type { IssueRead, Project, Tracker, Trackers } from "../tracker/tracker.ts";
@@ -67,7 +66,7 @@ export interface MoveDeps {
   /** Milliseconds since the epoch. */
   now(): number;
   /** Draws a Project's Map. `home` is true only for the Home Project, the only one kept warm; `away` names the Home Project otherwise. */
-  showMap(tracker: Tracker, project: Project, command: Command, at: { home: boolean; away?: string }): Promise<Shown>;
+  showMap(tracker: Tracker, project: Project, command: MapCommand, at: { home: boolean; away?: string }): Promise<Shown>;
   /** `read` is the Issue when it was just read live. */
   showCard(tracker: Tracker, project: Project, ref: string, page: number, read?: IssueRead): Promise<ShownCard>;
   /** Assigns the Issue `ref` names to the viewer, and shows its card; one that can't be says why. */
@@ -92,6 +91,8 @@ export type Request =
   | { kind: "assign"; ref: string }
   /** Starts work on the Issue `ref` names in the Project on screen. */
   | { kind: "start"; ref: string }
+  /** The HTML Picture of the Project on screen, written beside its Snapshot. */
+  | { kind: "html" }
   /** Link Suggestions from what is on screen: its text to propose from, the proposals to offer, or the ones ticked to write. */
   | { kind: "suggest" }
   | { kind: "offer"; proposals: Proposal[] }
@@ -132,7 +133,7 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
   const isHome = (project: Project) => project.id === home?.project.id;
 
   /** Draws `at`; `opened` when it drew something to stand on, `drewMap` when that was a Map. */
-  const show = async (at: Position): Promise<{ answer: Answer; opened: boolean; drewMap: boolean }> => {
+  const show = async (at: Position | { project: Project; view: { kind: "html" } }): Promise<{ answer: Answer; opened: boolean; drewMap: boolean }> => {
     const found = await trackerAt(deps, at.project.host);
     if ("why" in found) return { answer: say(`No Map of ${at.project.host}/${at.project.path}: ${found.why}`), opened: false, drewMap: false };
     const { tracker } = found;
@@ -170,6 +171,11 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
       if (shown.opened) await land(at, shown.drewMap);
       return shown.answer;
     }
+
+    case "html":
+      if (!here) return say(deps.home.text);
+      // A page beside the Map, not a place on it, so the user stays where they are.
+      return (await show({ project: here.project, view: { kind: "html" } })).answer;
 
     case "assign": {
       if (!here) return say(deps.home.text);
