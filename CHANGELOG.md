@@ -2,6 +2,10 @@
 
 What each release changes for someone using the Map. The Release workflow publishes the section headed with the version it releases as that release's notes, and refuses a version with none ([docs/releasing.md](docs/releasing.md)).
 
+## Unreleased
+
+- The status line is the plugin's own: a line pinned under the prompt, beside yours, with nothing to set up and nothing written to your settings. It needs a Claude Code build that loads plugins' hooks modules; without one there's no status line. A status line 0.1.0 set up says how to take it out, and `take the Map out of my status line` still puts yours back as it was.
+
 ## 0.1.0
 
 The first release. It needs Claude Code 2.1.152 or later, which shows the Map's output through a display hook, and Node.js 22.18 or later.

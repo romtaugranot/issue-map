@@ -23,7 +23,7 @@
  * `issue-map go [<target>] [--dir <path>]... [--pick-there <URL>]`: moves to a Project's or an Issue's URL, an `owner/repo[#n]` or a local path; on its own, offers nearby Projects, the added directories `--dir` names among them.
  * `issue-map back`: back one step along this session's trail.
  * `issue-map home`: returns to the Home Project's overview, and on it offers to re-pick it.
- * `issue-map statusline [--setup | --remove]`: the status line's row for this checkout; with `--setup`, installs the status line in the user's Claude Code settings, wrapping theirs; with `--remove`, takes the Map's row out of it again, putting theirs back.
+ * `issue-map statusline [--remove]`: the status line's row for this checkout; with `--remove`, takes the status line 0.1.0 set up out of the user's Claude Code settings, putting theirs back.
  * `issue-map read --host <host> --path <path>`: a full read of a Project, run detached by `map` and the refresher.
  * `issue-map refresher --host <host> --path <path> --login <login>`: keeps the Home Project's Snapshot warm, run detached by `map`.
  */
@@ -45,7 +45,7 @@ import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { statusRow } from "./map/status.ts";
 import { homeRowHere } from "./status/line.ts";
-import { installStatusLine, removeStatusLine, repointStatusLine, userSettings } from "./status/install.ts";
+import { removeStatusLine, userSettings } from "./status/settings.ts";
 import { showCard, showMap, type MapCommand } from "./map/show.ts";
 import type { Command } from "./map/draw.ts";
 import type { Export } from "./map/picture.ts";
@@ -56,10 +56,7 @@ import { confirm, offer, suggest, type Pending, type PendingSuggestions, type Pr
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
-
-/** The status line's process, where this plugin is now. */
-const STATUS_LINE = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--remove] — each takes [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -73,7 +70,6 @@ async function main(argv: string[]): Promise<number> {
       login: { type: "string" },
       dir: { type: "string", multiple: true },
       "pick-there": { type: "string" },
-      setup: { type: "boolean" },
       remove: { type: "boolean" },
       mermaid: { type: "boolean" },
       dot: { type: "boolean" },
@@ -99,11 +95,8 @@ async function main(argv: string[]): Promise<number> {
       if (!values.host || !values.path || !values.login) return usage();
       return refresher(known, values.host, values.path, values.login);
     case "statusline":
-      if (values.setup && values.remove) return usage();
       if (values.remove) {
         console.log(await withLine(stateDir(), await removeStatusLine(userSettings()), process.env.CLAUDE_CODE_SESSION_ID));
-      } else if (values.setup) {
-        console.log(await withLine(stateDir(), await installStatusLine(userSettings(), STATUS_LINE), process.env.CLAUDE_CODE_SESSION_ID));
       } else {
         const row = await homeRowHere(process.cwd());
         console.log(row || "No status line row: this isn't inside a git checkout, or no remote of it leads to a Tracker.");
@@ -184,8 +177,6 @@ async function main(argv: string[]): Promise<number> {
       checkouts: localCheckouts({ trackers: known, env: process.env, sshHostname }, cwd),
       now: Date.now,
       async showMap(tracker, project, command: MapCommand, at) {
-        // An update moves the plugin, so the status line follows it here.
-        await repointStatusLine(userSettings(), STATUS_LINE).catch(() => {});
         const startRead = () => detach(["read", "--host", tracker.host, "--path", project.path]);
         // Only the Home Project is kept warm.
         const startRefresher = async ({ login }: SnapshotKey) => {

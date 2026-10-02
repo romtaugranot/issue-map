@@ -1,7 +1,8 @@
 /**
  * The tree a release publishes, and what users install: only the plugin's
  * runtime parts, so it holds no package manifest or lockfile for Claude Code
- * to install npm dependencies from, and none of the tests, recorded
+ * to install npm dependencies from, and none of the tests (the hooks module's
+ * included: CI copies it back in to run it), recorded
  * Snapshots, schemas or developer notes. The Release workflow commits it to
  * the `release` branch the marketplace entry names, and tags that commit
  * (docs/releasing.md).
@@ -22,7 +23,7 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 /** Copies the committed runtime parts of the checkout at `root` to `dir`, the manifest saying `version`. */
 export function releaseTree(root: string, version: string, dir: string): void {
-  const files = execFileSync("git", ["ls-files", "-z", "--", ...RUNTIME], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
+  const files = execFileSync("git", ["ls-files", "-z", "--", ...RUNTIME], { cwd: root, encoding: "utf8" }).split("\0").filter((file) => file && !file.endsWith(".test.ts"));
   for (const file of files) {
     mkdirSync(dirname(join(dir, file)), { recursive: true });
     copyFileSync(join(root, file), join(dir, file));

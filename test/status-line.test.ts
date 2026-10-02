@@ -1,13 +1,12 @@
 /**
- * The status line as Claude Code runs it (#40): a process of its own, given
- * the session's JSON on standard input, wrapping the user's own status line
- * command when there is one, and done inside Claude Code's 300 ms debounce
- * on the largest recorded Project.
+ * The status line as the plugin's hooks module runs it (#40, ADR 0011): a
+ * process of its own, in the directory the session is in, done well inside
+ * 300 ms on the largest recorded Project.
  */
 import { before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,15 +65,21 @@ function recordedTracker(recorded: Snapshot): Tracker {
   };
 }
 
-/** Runs the status line as Claude Code does, and how long it took. */
-function run(args: string[], stdin: string, env: Record<string, string>): Promise<{ stdout: string; code: number | null; ms: number }> {
+/** A Claude Code config directory of its own, with `settings` when given, so the user's own are never read. */
+function configDir(settings?: object): string {
+  const dir = mkdtempSync(join(tmpdir(), "issue-map-config-"));
+  if (settings) writeFileSync(join(dir, "settings.json"), JSON.stringify(settings));
+  return dir;
+}
+
+/** Runs the status line as the hooks module does, in `cwd`, and how long it took. */
+function run(cwd: string, env: Record<string, string>): Promise<{ stdout: string; code: number | null; ms: number }> {
   const started = performance.now();
   return new Promise((resolve) => {
-    const child = spawn(ENTRY, args, { env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "inherit"] });
+    const child = spawn(ENTRY, [], { cwd, env: { ...process.env, CLAUDE_CONFIG_DIR: configDir(), ...env }, stdio: ["ignore", "pipe", "inherit"] });
     let stdout = "";
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.on("close", (code) => resolve({ stdout, code, ms: performance.now() - started }));
-    child.stdin.end(stdin);
   });
 }
 
@@ -83,8 +88,6 @@ describe("the status line on the largest recorded Project, gitlab-org/gitlab", (
   before(async () => {
     warm = await warmCheckout();
   });
-  const session = () => JSON.stringify({ session_id: "fixture-session", workspace: { current_dir: warm.checkout, project_dir: warm.checkout }, cwd: warm.checkout });
-
   test(`is worked out within ${BUDGET_MS} ms, never reading the Snapshot`, async () => {
     const store = snapshotStore(warm.state, { now: Date.now });
     const started = performance.now();
@@ -96,42 +99,29 @@ describe("the status line on the largest recorded Project, gitlab-org/gitlab", (
   });
 
   // Starting Node takes most of it; a loaded machine can take longer, so it's run a few times and the quickest counts.
-  test(`runs as a process of its own, standard input to row, within ${BUDGET_MS} ms`, async () => {
+  test(`runs as a process of its own, in the session's directory, within ${BUDGET_MS} ms`, async () => {
     const runs = [];
-    for (let i = 0; i < 3; i++) runs.push(await run([], session(), { ISSUE_MAP_STATE_DIR: warm.state }));
+    for (let i = 0; i < 3; i++) runs.push(await run(warm.checkout, { ISSUE_MAP_STATE_DIR: warm.state }));
     assert.equal(runs[0]!.code, 0);
     assert.equal(runs[0]!.stdout, `${warm.row}\n`);
     const quickest = Math.min(...runs.map((r) => r.ms));
     assert.ok(quickest < BUDGET_MS, `${Math.round(quickest)} ms`);
   });
 
-  test("wraps the user's own status line: their rows first, given the same standard input, then the Map's", async () => {
-    const { stdout, code } = await run(["--wrap", `node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log("theirs: "+JSON.parse(s).session_id+"\\nsecond row"))'`], session(), { ISSUE_MAP_STATE_DIR: warm.state });
-    assert.equal(code, 0);
-    const rows = stdout.trimEnd().split("\n");
-    assert.deepEqual(rows.slice(0, 2), ["theirs: fixture-session", "second row"]);
-    assert.match(rows[2]!, /^◆ gitlab-org\/gitlab · Take next: /);
-    assert.equal(rows.length, 3);
-  });
-
-  test("still shows the Map's row when the user's command fails", async () => {
-    const { stdout, code } = await run(["--wrap", "echo half a row; exit 3"], session(), { ISSUE_MAP_STATE_DIR: warm.state });
-    assert.equal(code, 0);
-    assert.deepEqual(stdout.trimEnd().split("\n").map((r) => r.slice(0, 20)), ["half a row", "◆ gitlab-org/gitlab "]);
-  });
-
-  test("reads the directory from standard input, and makes do without it", async () => {
+  test("prints nothing outside a checkout", async () => {
     const elsewhere = mkdtempSync(join(tmpdir(), "issue-map-elsewhere-"));
-    const outside = await run([], JSON.stringify({ workspace: { current_dir: elsewhere } }), { ISSUE_MAP_STATE_DIR: warm.state });
-    assert.deepEqual([outside.code, outside.stdout], [0, ""], "outside a checkout, nothing of the Map's");
-    const garbled = await new Promise<{ stdout: string; code: number | null }>((resolve) => {
-      const child = spawn(ENTRY, [], { cwd: warm.checkout, env: { ...process.env, ISSUE_MAP_STATE_DIR: warm.state }, stdio: ["pipe", "pipe", "pipe"] });
-      let stdout = "";
-      child.stdout.on("data", (chunk) => (stdout += chunk));
-      child.on("close", (code) => resolve({ stdout, code }));
-      child.stdin.end("not JSON");
-    });
-    assert.equal(garbled.code, 0);
-    assert.match(garbled.stdout, /^◆ gitlab-org\/gitlab · /, "from the directory it runs in");
+    assert.deepEqual(await run(elsewhere, { ISSUE_MAP_STATE_DIR: warm.state }).then((r) => [r.code, r.stdout]), [0, ""]);
+  });
+
+  test("while a status line 0.1.0 set up is still in the user's settings, says how to take it out", async () => {
+    const config = configDir({ statusLine: { type: "command", command: "'/gone/issue-map/0.1.0/bin/issue-map-status-line' --wrap 'mine' 2>/dev/null || sh -c 'mine'" } });
+    const { stdout } = await run(warm.checkout, { ISSUE_MAP_STATE_DIR: warm.state, CLAUDE_CONFIG_DIR: config });
+    assert.equal(stdout, `${warm.row} · say “take the Map out of my status line” to remove the old one\n`);
+  });
+
+  test("the user's own status line alone adds nothing", async () => {
+    const config = configDir({ statusLine: { type: "command", command: "mine" } });
+    const { stdout } = await run(warm.checkout, { ISSUE_MAP_STATE_DIR: warm.state, CLAUDE_CONFIG_DIR: config });
+    assert.equal(stdout, `${warm.row}\n`);
   });
 });

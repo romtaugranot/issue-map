@@ -44,10 +44,6 @@ for (const [found, version] of [["v20.11.0", "v20.11.0"], ["v22.17.1", "v22.17.1
     test("the status line prints no row, failing nothing", () => {
       assert.deepEqual(run("issue-map-status-line", [], env, "{}"), { status: 0, stdout: "", stderr: message });
     });
-
-    test("a wrapped status line still prints its rows", () => {
-      assert.deepEqual(run("issue-map-status-line", ["--wrap", "cat; echo theirs"], env, "{}"), { status: 0, stdout: "{}theirs\n", stderr: message });
-    });
   });
 }
 

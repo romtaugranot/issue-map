@@ -17,3 +17,5 @@ Every existing Map of Issue Links is a web page or a separate app, and none of t
 _Amended by ADR 0010: a read-only HTML Picture of the Map may be opened outside Claude Code, beside it._
 
 _Amended for #83: a Picture may also be printed as Mermaid or DOT text, for the user to paste where GitHub or GitLab render it. It is still printed in the conversation and the plugin writes it nowhere; only its use is outside._
+
+_Amended by ADR 0011: the plugin pins its own status line through a hooks module, and writes no setting._
