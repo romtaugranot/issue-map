@@ -198,7 +198,7 @@ The floors come from the adapters, which the matrix and the schema checks read t
 
 Three tiers, as [ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md) sets out:
 
-- **Contract**, on every push and pull request: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, and every query checked against the recorded GitHub and GitLab schemas. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
+- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, and every query checked against the recorded GitHub and GitLab schemas. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
 
   ```sh
   npm ci

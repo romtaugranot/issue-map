@@ -27,7 +27,8 @@ test("a schema is recorded for github.com, GHEC and every promised GHES release"
 for (const file of recorded) {
   const name = file.replace(/\.graphql\.gz$/, "");
   test(`every query the GitHub adapter sends validates against ${name}'s published schema`, async () => {
-    const schema = buildSchema(gunzipSync(readFileSync(new URL(file, SCHEMAS))).toString("utf8"), { assumeValidSDL: true });
+    // Built without validating the schema itself, which graphql 17 refuses (a deprecated field implementing an undeprecated one); only the queries are checked.
+    const schema = buildSchema(gunzipSync(readFileSync(new URL(file, SCHEMAS))).toString("utf8"), { assumeValidSDL: true, assumeValid: true });
     const host = name === "fpt" ? "github.com" : name === "ghec" ? "fixtures.ghe.com" : "ghes.example.com";
     const invalid: string[] = [];
     const sent = new Set<string>();
