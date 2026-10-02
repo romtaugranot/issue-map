@@ -221,6 +221,25 @@ describe("Take next", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "blocks", 2], [2, "blocks", 1]]);
     assert.deepEqual(takeNext(overview(s)), ["**Take next: 0** — every Issue on the Map is Blocked, or a Parent of Blocked Issues"]);
   });
+
+  test("Blocks Links in a cycle count each Issue in it once", () => {
+    // #4 Blocks #1, and #1 and #2 Block each other; #5 Blocks #6, and #6, #7 and #8 Block in a circle.
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 4 }, { n: 5 }, { n: 6 }, { n: 7 }, { n: 8 }],
+      [[4, "blocks", 1], [1, "blocks", 2], [2, "blocks", 1], [5, "blocks", 6], [6, "blocks", 7], [7, "blocks", 8], [8, "blocks", 6]],
+    );
+    const expected = ["**Take next: 2** — most waited on first", "- #5 Issue 5 — ▶3 wait on it", "- #4 Issue 4 — ▶2 wait on it"];
+    assert.deepEqual(takeNext(overview(s)), expected);
+    assert.deepEqual(takeNext(overview({ ...s, issues: [...s.issues].reverse() })), expected, "the same whatever order the Issues were read in");
+  });
+
+  test("Parent Links in a cycle pass a count down to the children under it once", () => {
+    // #1 and #2 are each other's Parent; #1 is the Parent of #3, #2 of #4; #9 waits on #1.
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 9 }], [[1, "parent", 2], [2, "parent", 1], [1, "parent", 3], [2, "parent", 4], [1, "blocks", 9]]);
+    const expected = ["**Take next: 2** — most waited on first", "- #3 Issue 3 — ▶1 via #1", "- #4 Issue 4 — ▶1 via #2"];
+    assert.deepEqual(takeNext(overview(s)), expected);
+    assert.deepEqual(takeNext(overview({ ...s, issues: [...s.issues].reverse() })), expected, "the same whatever order the Issues were read in");
+  });
 });
 
 describe("Groups (ADR 0008)", () => {

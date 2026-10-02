@@ -10,11 +10,13 @@
  * drawn until it's written, and nothing is written on a Project where the
  * Map doesn't write (ADR 0003).
  */
+import type { Snapshot } from "../snapshot/snapshot.ts";
 import type { SnapshotKey, SnapshotStore } from "../snapshot/store.ts";
 import type { FarEnd, IssueRead, LinkKind, LinkKinds, Project, Thread, Tracker } from "../tracker/tracker.ts";
 import { bandOf, wontWrite } from "./band.ts";
 import type { Choice } from "./card.ts";
 import { draw, type Command } from "./draw.ts";
+import { isOpen } from "./links.ts";
 import { issueLocator, typedRef, why } from "./show.ts";
 import { commentBlock } from "./start.ts";
 import { count, cut, fenced, FENCED_NOTE, fenceTag, plural, short } from "./text.ts";
@@ -191,7 +193,9 @@ export async function offer(deps: SuggestDeps, tracker: Tracker, project: Projec
   if (said.kind !== "capabilities") return { text: `No Link Suggestions to offer: ${why(tracker, said)}.` };
   const viewer = await tracker.viewer();
   if (viewer.kind !== "viewer") return { text: `No Link Suggestions to offer: ${why(tracker, viewer)}.` };
-  const declined = new Set(await deps.declines.get({ tracker: tracker.host, project: project.id, login: viewer.login }));
+  const key: SnapshotKey = { tracker: tracker.host, project: project.id, login: viewer.login };
+  const declined = new Set(await deps.declines.get(key));
+  const snapshot = await snapshotOf(deps.store, key);
   const reads = cached((locator: string) => tracker.issue(locator));
   const threads = cached((locator: string) => tracker.thread(locator));
 
@@ -218,7 +222,7 @@ export async function offer(deps: SuggestDeps, tracker: Tracker, project: Projec
     const rejectAs = (reason: string) => void rejected.push(`- ${named} — ${reason}`);
     if (from.id === to.id) return rejectAs("an Issue isn't Linked to itself");
     if (!pending.onScreen.includes(from.ref) && !pending.onScreen.includes(to.ref)) return rejectAs("neither Issue is on screen");
-    const stands = standsIn(from, proposal.kind, to, project.path);
+    const stands = standsIn(from, proposal.kind, to, project.path) ?? waitsOnItself(snapshot, suggestion, project.path);
     if (stands) return rejectAs(stands);
     if (declined.has(declineKey(suggestion))) return void declinedBefore++;
     const quote = flat(proposal.quote?.replace(/^["“”'‘’\s]+|["“”'‘’\s]+$/g, "") ?? "");
@@ -238,7 +242,7 @@ export async function offer(deps: SuggestDeps, tracker: Tracker, project: Projec
   for (const found of pending.found) {
     const [from, to] = [await reads(found.from.ref), await reads(found.to.ref)];
     if (from.kind !== "issue" || to.kind !== "issue") continue;
-    const stands = standsIn(from.issue, found.kind, to.issue, project.path);
+    const stands = standsIn(from.issue, found.kind, to.issue, project.path) ?? waitsOnItself(snapshot, found, project.path);
     if (stands) rejected.push(`- ${label(found, project.path)} — ${stands}`);
     else if (declined.has(declineKey(found))) declinedBefore++;
     else offered.push(found);
@@ -300,7 +304,8 @@ export async function confirm(deps: SuggestDeps, tracker: Tracker, project: Proj
       lines.push(`Not written: ${named} — ${why(tracker, from.kind !== "issue" ? from : (to as Exclude<typeof to, { kind: "issue" }>))}.`);
       continue;
     }
-    const stands = standsIn(from.issue, suggestion.kind, to.issue, project.path);
+    // The Snapshot takes in each Link written before this one, so a cycle they'd close is seen too.
+    const stands = standsIn(from.issue, suggestion.kind, to.issue, project.path) ?? waitsOnItself(await snapshotOf(deps.store, key), suggestion, project.path);
     if (stands === "already recorded") {
       lines.push(`${named} is already recorded.`);
       continue;
@@ -403,6 +408,37 @@ function standsIn(from: IssueRead, kind: LinkKind, to: IssueRead, project: strin
     return `${short(to.ref, project)} already has a Parent, ${named}, and a Link Suggestion never moves an Issue from its Parent`;
   }
   return null;
+}
+
+/**
+ * Why a Blocks Link from `from` to `to` would leave Issues waiting on one
+ * another: `to` already reaches `from` along the open Blocks Links the
+ * Snapshot records. `null` where it doesn't, or there's no Snapshot.
+ */
+function waitsOnItself(snapshot: Snapshot | null, { from, kind, to }: Planned, project: string): string | null {
+  if (!snapshot || kind !== "blocks") return null;
+  const issues = new Map(snapshot.issues.map((issue) => [issue.id, issue]));
+  /** Each Issue reached, by the Issue it was reached from and its reference. */
+  const reached = new Map<string, { before: string | null; ref: string }>([[to.id, { before: null, ref: to.ref }]]);
+  const queue = [to.id];
+  for (const id of queue) {
+    if (id === from.id) break;
+    for (const { role, to: next } of issues.get(id)?.links ?? []) {
+      if (role !== "blocked" || !next.readable || !isOpen(next) || reached.has(next.id)) continue;
+      reached.set(next.id, { before: id, ref: next.ref });
+      queue.push(next.id);
+    }
+  }
+  if (!reached.has(from.id)) return null;
+  const refs: string[] = [];
+  for (let at: string | null = from.id; at !== null; at = reached.get(at)!.before) refs.unshift(short(reached.get(at)!.ref, project));
+  return `${refs[0]} Blocks ${refs.slice(1).join(", which Blocks ")}: ${refs.slice(0, -1).join(", ")} and ${refs.at(-1)} would wait on one another`;
+}
+
+/** The Snapshot the Map draws from, where it's read. */
+async function snapshotOf(store: SnapshotStore, key: SnapshotKey): Promise<Snapshot | null> {
+  const state = await store.state(key);
+  return state.kind === "ready" ? state.snapshot : null;
 }
 
 /** One Issue's part of what `suggest` hands over: its name, Links and text, and what mentions of it say; `thread` is why it couldn't be read, where it couldn't. */
