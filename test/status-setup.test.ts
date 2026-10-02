@@ -1,14 +1,15 @@
 /**
  * Installing the status line (#40): a setup command writes it into the
- * user's Claude Code settings, wrapping a status line they already have.
+ * user's Claude Code settings, wrapping a status line they already have;
+ * removing it (#50) puts that one back.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installStatusLine, userSettings } from "../src/status/install.ts";
+import { installStatusLine, removeStatusLine, userSettings } from "../src/status/install.ts";
 
 const ENTRY = "/opt/plugins/issue map/bin/issue-map-status-line";
 
@@ -82,6 +83,70 @@ test("leaves a settings file it can't read as JSON alone, and says why", async (
   const said = await installStatusLine(path, ENTRY);
   assert.equal(readFileSync(path, "utf8"), "{ not json");
   assert.match(said, /^Didn't install the status line: .*settings\.json isn't JSON/);
+});
+
+test("removing it puts back the status line it wrapped, byte for byte, keeping its other fields and every other setting", async () => {
+  const theirs = { type: "command", command: `~/bin/status --sep ' | ' "it's \\"mine\\""`, padding: 2 };
+  const path = settingsFile(JSON.stringify({ model: "opus", statusLine: theirs }));
+  await installStatusLine(path, ENTRY);
+  const said = await removeStatusLine(path);
+  assert.deepEqual(read(path), { model: "opus", statusLine: theirs });
+  assert.match(said, /yours is back as it was/);
+});
+
+test("removing it after the plugin moved still puts back the status line it wrapped", async () => {
+  const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: "my-status" } }));
+  await installStatusLine(path, "/opt/plugins/issue-map/0.1.0/bin/issue-map-status-line");
+  await installStatusLine(path, "/opt/plugins/issue-map/0.2.0/bin/issue-map-status-line");
+  await removeStatusLine(path);
+  assert.deepEqual(read(path), { statusLine: { type: "command", command: "my-status" } });
+});
+
+test("removing it deletes the status line setting when the Map's row was all there was", async () => {
+  const path = settingsFile(JSON.stringify({ model: "opus" }));
+  await installStatusLine(path, ENTRY);
+  const said = await removeStatusLine(path);
+  assert.deepEqual(read(path), { model: "opus" });
+  assert.match(said, /^The status line is removed from .*settings\.json/);
+});
+
+test("removing it when it isn't installed changes nothing, and says so", async () => {
+  for (const settings of [undefined, `{"statusLine": {"type": "command", "command": "my-status"}}`]) {
+    const path = settingsFile(settings);
+    const said = await removeStatusLine(path);
+    assert.equal(existsSync(path) ? readFileSync(path, "utf8") : undefined, settings);
+    assert.match(said, /isn't installed in .*; nothing changed/);
+  }
+});
+
+test("removing a status line of the Map's that was changed by hand leaves it alone, and says why", async () => {
+  const path = settingsFile(JSON.stringify({ statusLine: { type: "command", command: `'${ENTRY}' --wrap 'my-status' --extra` } }));
+  const before = readFileSync(path, "utf8");
+  const said = await removeStatusLine(path);
+  assert.equal(readFileSync(path, "utf8"), before);
+  assert.match(said, /^Didn't remove the status line: .*Nothing changed\.$/);
+});
+
+test("a symlinked settings file is written through, keeping the link", async () => {
+  const target = settingsFile(JSON.stringify({ model: "opus" }));
+  const link = join(mkdtempSync(join(tmpdir(), "issue-map-dotfiles-")), "settings.json");
+  symlinkSync(target, link);
+  await installStatusLine(link, ENTRY);
+  assert.equal(readlinkSync(link), target);
+  assert.deepEqual(Object.keys(read(target)), ["model", "statusLine"]);
+  await removeStatusLine(link);
+  assert.ok(lstatSync(link).isSymbolicLink());
+  assert.deepEqual(read(target), { model: "opus" });
+});
+
+test("an empty settings file counts as empty settings", async () => {
+  for (const empty of ["", "\n  \n"]) {
+    const path = settingsFile(empty);
+    assert.match(await removeStatusLine(path), /isn't installed/);
+    assert.equal(readFileSync(path, "utf8"), empty);
+    await installStatusLine(path, ENTRY);
+    assert.deepEqual(Object.keys(read(path)), ["statusLine"]);
+  }
 });
 
 test("the user's settings are in CLAUDE_CONFIG_DIR, or in ~/.claude", () => {

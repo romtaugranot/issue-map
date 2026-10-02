@@ -1,6 +1,6 @@
 ---
 name: map
-description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; to move to another Project, `go`, `back` or `home`; or to set up the Map's status line.
+description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; to move to another Project, `go`, `back` or `home`; or to set up or remove the Map's status line.
 ---
 
 # The Map
@@ -24,7 +24,7 @@ What `start` and `suggest` print has no line: it's for you, as said where they'r
 - **Link Suggestions**: `issue-map suggest`, then `issue-map offer` and `issue-map confirm` — see **Link Suggestions**.
 - **The Unlinked Issues**, 15 a page, newest first: `issue-map unlinked`, and `issue-map unlinked --page <n>` when the user says `more` or asks for a page.
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
-- **The status line**: `issue-map statusline --setup` — see **The status line**.
+- **The status line**: `issue-map statusline --setup`, and `issue-map statusline --remove` — see **The status line**.
 
 
 ## Take next
@@ -103,6 +103,8 @@ A move that can't open says why and leaves the user where they were; show that a
 ## The status line
 
 When the user asks for the Map in their status line, or for what to take next always on screen, run `issue-map statusline --setup` and show what it says. It writes the status line into their Claude Code settings; a status line they already have is wrapped, not replaced — its rows come first. Running it again changes nothing, unless the plugin has moved since, as an update moves it: then it points the status line at where the plugin is now. When the row goes blank after an update, run it again.
+
+When the user asks to take the Map out of their status line, or before they uninstall the plugin, run `issue-map statusline --remove` and show what it says: a status line it wrapped is put back as it was; otherwise the status line setting goes. When the Map's status line isn't installed, it changes nothing and says so.
 
 The row shows the Home Project's first Issue in Take next, the same as the overview's, from the Snapshot the background refresher keeps warm, with its age once it's old. It never reads the Tracker, so until the Map has been drawn in the checkout it asks for the Map instead. It stays on the Home Project whatever the user moves to. `issue-map statusline` alone prints the row.
 

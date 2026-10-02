@@ -16,7 +16,7 @@
  * `issue-map go [<target>] [--dir <path>]... [--pick-there <URL>]`: moves to a Project's or an Issue's URL, an `owner/repo[#n]` or a local path; on its own, offers nearby Projects, the added directories `--dir` names among them.
  * `issue-map back`: back one step along this session's trail.
  * `issue-map home`: returns to the Home Project's overview, and on it offers to re-pick it.
- * `issue-map statusline [--setup]`: the status line's row for this checkout; with `--setup`, installs the status line in the user's Claude Code settings, wrapping theirs.
+ * `issue-map statusline [--setup | --remove]`: the status line's row for this checkout; with `--setup`, installs the status line in the user's Claude Code settings, wrapping theirs; with `--remove`, takes the Map's row out of it again, putting theirs back.
  * `issue-map read --host <host> --path <path>`: a full read of a Project, run detached by `map` and the refresher.
  * `issue-map refresher --host <host> --path <path> --login <login>`: keeps the Home Project's Snapshot warm, run detached by `map`.
  */
@@ -39,7 +39,7 @@ import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { statusRow } from "./map/status.ts";
 import { homeRowHere } from "./status/line.ts";
-import { installStatusLine, userSettings } from "./status/install.ts";
+import { installStatusLine, removeStatusLine, userSettings } from "./status/install.ts";
 import { showCard, showMap } from "./map/show.ts";
 import { withLine } from "./show/shown.ts";
 import { assignToViewer } from "./map/assign.ts";
@@ -49,7 +49,7 @@ import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup] — each takes [--pick <URL>]";
+  "usage: issue-map map | unlinked [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -64,6 +64,7 @@ async function main(argv: string[]): Promise<number> {
       dir: { type: "string", multiple: true },
       "pick-there": { type: "string" },
       setup: { type: "boolean" },
+      remove: { type: "boolean" },
     },
   });
   const [verb, ...rest] = positionals;
@@ -84,7 +85,10 @@ async function main(argv: string[]): Promise<number> {
       if (!values.host || !values.path || !values.login) return usage();
       return refresher(known, values.host, values.path, values.login);
     case "statusline":
-      if (values.setup) {
+      if (values.setup && values.remove) return usage();
+      if (values.remove) {
+        console.log(await withLine(stateDir(), await removeStatusLine(userSettings())));
+      } else if (values.setup) {
         console.log(await withLine(stateDir(), await installStatusLine(userSettings(), fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url)))));
       } else {
         const row = await homeRowHere(process.cwd());
