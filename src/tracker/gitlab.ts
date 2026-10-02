@@ -23,7 +23,7 @@ const FOR_ONE_HOST = [...TOKEN_VARIABLES, "CI_JOB_TOKEN", "GITLAB_API_HOST"];
 const CANT_RECORD_BLOCKS = "this Project's GitLab tier can't record Blocks Links";
 
 /** The oldest GitLab the Map reads Links from: its REST API gives each Link's kind from 13.4. */
-const READS_FROM = "13.4";
+export const READS_FROM = "13.4";
 
 /** The oldest GitLab the Map is tested on (ADR 0003). */
 export const TESTED_FROM = "16.0";

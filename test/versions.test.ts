@@ -56,11 +56,22 @@ test("a floor GitHub no longer publishes a schema for is refused, so no recorded
   await assert.rejects(ghesReleases("3.18", async (r) => r === "3.19"), /GHES 3\.18.*OLDEST_SUPPORTED_GHES/);
 });
 
-test("the README's support table promises from the floors the adapters promise from", async () => {
+test("the README's support table names each band from the floors the adapters promise and read from", async () => {
   const { readFile } = await import("node:fs/promises");
-  const { TESTED_FROM } = await import("../src/tracker/gitlab.ts");
-  const { OLDEST_SUPPORTED_GHES } = await import("../src/tracker/github.ts");
+  const { READS_FROM, TESTED_FROM } = await import("../src/tracker/gitlab.ts");
+  const { GHES_SINCE, OLDEST_SUPPORTED_GHES } = await import("../src/tracker/github.ts");
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-  assert.match(readme, new RegExp(`GHES ${OLDEST_SUPPORTED_GHES.replace(".", "\\.")} and later`));
-  assert.match(readme, new RegExp(`GitLab ${TESTED_FROM.replace(".", "\\.")} and later`));
+  const rows: [string, string][] = [
+    [`GHES ${GHES_SINCE.blocks} and later`, "Promised"],
+    [`GHES from ${OLDEST_SUPPORTED_GHES}, before ${GHES_SINCE.blocks}`, "Promised: no Blocks, so no Take next"],
+    [`GHES from ${GHES_SINCE.subIssues}, before ${OLDEST_SUPPORTED_GHES}`, "Best effort"],
+    [`GHES before ${GHES_SINCE.subIssues}`, "Refused"],
+    [`Self-managed GitLab ${TESTED_FROM} and later, every tier`, "Promised"],
+    [`Self-managed GitLab from ${READS_FROM}, before ${TESTED_FROM}`, "Best effort"],
+    [`GitLab before ${READS_FROM}`, "Refused"],
+  ];
+  for (const [tracker, band] of rows) {
+    const row = new RegExp(`^\\| ${tracker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\| ${band}\\b`, "m");
+    assert.match(readme, row, `the row for ${tracker}`);
+  }
 });
