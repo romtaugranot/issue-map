@@ -7,8 +7,9 @@ import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { bandName, bandOf, notes, refusal } from "./band.ts";
 import { layout, ownBeneath, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
+import { picture, PICTURE_ISSUES, PICTURE_ROWS } from "./picture.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
-import { age, ago, count, howClosed, OUTSIDE, plural, short, title } from "./text.ts";
+import { age, ago, count, fence, howClosed, OUTSIDE, plural, short, title } from "./text.ts";
 
 export type Command =
   | { kind: "overview" }
@@ -23,7 +24,9 @@ export type Command =
   /** A Group's outline, by its place on the overview counting from 1. */
   | { kind: "group"; group: number; page: number }
   /** The level beneath the Issue a reference or URL names, in its Group. */
-  | { kind: "under"; ref: string; page: number };
+  | { kind: "under"; ref: string; page: number }
+  /** A Group drawn whole, by its place on the overview counting from 1; its outline when it doesn't fit. */
+  | { kind: "picture"; group: number };
 
 export interface Drawing {
   text: string;
@@ -86,6 +89,10 @@ function drawn(snapshot: Snapshot, command: Command, home: string | undefined, s
       const laidOut = layout(snapshot);
       const opened = command.kind === "group" ? openGroup(laidOut, command.group) : openUnder(snapshot, laidOut, command.ref);
       return outline(snapshot, opened, unblockedIn(takeNext(snapshot, laidOut)), command.page, shows);
+    }
+    case "picture": {
+      const laidOut = layout(snapshot);
+      return pictured(snapshot, openGroup(laidOut, command.group), unblockedIn(takeNext(snapshot, laidOut)), shows);
     }
   }
 }
@@ -307,8 +314,7 @@ function outline(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, page:
     return `No Issue on the Map of ${snapshot.project.path} is ${opened.ref}. \`map\` for the Map.`;
   }
   const { place, groups, group, above, alone, entries } = opened;
-  const head = `${name(group.head)}${group.head.kind === "outside" ? " (an Outside Issue)" : ""}`;
-  const lines = [`**Group ${count(place)} of ${count(groups)}** · ${head} — ${groupSize(group, unblocked)}`, ""];
+  const lines = [`**Group ${count(place)} of ${count(groups)}** · ${headOf(group)} — ${groupSize(group, unblocked)}`, ""];
   if (above && entries.length === 0) {
     lines.push(`Nothing sits beneath ${label(above)} in this Group.`, "_`map` for the Map_");
     return lines.join("\n");
@@ -332,6 +338,32 @@ function outline(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, page:
   return lines.join("\n");
 }
 
+/**
+ * A Group's Picture, fenced so its rows print as drawn: the Group's line,
+ * then its rows, then what the marks mean. A Group too large for one opens
+ * as its outline, saying why.
+ */
+function pictured(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, shows: Shows): string {
+  if (opened.kind !== "level") return outline(snapshot, opened, unblocked, 1, shows);
+  const { place, groups, group } = opened;
+  const rows = picture(group);
+  if (!rows) {
+    const why = `Group ${count(place)} is too large to draw whole: a Picture holds about ${PICTURE_ISSUES} Issues in ${PICTURE_ROWS} rows. Here is its outline.`;
+    return `${why}\n\n${outline(snapshot, opened, unblocked, 1, shows)}`;
+  }
+  for (const member of group.members.values()) if (member.kind === "issue") shows(member.issue);
+  const marks = fence(rows);
+  return [
+    `**Picture of Group ${count(place)} of ${count(groups)}** · ${headOf(group)} — ${groupSize(group, unblocked)}`,
+    "",
+    marks,
+    ...rows,
+    marks,
+    `_\`─\` its Parent above it · \`▶\` Blocked by the Issue above it · \`${OUTSIDE}\` an Outside Issue, not followed_`,
+    `_\`group ${place}\` for its outline · \`map\` for the Map_`,
+  ].join("\n");
+}
+
 function entryLine({ member, how, under, related }: Entry, group: Group, unblocked: Unblocked): string {
   const held = [...(member.kind === "issue" ? [member.issue] : []), ...ownBeneath(group, member.id)];
   const reasons = [how === "blocked" ? "Blocked by it" : "", under > 0 ? `${count(under)} under it` : "", unblocked(held), related > 0 ? `${count(related)} Related` : ""];
@@ -343,6 +375,10 @@ function entryLine({ member, how, under, related }: Entry, group: Group, unblock
 function label(member: Member): string {
   if (member.kind === "issue") return member.issue.ref;
   return member.end.readable ? `${OUTSIDE}${member.end.ref}` : `${OUTSIDE} an Outside Issue this login can't read`;
+}
+
+function headOf(group: Group): string {
+  return `${name(group.head)}${group.head.kind === "outside" ? " (an Outside Issue)" : ""}`;
 }
 
 function groupLine(group: Group, unblocked: Unblocked): string {

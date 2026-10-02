@@ -851,7 +851,7 @@ describe("the Project's band (ADR 0003)", () => {
     });
     const text =
       "No Map of github.com/fixture-org/tools: Refused — the Map can read no Link kind here. Blocks: GHES 3.16.0 can't record Blocks Links; 3.19 and later can. Parent: GHES 3.16.0 can't record Parent Links; 3.17 and later can. Related: GitHub records no Related Links.";
-    for (const command of [{ kind: "overview" }, { kind: "unlinked", page: 1 }, { kind: "group", group: 1, page: 1 }, { kind: "under", ref: "#1", page: 1 }] as const) {
+    for (const command of [{ kind: "overview" }, { kind: "unlinked", page: 1 }, { kind: "group", group: 1, page: 1 }, { kind: "under", ref: "#1", page: 1 }, { kind: "picture", group: 1 }] as const) {
       assert.equal(draw(refused, command).text, text, command.kind);
     }
   });
@@ -860,5 +860,85 @@ describe("the Project's band (ADR 0003)", () => {
     const none = { kind: "cant-read", reason: "GitLab 13.3.0 is older than 13.4, the oldest the Map reads" } as const;
     const refused = snapshot(issues, [], {}, { untested: "GitLab 13.3.0 is older than 16.0, the oldest the Map is tested on", links: { blocks: none, parent: none, related: none } });
     assert.equal(overview(refused), "No Map of github.com/fixture-org/tools: Refused — the Map can read no Link kind here. GitLab 13.3.0 is older than 13.4, the oldest the Map reads.");
+  });
+});
+
+describe("a Group's Picture", () => {
+  const picture = (s: ReturnType<typeof snapshot>, group = 1) => draw(s, { kind: "picture", group }).text;
+  /** The rows between the Picture's fences. */
+  const rows = (text: string) => text.split("\n").slice(3, text.split("\n").lastIndexOf("```"));
+
+  test("draws the whole Group, a Parent's children and the Issues one Blocks each told apart, with Blocks pointing at the Issue that waits", () => {
+    // #1 is the Parent of #2 and #3; #2 Blocks #4.
+    const s = snapshot([{ n: 1, title: "Lay the foundation" }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [1, "parent", 3], [2, "blocks", 4]]);
+    assert.equal(
+      picture(s),
+      [
+        "**Picture of Group 1 of 1** · #1 Lay the foundation — 4 Issues, 2 Unblocked",
+        "",
+        "```",
+        "#1 Lay the foundation",
+        "├─ #2 Issue 2",
+        "│  └▶ #4 Issue 4",
+        "└─ #3 Issue 3",
+        "```",
+        "_`─` its Parent above it · `▶` Blocked by the Issue above it · `↗` an Outside Issue, not followed_",
+        "_`group 1` for its outline · `map` for the Map_",
+      ].join("\n"),
+    );
+    assert.deepEqual(draw(s, { kind: "picture", group: 1 }).issues?.sort(), ["#1", "#2", "#3", "#4"], "every Issue drawn is on screen for Link Suggestions");
+  });
+
+  test("an Issue under two Parents is drawn once, and named where it's reached again", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [1, "parent", 3], [2, "parent", 4], [3, "parent", 4]]);
+    assert.deepEqual(rows(picture(s)), ["#1 Issue 1", "├─ #2 Issue 2", "│  └─ #4 Issue 4", "└─ #3 Issue 3", "   └─ #4 also under #2, drawn above"]);
+  });
+
+  test("Blocks Links in a circle draw each Issue once", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "blocks", 2], [2, "blocks", 1]]);
+    assert.deepEqual(rows(picture(s)), ["#1 Issue 1", "└▶ #2 Issue 2", "   └▶ #1 also at the top, drawn above"]);
+  });
+
+  test("counts Related Links on a row and draws none; marks Outside Issues, and one this login can't read has no name", () => {
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 9 }],
+      [[{ outside: "fixture-org/plans#7", title: "Roadmap" }, "parent", 1], [1, "blocks", 2], [{ hidden: "fixture-org/secret#1" }, "blocks", 3], [1, "blocks", 3], [2, "related", 9], [3, "related", 9]],
+    );
+    assert.deepEqual(rows(picture(s)), [
+      "↗fixture-org/plans#7 Roadmap",
+      "└─ #1 Issue 1",
+      "   ├▶ #2 (1 Related) Issue 2",
+      "   └▶ #3 (1 Related) Issue 3",
+      "↗ an Issue this login can't read",
+      "└▶ #3 also under #1, drawn above",
+    ]);
+  });
+
+  test("titles print on one line, cut to fit 72 columns, inside a fence longer than any backtick run in them", () => {
+    const s = snapshot([{ n: 1, title: "Run ```sh\nmake``` before\tthe release, every time, on every platform we ship to" }, { n: 2 }], [[1, "blocks", 2]]);
+    const lines = picture(s).split("\n");
+    assert.equal(lines[2], "````");
+    assert.equal(lines[3], "#1 Run ```sh make``` before the release, every time, on every platform …");
+    assert.equal(lines[3]!.length, 72);
+    assert.equal(lines[5], "````");
+  });
+
+  test("a row too deep or an Outside Issue's path too long for a title keeps its reference alone", () => {
+    const path = "fixture-org/a-group-with-a-long-name/and-a-subgroup/with-a-project#12";
+    const s = snapshot([{ n: 1 }], [[{ outside: path }, "parent", 1]]);
+    assert.deepEqual(rows(picture(s)), [`↗${path}`, "└─ #1 Issue 1"]);
+  });
+
+  test("a Group too large to draw whole opens as its outline, saying why", () => {
+    const issues = Array.from({ length: 26 }, (_, i) => ({ n: i + 1 }));
+    const s = snapshot(issues, issues.slice(1).map(({ n }): LinkSpec => [1, "parent", n]));
+    const lines = picture(s).split("\n");
+    assert.equal(lines[0], "Group 1 is too large to draw whole: a Picture holds about 25 Issues in 30 rows. Here is its outline.");
+    assert.equal(lines.slice(2).join("\n"), draw(s, { kind: "group", group: 1, page: 1 }).text);
+  });
+
+  test("a Group past the last says how many there are", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "blocks", 2]]);
+    assert.equal(picture(s, 2), "There is only 1 Group on the Map of fixture-org/tools. `map` for the Map.");
   });
 });

@@ -11,6 +11,7 @@
  * `issue-map next [--page <n>]`: lists every Issue in Take next, 15 a page, in its order.
  * `issue-map taken [--page <n>]`: lists the Unblocked Issues taken by others, 15 a page, in Take next's order, each with who has it.
  * `issue-map group <n | ref> [--page <n>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
+ * `issue-map picture <n>`: draws Group `n` of the overview whole, or its outline when it's too large for a Picture.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
  * `issue-map start <ref>`: the body and comments of the Issue `ref` names, cut to a fixed budget, for Claude to brief the user from; where the user is doesn't change.
@@ -52,7 +53,7 @@ import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n> | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
 
 /** The status line's process, where this plugin is now. */
 const STATUS_LINE = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
@@ -75,7 +76,7 @@ async function main(argv: string[]): Promise<number> {
   });
   const [verb, ...rest] = positionals;
   const page = values.page === undefined ? 1 : Number(values.page);
-  const opening = verb === "group" ? toOpen(rest.shift(), page) : undefined;
+  const opening = verb === "group" ? toOpen(rest.shift(), page) : verb === "picture" ? toPicture(rest.shift()) : undefined;
   const cardRef = verb === "issue" || verb === "assign" || verb === "start" ? rest.shift() : undefined;
   const target = verb === "go" ? rest.shift() : undefined;
   const picked = verb === "confirm" ? rest.splice(0).map(Number) : [];
@@ -102,6 +103,7 @@ async function main(argv: string[]): Promise<number> {
       }
       return 0;
     case "group":
+    case "picture":
       if (!opening) return usage();
       break;
     case "issue":
@@ -207,6 +209,11 @@ function toOpen(arg: string | undefined, page: number): Command | undefined {
   if (!arg) return undefined;
   if (!/^\d+$/.test(arg)) return { kind: "under", ref: arg, page };
   return Number(arg) >= 1 ? { kind: "group", group: Number(arg), page } : undefined;
+}
+
+/** `picture`'s argument: a Group's place on the overview, from 1. */
+function toPicture(arg: string | undefined): Command | undefined {
+  return arg && /^\d+$/.test(arg) && Number(arg) >= 1 ? { kind: "picture", group: Number(arg) } : undefined;
 }
 
 /** How long a full read may run in all: well past the 37 minutes `gitlab-org/gitlab` takes. */

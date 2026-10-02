@@ -79,7 +79,7 @@ The drawing of one Project's open Issues joined by their Links, which the user m
 _Avoid_: graph, board, tree
 
 **Picture**:
-A drawing of open Issues joined by their Links as lines, rather than the outline the Map moves through: a Group drawn whole, or what surrounds one Issue, as text in the conversation; or the whole Map on a read-only HTML page outside Claude Code, the HTML Picture (ADR 0010). A Picture is drawn from the Snapshot and never writes to a Tracker.
+A drawing of open Issues joined by their Links as lines, rather than the outline the Map moves through: a Group drawn whole, or what surrounds one Issue, as text in the conversation; or the whole Map on a read-only HTML page outside Claude Code, the HTML Picture (ADR 0010). A Picture is drawn from the Snapshot and never writes to a Tracker. In the conversation, it draws only what fits about one screen: a Group too large for one is left to its outline.
 _Avoid_: graph, tree, node, diagram, web Map
 
 **Snapshot**:
