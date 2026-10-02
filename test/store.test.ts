@@ -5,7 +5,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -616,6 +616,64 @@ describe("reading a Snapshot again in full (ADR 0006)", () => {
     assert.deepEqual(await reading, refused);
     assert.notEqual((await store.state(key)).kind, "ready");
     assert.deepEqual(titlesIn(dir), []);
+  });
+});
+
+describe("a lock left behind (#53)", () => {
+  /** Where the store keeps the lock `name`s beside `key`'s Snapshot, made ready for one to be left there. */
+  function lockPath(dir: string, name: "lock" | "reading.lock") {
+    const at = join(dir, "snapshots", "github.com", encodeURIComponent(project.id));
+    mkdirSync(at, { recursive: true });
+    return join(at, `${key.login}.${name}`);
+  }
+
+  /** Leaves a lock at `path` as another taker would: by default a live process that isn't this one, taken at 10:00:00 on a boot that can't be told. */
+  function leave(path: string, holder: { pid?: number; at?: number; boot?: string | null } = {}) {
+    writeFileSync(path, JSON.stringify({ pid: process.ppid, id: "left-behind", at: Date.parse("2026-09-23T10:00:00Z"), boot: null, ...holder }));
+  }
+
+  const leftBehind = {
+    "by a live process that isn't its holder, unrenewed for ten minutes": { at: Date.parse("2026-09-23T09:50:00Z") },
+    "from before a reboot": { boot: "a boot before this one" },
+    "naming this process's pid, which a process before it had": { pid: process.pid },
+  };
+
+  for (const [how, holder] of Object.entries(leftBehind)) {
+    test(`a lock left ${how} doesn't keep the Map 'reading', nor hold up a read, a refresh, an assignment or a Link`, async () => {
+      const dir = scratch();
+      const time = clock();
+      const store = snapshotStore(dir, time);
+      leave(lockPath(dir, "reading.lock"), holder);
+      assert.deepEqual(await store.state(key), { kind: "none" });
+      assert.deepEqual(await store.read(key, fakeTracker(5, { time }).tracker, project), { kind: "done" });
+
+      leave(lockPath(dir, "lock"), holder);
+      await store.assigned(key, "I_1", ["fixture-viewer"]);
+      leave(lockPath(dir, "lock"), holder);
+      await store.linked(key, [{ issue: "I_1", link: { role: "blocked", to: end(2) } }]);
+      const state = await store.state(key);
+      assert.deepEqual(state.kind === "ready" && [state.snapshot.issues[0]!.assignees, state.snapshot.issues[0]!.links.length], [["fixture-viewer"], 1]);
+      leave(lockPath(dir, "lock"), holder);
+      time.advance(121_000);
+      assert.equal((await store.refresh(key, fakeTracker(5, { time }).tracker, project)).kind, "done");
+    });
+  }
+
+  test("a lock a live process took lately is held: a read leaves it be, and a wait for it gives up after a minute naming it", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time);
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    leave(lockPath(dir, "reading.lock"), { at: time.now() });
+    assert.deepEqual(await store.read(key, fakeTracker(5, { time }).tracker, project), { kind: "busy" });
+    leave(lockPath(dir, "lock"), { at: time.now() });
+    // The minute passes on the store's clock while it waits.
+    const passing = setInterval(() => time.advance(20_000), 5);
+    try {
+      await assert.rejects(store.assigned(key, "I_1", ["fixture-viewer"]), new RegExp(`a minute waiting for the Snapshot lock .*${key.login}\\.lock, held by process ${process.ppid}`));
+    } finally {
+      clearInterval(passing);
+    }
   });
 });
 

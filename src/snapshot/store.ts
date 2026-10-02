@@ -10,6 +10,8 @@
  * Snapshot to keep it warm. Beside each Snapshot it keeps a line summing it
  * up, for the status line, which has no time to read a large Snapshot.
  */
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { link, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -121,9 +123,10 @@ export interface SnapshotStore {
   /**
    * Takes the place of the one refresher that keeps it warm, or `null` while
    * another holds it. The claim lapses unless renewed every few minutes, so a
-   * pid handed on to another process after a reboot doesn't hold it forever.
+   * stuck refresher doesn't hold it forever. `renew` says `false` once another
+   * refresher has taken the claim over, and `release` leaves that one's claim.
    */
-  claimRefresher(key: SnapshotKey): Promise<{ renew(): Promise<void>; release(): Promise<void> } | null>;
+  claimRefresher(key: SnapshotKey): Promise<{ renew(): Promise<boolean>; release(): Promise<void> } | null>;
   /** Whether a live process is keeping it warm. */
   refresherRunning(key: SnapshotKey): Promise<boolean>;
   /** How long since anyone drew its Project's Map or glanced at it for the status line, counted from the refresher's claim when nobody has yet. */
@@ -154,8 +157,15 @@ const MARGIN_MS = 60_000;
 const LOOK_EVERY_MS = 60_000;
 /** Where the last look at a Project's Map is written down, beside its Snapshots. */
 const LOOKED = ".looked.json";
-/** How long a refresher's claim lasts unrenewed; it renews it every round. */
-const CLAIM_LAPSES_MS = 10 * 60_000;
+/**
+ * How long a lock lasts unrenewed, whoever's pid it names, since a pid can
+ * pass to another process. The refresher renews its claim every round and a
+ * full read its reading lock every page; a refresh holds the Snapshot lock
+ * for a few requests.
+ */
+const LOCK_LAPSES_MS = 10 * 60_000;
+/** How long a write waits for the Snapshot lock before it gives up and says so. */
+const LOCK_WAIT_MS = 60_000;
 /** How the refresher's claim on a login's Snapshot is named, after the login. */
 const REFRESHER_LOCK = ".refresher.lock";
 /** How often a full read that's done looks again for a refresh to finish before putting its Snapshot in place. */
@@ -219,17 +229,11 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     await save(path, { at: clock.now() });
   };
 
-  /** Whether a live refresher holds the claim at `path` and renewed it lately. */
-  const renewed = async (path: string) => {
-    const claim = await readJson<{ renewedAt?: number }>(path);
-    return clock.now() - (claim?.renewedAt ?? 0) < CLAIM_LAPSES_MS && (await held(path));
-  };
-
   return {
     async state(key) {
       const at = paths(key);
       const snapshot = current(await readJson<Snapshot>(at.snapshot));
-      const running = await held(at.readLock);
+      const running = await held(at.readLock, clock);
       if (snapshot) {
         const due = !snapshot.caughtUp || clock.now() - Date.parse(snapshot.fullReadAt) >= FULL_READ_EVERY_MS;
         return { kind: "ready", snapshot, ageMs: clock.now() - Date.parse(snapshot.readAt), readAgain: due && !running };
@@ -249,7 +253,8 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     async read(key, tracker, project) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
-      if (!(await lock(at.readLock))) return { kind: "busy" };
+      const reader = await lock(at.readLock, clock);
+      if (!reader) return { kind: "busy" };
       try {
         const saved = current(await readJson<Progress>(at.progress));
         // Pages saved in another format are read again.
@@ -274,7 +279,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
           const said = await tracker.capabilities(project);
           if (said.kind === "refused" || said.kind === "not-found") {
             const total = progress.total;
-            return await locked(at.lock, () => forget(at, total, said.reason));
+            return await locked(at.lock, clock, () => forget(at, total, said.reason));
           }
           if (said.kind !== "capabilities") {
             progress.stopped = said.reason;
@@ -291,7 +296,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
           const page = await tracker.openIssues(project, progress.after);
           if (page.kind === "refused" || page.kind === "not-found") {
             const total = progress.total;
-            return await locked(at.lock, () => forget(at, total, page.reason));
+            return await locked(at.lock, clock, () => forget(at, total, page.reason));
           }
           if (page.kind !== "page") {
             progress.stopped = page.reason;
@@ -299,7 +304,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
             return { kind: "failed", reason: page.reason };
           }
           // Saved under the Snapshot's lock, so a refused login's pages are never saved after they're deleted.
-          const deleted = await locked(at.lock, async () => {
+          const deleted = await locked(at.lock, clock, async () => {
             const deleted = await forgotten(at, attempt);
             if (deleted) return deleted;
             await save(at.page(progress.pages), page.issues);
@@ -310,6 +315,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
             progress.spentMs += clock.now() - started;
             progress.after = page.next;
             await save(at.progress, progress);
+            await renew(at.readLock, reader, clock);
             return null;
           });
           if (deleted) return deleted;
@@ -317,7 +323,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
         }
         const switched = await otherLogin(tracker, key);
         if (switched) {
-          await locked(at.lock, () => rm(at.reading, { recursive: true, force: true }));
+          await locked(at.lock, clock, () => rm(at.reading, { recursive: true, force: true }));
           return { kind: "failed", reason: switched };
         }
         const issues: OpenIssue[] = [];
@@ -336,7 +342,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
           support,
         };
         // A refresh of the Snapshot this replaces may be running; its changes are read again from `changesSince`.
-        const replaced = await locked(at.lock, async () => {
+        const replaced = await locked(at.lock, clock, async () => {
           const deleted = await forgotten(at, attempt);
           if (!deleted) await keep(at, snapshot);
           return deleted;
@@ -345,13 +351,14 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
         await rm(at.reading, { recursive: true, force: true });
         return { kind: "done" };
       } finally {
-        await rm(at.readLock, { force: true });
+        await unlock(at.readLock, reader);
       }
     },
 
     async refresh(key, tracker, project) {
       const at = paths(key);
-      if (!(await lock(at.lock))) return { kind: "busy" };
+      const refresher = await lock(at.lock, clock);
+      if (!refresher) return { kind: "busy" };
       try {
         const snapshot = current(await readJson<Snapshot>(at.snapshot));
         if (!snapshot) return { kind: "none" };
@@ -372,7 +379,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
         await keep(at, refreshed);
         return { kind: "done", caughtUp: refreshed.caughtUp };
       } finally {
-        await rm(at.lock, { force: true });
+        await unlock(at.lock, refresher);
       }
     },
 
@@ -390,7 +397,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     async assigned(key, issue, assignees) {
       const at = paths(key);
       if (!current(await readJson<Snapshot>(at.snapshot))) return;
-      await locked(at.lock, async () => {
+      await locked(at.lock, clock, async () => {
         const snapshot = current(await readJson<Snapshot>(at.snapshot));
         if (!snapshot?.issues.some((held) => held.id === issue)) return;
         await keep(at, { ...snapshot, issues: snapshot.issues.map((held) => (held.id === issue ? { ...held, assignees } : held)) });
@@ -400,7 +407,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     async linked(key, ends) {
       const at = paths(key);
       if (!current(await readJson<Snapshot>(at.snapshot))) return;
-      await locked(at.lock, async () => {
+      await locked(at.lock, clock, async () => {
         const snapshot = current(await readJson<Snapshot>(at.snapshot));
         if (!snapshot) return;
         const issues = snapshot.issues.map((held) => {
@@ -414,22 +421,23 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     async forget(key, reason) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
-      return locked(at.lock, () => forget(at, 0, reason));
+      return locked(at.lock, clock, () => forget(at, 0, reason));
     },
 
     async claimRefresher(key) {
       const at = paths(key);
       await mkdir(at.dir, { recursive: true, mode: 0o700 });
-      if (!(await lock(at.refresherLock, { renewedAt: clock.now() }, renewed))) return null;
+      const claim = await lock(at.refresherLock, clock);
+      if (!claim) return null;
       if (!(await readJson<{ at: number }>(join(at.dir, LOOKED)))) await look(key.tracker, key.project);
       return {
-        renew: () => save(at.refresherLock, { pid: process.pid, renewedAt: clock.now() }),
-        release: () => rm(at.refresherLock, { force: true }),
+        renew: () => renew(at.refresherLock, claim, clock),
+        release: () => unlock(at.refresherLock, claim),
       };
     },
 
     async refresherRunning(key) {
-      return renewed(paths(key).refresherLock);
+      return held(paths(key).refresherLock, clock);
     },
 
     async unlookedMs(key) {
@@ -439,11 +447,11 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
 
     async glance(tracker, project) {
       const claimed = (await readdir(projectDir(tracker, project)).catch(() => [])).filter((name) => name.endsWith(REFRESHER_LOCK));
-      let warm: { login: string; renewedAt: number } | null = null;
+      let warm: { login: string; at: number } | null = null;
       for (const name of claimed) {
         const path = join(projectDir(tracker, project), name);
-        const renewedAt = (await readJson<{ renewedAt?: number }>(path))?.renewedAt ?? 0;
-        if ((!warm || renewedAt > warm.renewedAt) && (await renewed(path))) warm = { login: decodeURIComponent(name.slice(0, -REFRESHER_LOCK.length)), renewedAt };
+        const at = (await readJson<Holder>(path))?.at ?? 0;
+        if ((!warm || at > warm.at) && (await held(path, clock))) warm = { login: decodeURIComponent(name.slice(0, -REFRESHER_LOCK.length)), at };
       }
       if (!warm) return { kind: "none" };
       await look(tracker, project);
@@ -451,7 +459,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       const summary = current(await readJson<Summary>(at.summary));
       if (summary) return { kind: "ready", line: summary.line, ageMs: clock.now() - Date.parse(summary.readAt) };
       const progress = current(await readJson<Progress>(at.progress));
-      if (progress && (await held(at.readLock))) return { kind: "reading", read: progress.read, total: progress.total };
+      if (progress && (await held(at.readLock, clock))) return { kind: "reading", read: progress.read, total: progress.total };
       return { kind: "none" };
     },
   };
@@ -548,50 +556,128 @@ function unique(issues: OpenIssue[]): OpenIssue[] {
 }
 
 /** Runs `work` holding the lock, waiting for whoever holds it now; only a refresh or a Snapshot being put in place holds it, and neither for long. */
-async function locked<T>(path: string, work: () => Promise<T>): Promise<T> {
-  while (!(await lock(path))) await sleep(LOCK_POLL_MS);
+async function locked<T>(path: string, clock: Clock, work: () => Promise<T>): Promise<T> {
+  const until = clock.now() + LOCK_WAIT_MS;
+  let id: string | null;
+  while (!(id = await lock(path, clock))) {
+    if (clock.now() >= until) {
+      const holder = await readJson<Holder>(path);
+      throw new Error(`Gave up after a minute waiting for the Snapshot lock ${path}, held by process ${holder?.pid ?? "unknown"}.`);
+    }
+    await sleep(LOCK_POLL_MS);
+  }
   try {
     return await work();
   } finally {
-    await rm(path, { force: true });
+    await unlock(path, id);
   }
 }
 
+/** What a lock holds: who took it, which taking it was, when it was taken or last renewed, and on which boot. */
+interface Holder {
+  pid: number;
+  id: string;
+  at: number;
+  boot: string | null;
+}
+
+/** The ids of the locks this process holds now. */
+const holding = new Set<string>();
+
 /**
- * Takes the lock, or says another live process holds it. A lock whose
- * process is gone is taken over, and so is one `holding` says isn't held.
+ * Takes the lock, returning its id, or `null` while another holds it. A lock
+ * nobody holds any more is moved aside, and taken over only if what moved is
+ * the one found not held, so two takers of one stale lock can't both win.
  */
-async function lock(path: string, stamp: object = {}, holding: (path: string) => Promise<boolean> = held): Promise<boolean> {
-  // Linked into place whole, so nobody ever reads a lock without its holder; named per attempt, since one process can try twice at once.
-  const mine = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  await writeFile(mine, JSON.stringify({ pid: process.pid, ...stamp }), { mode: 0o600 });
+async function lock(path: string, clock: Clock): Promise<string | null> {
+  const id = randomUUID();
+  // Linked into place whole, so nobody ever reads a lock without its holder.
+  const mine = `${path}.${id}.tmp`;
+  await writeFile(mine, JSON.stringify({ pid: process.pid, id, at: clock.now(), boot: bootId() } satisfies Holder), { mode: 0o600 });
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         await link(mine, path);
-        return true;
+        holding.add(id);
+        return id;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        if (await holding(path)) return false;
-        await rm(path, { force: true });
       }
+      const found = await readJson<Holder>(path);
+      if (found && alive(found, clock)) return null;
+      const aside = `${path}.${randomUUID()}.stale`;
+      try {
+        await rename(path, aside);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      const moved = await readJson<Holder>(aside);
+      if (moved?.id !== found?.id) {
+        // Another taker got in first: its lock goes back.
+        // ponytail: a third taker linking in this instant wins too; renameat2's RENAME_NOREPLACE would close it, were it in Node.
+        await link(aside, path).catch(() => {});
+        await rm(aside, { force: true });
+        return null;
+      }
+      await rm(aside, { force: true });
     }
-    return false;
+    return null;
   } finally {
     await rm(mine, { force: true });
   }
 }
 
-async function held(path: string): Promise<boolean> {
-  const holder = await readJson<{ pid: number }>(path);
-  if (!holder) return false;
-  try {
-    process.kill(holder.pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM: the process is alive but belongs to someone else.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+/** Marks the lock `id` renewed now; `false`, changing nothing, once another holds it. */
+async function renew(path: string, id: string, clock: Clock): Promise<boolean> {
+  const found = await readJson<Holder>(path);
+  if (found?.id !== id) {
+    holding.delete(id);
+    return false;
   }
+  await save(path, { ...found, at: clock.now() });
+  return true;
+}
+
+/** Lets go of the lock `id`, leaving it be if another has taken it over since. */
+async function unlock(path: string, id: string): Promise<void> {
+  holding.delete(id);
+  if ((await readJson<Holder>(path))?.id === id) await rm(path, { force: true });
+}
+
+async function held(path: string, clock: Clock): Promise<boolean> {
+  const found = await readJson<Holder>(path);
+  return found !== null && alive(found, clock);
+}
+
+/** Whether the lock's holder can still be running. Its pid alone can't say, since another process may have that pid now. */
+function alive({ pid, id, at, boot }: Holder, clock: Clock): boolean {
+  const thisBoot = bootId();
+  if (boot && thisBoot && boot !== thisBoot) return false;
+  if (!(clock.now() - at < LOCK_LAPSES_MS)) return false;
+  // Our own pid holds only what this process took, not what one before it with that pid left.
+  if (pid === process.pid) return holding.has(id);
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    // ESRCH: the process is gone. EPERM: it's another OS user's, so it can't hold this user's lock.
+    return false;
+  }
+}
+
+let boot: string | null | undefined;
+
+/** What tells this boot from the last, where the OS says; `null` where it doesn't, which leaves a lock from before a reboot to lapse. */
+function bootId(): string | null {
+  if (boot !== undefined) return boot;
+  try {
+    const said = process.platform === "darwin" ? execFileSync("sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" }) : readFileSync("/proc/sys/kernel/random/boot_id", "utf8");
+    boot = said.trim() || null;
+  } catch {
+    boot = null;
+  }
+  return boot;
 }
 
 /** Written whole or not at all, and readable only by this OS user. */
