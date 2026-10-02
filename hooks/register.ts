@@ -15,14 +15,14 @@ async function refreshStatus($: Engine): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'map', description: "Draw the Map of this checkout's Home Project (args: group N | issue X)" })
+    await $.command.register({ name: 'issue-map', description: "Draw the Map of this checkout's Home Project (args: group N | issue X)" })
     void refreshStatus($)
     $.clock.every(60_000, () => refreshStatus($))
     return next(e)
   })
 
   // Shown as the command's output, and handed to Claude as context: the user and Claude read the same output.
-  on('command.run', { command: 'map' }, async ($, e) => {
+  on('command.run', { command: 'issue-map' }, async ($, e) => {
     const text = await cli($, e.args.trim() ? e.args.trim().split(/\s+/) : ['map'])
     return { text, context: [text] }
   })
