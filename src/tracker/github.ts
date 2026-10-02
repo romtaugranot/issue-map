@@ -58,7 +58,7 @@ const VIEWER_QUERY = `query { viewer { login } }`;
 
 /** Need 9's half the Tracker states: this login's role in the repository. */
 const ROLE_QUERY = `query($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) { viewerPermission }
+  repository(owner: $owner, name: $name) { viewerPermission isPrivate }
 }`;
 
 /** Roles that may write a Link or assign: triage and above. */
@@ -324,7 +324,7 @@ export function github(deps: AdapterDeps): TrackerKind {
 
     async probe(host): Promise<Identification> {
       loggedInHosts ??= hostsGhKnows(cli);
-      const known = env.GH_HOST === host || (await loggedInHosts).includes(host);
+      const known = hostNamed(env.GH_HOST) === host || (await loggedInHosts).includes(host);
       const answer = await http(`https://${host}/api/v3/meta`);
       if (answer.kind === "unreachable") {
         return known
@@ -390,23 +390,24 @@ async function capabilities(ctx: Ctx, { path }: Project): Promise<CapabilitiesAn
   const answer = await graphql(ctx.cli, ctx.host, ROLE_QUERY, { owner, name });
   if (answer.kind === "missing") return ghMissing(ctx.host);
   const body = parse(answer.stdout);
-  const repository = (body?.data as { repository?: { viewerPermission: string | null } | null } | undefined)?.repository;
+  const repository = (body?.data as { repository?: { viewerPermission: string | null; isPrivate: boolean } | null } | undefined)?.repository;
   if (answer.code !== 0 || !repository) return failure(answer, body, ctx.host, path);
   const links: Capabilities["links"] = {
     blocks: linkKind(ctx, ctx.has.blocks, "Blocks", GHES_SINCE.blocks),
     parent: linkKind(ctx, ctx.has.subIssues, "Parent", GHES_SINCE.subIssues),
     related: { kind: "cant-record", reason: NO_RELATED },
   };
-  return { kind: "capabilities", links, write: await writes(ctx, path, repository.viewerPermission) };
+  return { kind: "capabilities", links, write: await writes(ctx, path, repository.viewerPermission, repository.isPrivate) };
 }
 
-async function writes(ctx: Ctx, path: string, role: string | null): Promise<WriteAnswer> {
+async function writes(ctx: Ctx, path: string, role: string | null, isPrivate: boolean): Promise<WriteAnswer> {
   if (role === null) return { kind: "cant-tell", reason: `GitHub doesn't say this login's role in ${path}, as it doesn't for an app's token` };
   if (!ROLES_THAT_WRITE.has(role)) return { kind: "cant", reason: `this login can only read ${path}; writing a Link or assigning takes the triage role` };
   const held = await heldEntry(ctx.cli, ctx.host);
   if (held === null) return { kind: "cant-tell", reason: `\`gh auth status\` didn't say what this login's token may write; \`gh\` 2.64 and later do` };
   const scopes = held.scopes?.split(",").map((scope) => scope.trim()).filter(Boolean) ?? [];
-  if (scopes.includes("repo")) return { kind: "can" };
+  // A classic token with only `public_repo` may write public repositories.
+  if (scopes.includes("repo") || (scopes.includes("public_repo") && !isPrivate)) return { kind: "can" };
   if (scopes.length === 0) return { kind: "cant-tell", reason: "this login's token doesn't list what it may write, as a fine-grained token doesn't" };
   return { kind: "cant", reason: `this login's token can't write: it has no \`repo\` scope — run \`gh auth refresh --hostname ${ctx.host} --scopes repo\`` };
 }

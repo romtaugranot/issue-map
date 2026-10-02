@@ -7,6 +7,7 @@
  */
 import type { Project, Tracker, Trackers } from "../tracker/tracker.ts";
 import type { Checkout, Remote } from "./checkout.ts";
+import { hostNamed } from "../tracker/boundary.ts";
 import { remoteAddress, sshHosts, type Address } from "./remote-address.ts";
 
 export interface HomeDeps {
@@ -164,12 +165,15 @@ export async function likelyHome(checkout: Checkout, sshHostname: (alias: string
 
 function envDefaults(env: Record<string, string | undefined>): Address[] {
   const defaults: Address[] = [];
-  // GH_REPO is [HOST/]OWNER/REPO.
-  const ghRepo = env.GH_REPO?.split("/");
-  if (ghRepo && ghRepo.length >= 2) {
-    const path = ghRepo.slice(-2).join("/");
-    const host = ghRepo.length > 2 ? ghRepo.slice(0, -2).join("/") : (env.GH_HOST ?? "github.com");
-    defaults.push({ host, path });
+  // GH_REPO is a URL, or [HOST/]OWNER/REPO.
+  const ghRepo = env.GH_REPO?.trim();
+  if (ghRepo && (ghRepo.includes("://") || ghRepo.startsWith("git@"))) {
+    const address = remoteAddress(ghRepo, (alias) => alias);
+    if (address) defaults.push(address);
+  } else if (ghRepo) {
+    const parts = ghRepo.split("/");
+    const host = parts.length === 3 ? hostNamed(parts[0]) : (hostNamed(env.GH_HOST) ?? "github.com");
+    if (host && (parts.length === 2 || parts.length === 3)) defaults.push({ host, path: parts.slice(-2).join("/") });
   }
   // GITLAB_REPO is a URL, or a path whose first segment is a host only when it looks like one.
   const glRepo = env.GITLAB_REPO;
