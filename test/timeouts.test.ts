@@ -52,7 +52,7 @@ test("a refresh that times out leaves the Snapshot in place and says why, and th
   assert.deepEqual([kept.snapshot.issues.length, kept.ageMs, kept.stale], [2, 600_000, "github.com didn't answer in 60 s"]);
 
   hangs = false;
-  assert.deepEqual(await store.refresh(key, tracker, project), { kind: "done", caughtUp: true });
+  assert.deepEqual(await store.refresh(key, tracker, project).then((o) => [o.kind, o.kind === "done" && o.caughtUp]), ["done", true]);
   const after = await store.state(key);
   assert.equal(after.kind === "ready" && after.ageMs, 0);
 });

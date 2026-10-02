@@ -343,6 +343,34 @@ describe("refreshing a Snapshot for a draw (ADR 0006)", () => {
     assert.equal(fake.refreshes[1]?.since, "2026-09-23T10:01:02.000Z");
   });
 
+  test("a refresh that finds nothing changed doesn't rewrite the Snapshot, which is as fresh as if it had, to any reader and the status line (#75)", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time, { summarise: (s) => `read at ${s.readAt}` });
+    await store.read(key, fakeTracker(5, { time }).tracker, project);
+    assert.ok(await store.claimRefresher(key));
+    const file = join(dir, "snapshots", "github.com", encodeURIComponent(project.id), `${key.login}.json`);
+    const saved = statSync(file);
+    time.advance(121_000);
+    const fake = fakeTracker(5, { time });
+    assert.equal((await store.refresh(key, fake.tracker, project)).kind, "done");
+    assert.deepEqual([statSync(file).ino, statSync(file).mtimeMs], [saved.ino, saved.mtimeMs], "not rewritten");
+    const another = snapshotStore(dir, time);
+    const state = await another.state(key);
+    assert.deepEqual(state.kind === "ready" && [state.ageMs, state.snapshot.readAt], [0, "2026-09-23T10:02:03.000Z"]);
+    assert.deepEqual(await store.glance("github.com", project.id), { kind: "ready", line: "read at 2026-09-23T10:02:03.000Z", ageMs: 0 });
+    // The next refresh reads from when this one started.
+    time.advance(121_000);
+    await another.forDraw(key, fake.tracker, project);
+    assert.equal(fake.refreshes[1]?.since, "2026-09-23T10:01:02.000Z");
+    // One that finds a change rewrites it.
+    time.advance(121_000);
+    await store.refresh(key, fakeTracker(5, { time, changes: { kind: "changes", open: [{ ...issue(2), title: "Renamed" }], ends: [], requests: [], caughtUp: true, unread: {} } }).tracker, project);
+    assert.notEqual(statSync(file).mtimeMs, saved.mtimeMs);
+    const renamed = await snapshotStore(dir, time).state(key);
+    assert.equal(renamed.kind === "ready" && renamed.snapshot.issues[1]?.title, "Renamed");
+  });
+
   test("when the Tracker can't be read, the old Snapshot is handed over as it was, with its age and why", async () => {
     const { store, time } = await readStore();
     time.advance(3 * 3_600_000);
@@ -425,9 +453,9 @@ describe("refreshing a Snapshot for a draw (ADR 0006)", () => {
     const behind = fakeTracker(5, { time, changes: { kind: "changes", open: [], ends: [], requests: [], caughtUp: false, unread: {} } });
     const caughtUp = fakeTracker(5, { time });
     time.advance(121_000);
-    assert.deepEqual(await store.refresh(key, behind.tracker, project), { kind: "done", caughtUp: false });
+    assert.deepEqual(await store.refresh(key, behind.tracker, project).then((o) => [o.kind, o.kind === "done" && o.caughtUp]), ["done", false]);
     time.advance(121_000);
-    assert.deepEqual(await store.refresh(key, caughtUp.tracker, project), { kind: "done", caughtUp: false });
+    assert.deepEqual(await store.refresh(key, caughtUp.tracker, project).then((o) => [o.kind, o.kind === "done" && o.caughtUp]), ["done", false]);
     const state = await store.state(key);
     assert.equal(state.kind === "ready" && state.snapshot.caughtUp, false);
   });
