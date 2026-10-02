@@ -22,7 +22,7 @@ describe("the overview", () => {
         "- #1 Plan the importer — ▶1 wait on it",
         "",
         "**Groups: 1** — largest first",
-        "- #1 Plan the importer — 2 Issues",
+        "- #1 Plan the importer — 2 Issues, 1 Unblocked",
         "",
         "**Unlinked: 1** — no Link to another open Issue. Ask to list them.",
       ].join("\n"),
@@ -44,14 +44,14 @@ describe("the overview", () => {
     links.push([{ outside: "fixture-org/plans#7" }, "parent", 100]);
     assert.deepEqual(groupLines(overview(snapshot(issues, links))), [
       "**Groups: 10** — largest first",
-      "- #10 Issue 10 — 10 Issues",
-      "- #20 Issue 20 — 9 Issues",
-      "- #30 Issue 30 — 8 Issues",
-      "- #40 Issue 40 — 7 Issues",
-      "- #50 Issue 50 — 6 Issues",
-      "- #60 Issue 60 — 5 Issues",
-      "- #70 Issue 70 — 4 Issues",
-      "- #80 Issue 80 — 3 Issues",
+      "- #10 Issue 10 — 10 Issues, 9 Unblocked",
+      "- #20 Issue 20 — 9 Issues, 8 Unblocked",
+      "- #30 Issue 30 — 8 Issues, 7 Unblocked",
+      "- #40 Issue 40 — 7 Issues, 6 Unblocked",
+      "- #50 Issue 50 — 6 Issues, 5 Unblocked",
+      "- #60 Issue 60 — 5 Issues, 4 Unblocked",
+      "- #70 Issue 70 — 4 Issues, 3 Unblocked",
+      "- #80 Issue 80 — 3 Issues, 2 Unblocked",
       "- … 2 more Groups, 3 Issues. Ask to list them.",
     ]);
   });
@@ -66,7 +66,7 @@ describe("the overview", () => {
   test("trims a long title to 60 characters", () => {
     const title = "Support reading state from every remote backend at once, in parallel, with retries";
     const s = snapshot([{ n: 1, title }, { n: 2 }], [[1, "blocks", 2]]);
-    assert.equal(groupLines(overview(s))[1], "- #1 Support reading state from every remote backend at once, in… — 2 Issues");
+    assert.equal(groupLines(overview(s))[1], "- #1 Support reading state from every remote backend at once, in… — 2 Issues, 1 Unblocked");
   });
 });
 
@@ -135,8 +135,8 @@ describe("Take next", () => {
     );
     assert.deepEqual(takeNext(overview(s)), [
       "**Take next: 4** — most waited on first",
-      "- #2 Issue 2 — ▶2 via #1",
-      "- #4 Issue 4 — ▶2 via #1",
+      "- #2 Issue 2 — ▶2 wait on it, via #1",
+      "- #4 Issue 4 — ▶2 wait on it, via #1",
       "- #7 Issue 7 — ▶1 wait on it",
       "- #20 Issue 20",
     ]);
@@ -150,8 +150,8 @@ describe("Take next", () => {
     );
     assert.deepEqual(takeNext(overview(s)), [
       "**Take next: 2** — most waited on first",
-      "- #3 Issue 3 — ▶3 via #2",
-      "- #5 Issue 5 — ▶3 via #4",
+      "- #3 Issue 3 — ▶3 wait on it, via #2",
+      "- #5 Issue 5 — ▶3 wait on it, via #4",
     ]);
   });
 
@@ -236,7 +236,7 @@ describe("Take next", () => {
   test("Parent Links in a cycle pass a count down to the children under it once", () => {
     // #1 and #2 are each other's Parent; #1 is the Parent of #3, #2 of #4; #9 waits on #1.
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 9 }], [[1, "parent", 2], [2, "parent", 1], [1, "parent", 3], [2, "parent", 4], [1, "blocks", 9]]);
-    const expected = ["**Take next: 2** — most waited on first", "- #3 Issue 3 — ▶1 via #1", "- #4 Issue 4 — ▶1 via #2"];
+    const expected = ["**Take next: 2** — most waited on first", "- #3 Issue 3 — ▶1 wait on it, via #1", "- #4 Issue 4 — ▶1 wait on it, via #2"];
     assert.deepEqual(takeNext(overview(s)), expected);
     assert.deepEqual(takeNext(overview({ ...s, issues: [...s.issues].reverse() })), expected, "the same whatever order the Issues were read in");
   });
@@ -245,22 +245,22 @@ describe("Take next", () => {
 describe("Groups (ADR 0008)", () => {
   test("Parent and Blocks Links join a Group directly and through one another, and the top Issue heads it", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[3, "blocks", 2], [2, "blocks", 1], [4, "parent", 3]]);
-    assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #4 Issue 4 — 4 Issues"]);
+    assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #4 Issue 4 — 4 Issues, 1 Unblocked"]);
   });
 
   test("the Issue with most of the Project's own Issues under it heads the Group; Outside Issues under it don't count", () => {
     // #1 has two Outside children; #2 has one of the Project's own, #3, which Blocks one of #1's.
     const plans = [{ outside: "fixture-org/plans#7" }, { outside: "fixture-org/plans#8" }];
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "parent", plans[0]!], [1, "parent", plans[1]!], [2, "parent", 3], [3, "blocks", plans[0]!]]);
-    assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #2 Issue 2 — 3 Issues, 2↗"]);
+    assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #2 Issue 2 — 3 Issues, 2 Unblocked, 2↗ Outside"]);
   });
 
   test("a Related Link joins nothing between Issues that have a Parent or Blocks Link", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [3, "parent", 4], [2, "related", 4]]);
     assert.deepEqual(groupLines(overview(s)), [
       "**Groups: 2** — largest first",
-      "- #1 Issue 1 — 2 Issues",
-      "- #3 Issue 3 — 2 Issues",
+      "- #1 Issue 1 — 2 Issues, 1 Unblocked",
+      "- #3 Issue 3 — 2 Issues, 1 Unblocked",
     ]);
   });
 
@@ -273,9 +273,29 @@ describe("Groups (ADR 0008)", () => {
     assert.match(text, /^\*\*fixture-org\/tools\*\* · 6 open · 5 on the Map · 1 Unlinked · Promised$/m);
     assert.deepEqual(groupLines(text), [
       "**Groups: 2** — largest first",
-      "- #3 Issue 3 — 3 Issues",
-      "- #1 Issue 1 — 2 Issues",
+      "- #3 Issue 3 — 3 Issues, 3 Unblocked",
+      "- #1 Issue 1 — 2 Issues, 1 Unblocked",
     ]);
+  });
+
+  test("a Group line says how many of its Issues are Unblocked, as Take next counts them, and its Outside Issues in words", () => {
+    // #1 and #2 Block each other, so all their Group is Blocked. #10 is the Parent of #11 and #12 and gives way to them; #12 is someone else's; #13 waits on #11; an Outside Issue is under #10.
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 10 }, { n: 11 }, { n: 12, assignees: ["fixture-other"] }, { n: 13 }],
+      [[1, "blocks", 2], [2, "blocks", 1], [2, "blocks", 3], [10, "parent", 11], [10, "parent", 12], [11, "blocks", 13], [10, "parent", { outside: "fixture-org/plans#7" }]],
+    );
+    const text = overview(s);
+    assert.deepEqual(groupLines(text), [
+      "**Groups: 2** — largest first",
+      "- #10 Issue 10 — 4 Issues, 2 Unblocked, 1↗ Outside",
+      "- #1 Issue 1 — 3 Issues, 0 Unblocked",
+    ]);
+    assert.equal(takeNext(text)[0], "**Take next: 1** — most waited on first · 1 taken by others", "the 2 Unblocked are Take next's 1 and the 1 taken by others");
+  });
+
+  test("where Blocks Links can't be read, a Group line counts nothing Unblocked", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "parent", 2], [1, "parent", { outside: "fixture-org/plans#7" }]], { blocks: "GitLab Free doesn't record them" });
+    assert.deepEqual(groupLines(overview(s)), ["**Groups: 1** — largest first", "- #1 Issue 1 — 2 Issues, 1↗ Outside"]);
   });
 
   test("an Issue whose only Links reach closed Issues is Unlinked", () => {
@@ -348,7 +368,7 @@ describe("closed Issues", () => {
     // #9 is closed and the Parent of #1 and #2, which are the Parents of #3 and #4.
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[{ closed: 9 }, "parent", 1], [{ closed: 9 }, "parent", 2], [1, "parent", 3], [2, "parent", 4]]);
     const text = overview(s);
-    assert.deepEqual(groupLines(text), ["**Groups: 2** — largest first", "- #1 Issue 1 — 2 Issues", "- #2 Issue 2 — 2 Issues"]);
+    assert.deepEqual(groupLines(text), ["**Groups: 2** — largest first", "- #1 Issue 1 — 2 Issues, 1 Unblocked", "- #2 Issue 2 — 2 Issues, 1 Unblocked"]);
     for (const drawn of [text, draw(s, { kind: "group", group: 1, page: 1 }).text, draw(s, { kind: "under", ref: "#1", page: 1 }).text]) {
       assert.doesNotMatch(drawn, /#9/);
     }
@@ -374,7 +394,7 @@ describe("Outside Issues (ADR 0005)", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[plans, "parent", 1], [plans, "parent", 2]]);
     assert.deepEqual(groupLines(overview(s)), [
       "**Groups: 1** — largest first",
-      "- ↗fixture-org/plans#7 Q3 importer epic — 2 Issues, 1↗",
+      "- ↗fixture-org/plans#7 Q3 importer epic — 2 Issues, 2 Unblocked, 1↗ Outside",
     ]);
   });
 
@@ -390,9 +410,9 @@ describe("Outside Issues (ADR 0005)", () => {
     );
     assert.deepEqual(groupLines(overview(s)), [
       "**Groups: 3** — largest first",
-      "- ↗fixture-org/plans#7 Q3 importer epic — 1 Issue, 1↗",
-      "- #2 Issue 2 — 1 Issue",
-      "- #3 Issue 3 — 1 Issue, 1↗",
+      "- ↗fixture-org/plans#7 Q3 importer epic — 1 Issue, 1 Unblocked, 1↗ Outside",
+      "- #2 Issue 2 — 1 Issue, 1 Unblocked",
+      "- #3 Issue 3 — 1 Issue, 1 Unblocked, 1↗ Outside",
     ]);
   });
 
@@ -403,9 +423,9 @@ describe("Outside Issues (ADR 0005)", () => {
     assert.match(text, /· 3 on the Map · 0 Unlinked · Promised$/m);
     assert.deepEqual(groupLines(text), [
       "**Groups: 3** — largest first",
-      "- ↗ an Issue this login can't read — 1 Issue, 1↗",
-      "- ↗ an Issue this login can't read — 1 Issue, 1↗",
-      "- #3 Issue 3 — 1 Issue, 1↗",
+      "- ↗ an Issue this login can't read — 1 Issue, 1 Unblocked, 1↗ Outside",
+      "- ↗ an Issue this login can't read — 1 Issue, 1 Unblocked, 1↗ Outside",
+      "- #3 Issue 3 — 1 Issue, 1 Unblocked, 1↗ Outside",
     ]);
   });
 });
@@ -424,11 +444,11 @@ describe("a Group's outline (ADR 0008)", () => {
     assert.equal(
       outline(tree, 1),
       [
-        "**Group 1 of 1** · #1 Issue 1 — 6 Issues",
+        "**Group 1 of 1** · #1 Issue 1 — 6 Issues, 2 Unblocked",
         "",
         "**At the top: 2** — most under it first",
-        "- #1 Issue 1 — 4 under it",
-        "- #6 Issue 6 — 1 under it",
+        "- #1 Issue 1 — 4 under it · 1 Unblocked",
+        "- #6 Issue 6 — 1 under it · 1 Unblocked",
         "",
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
@@ -439,18 +459,31 @@ describe("a Group's outline (ADR 0008)", () => {
     assert.equal(
       outline(tree, "#1"),
       [
-        "**Group 1 of 1** · #1 Issue 1 — 6 Issues",
+        "**Group 1 of 1** · #1 Issue 1 — 6 Issues, 2 Unblocked",
         "",
         "**Under #1: 3** — most under it first",
-        "- #2 Issue 2 — 1 under it",
-        "- #3 Issue 3",
-        "- #7 Issue 7 — Blocked by it",
+        "- #2 Issue 2 — 1 under it · 1 Unblocked",
+        "- #3 Issue 3 — 0 Unblocked",
+        "- #7 Issue 7 — Blocked by it · 0 Unblocked",
         "",
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
     );
     assert.equal(outline(tree, "#2").split("\n")[2], "**Under #2: 1** — oldest first", "a level deeper again, where nothing has anything beneath it");
     assert.equal(outline(tree, "https://github.com/fixture-org/tools/issues/2"), outline(tree, "#2"), "by URL too");
+  });
+
+  test("each entry says how many Unblocked Issues it and those beneath it hold, as Take next counts them", () => {
+    // In the tree, #1 gives way to its children #2 and #3; #2 gives way to #4. #6 Blocks #3, and #1 Blocks #7. So #4 and #6 are Unblocked.
+    const top = outline(tree, 1).split("\n");
+    assert.equal(top[0], "**Group 1 of 1** · #1 Issue 1 — 6 Issues, 2 Unblocked");
+    assert.deepEqual(top.slice(3, 5), ["- #1 Issue 1 — 4 under it · 1 Unblocked", "- #6 Issue 6 — 1 under it · 1 Unblocked"]);
+    assert.deepEqual(outline(tree, "#1").split("\n").slice(3, 6), ["- #2 Issue 2 — 1 under it · 1 Unblocked", "- #3 Issue 3 — 0 Unblocked", "- #7 Issue 7 — Blocked by it · 0 Unblocked"]);
+    assert.equal(takeNext(overview(tree))[0], "**Take next: 2** — most waited on first");
+    const reaching = snapshot([{ n: 1 }, { n: 2 }], [[1, "parent", 2], [1, "parent", { outside: "fixture-org/plans#7" }]]);
+    assert.deepEqual(outline(reaching, "#1").split("\n").slice(3, 5), ["- #2 Issue 2 — 1 Unblocked", "- ↗fixture-org/plans#7 Outside fixture-org/plans#7"], "an Outside Issue with none of the Project's beneath it holds none to count");
+    const unread = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "parent", 2], [2, "parent", 3]], { blocks: "GitLab Free doesn't record them" });
+    assert.equal(outline(unread, 1).split("\n")[3], "- #2 Issue 2 — 1 under it", "none where Blocks Links can't be read");
   });
 
   test("an Issue is named by its reference, after the Project's path, or by an Issue or work-item URL of it in the Project", () => {
@@ -478,16 +511,16 @@ describe("a Group's outline (ADR 0008)", () => {
     // Before: #1 heads 3 Issues, #10 heads 2. A refresh adds two children to #10, so it comes first.
     const before = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 10 }, { n: 11 }], [[1, "parent", 2], [1, "parent", 3], [10, "parent", 11]]);
     const after = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 10 }, { n: 11 }, { n: 12 }, { n: 13 }], [[1, "parent", 2], [1, "parent", 3], [10, "parent", 11], [10, "parent", 12], [10, "parent", 13]]);
-    assert.equal(groupLines(overview(before))[1], "- #1 Issue 1 — 3 Issues", "the overview's first Group, picked by place");
-    assert.equal(outline(after, 1).split("\n")[0], "**Group 1 of 2** · #10 Issue 10 — 4 Issues", "its first line names the head the skill checks against");
-    assert.equal(groupLines(overview(after))[1], "- #10 Issue 10 — 4 Issues", "a redrawn overview agrees with it");
+    assert.equal(groupLines(overview(before))[1], "- #1 Issue 1 — 3 Issues, 2 Unblocked", "the overview's first Group, picked by place");
+    assert.equal(outline(after, 1).split("\n")[0], "**Group 1 of 2** · #10 Issue 10 — 4 Issues, 3 Unblocked", "its first line names the head the skill checks against");
+    assert.equal(groupLines(overview(after))[1], "- #10 Issue 10 — 4 Issues, 3 Unblocked", "a redrawn overview agrees with it");
   });
 
   test("an Issue with Related Links shows how many on its line, and the Related Issue stays in its own Group", () => {
     // #2 is Related to #4, which is in the Group #3 heads, and to an Outside Issue.
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [3, "parent", 4], [2, "related", 4], [2, "related", { outside: "fixture-org/plans#9" }]]);
-    assert.deepEqual(outline(s, 1).split("\n").slice(2, 4), ["**Under #1, alone at the top: 1** — oldest first", "- #2 Issue 2 — 2 Related"]);
-    assert.equal(outline(s, 2).split("\n")[3], "- #4 Issue 4 — 1 Related");
+    assert.deepEqual(outline(s, 1).split("\n").slice(2, 4), ["**Under #1, alone at the top: 1** — oldest first", "- #2 Issue 2 — 1 Unblocked · 2 Related"]);
+    assert.equal(outline(s, 2).split("\n")[3], "- #4 Issue 4 — 1 Unblocked · 1 Related");
   });
 
   test("the overview draws no Related count between Groups", () => {
@@ -499,13 +532,13 @@ describe("a Group's outline (ADR 0008)", () => {
     const issues = Array.from({ length: 12 }, (_, i): IssueSpec => ({ n: i + 1 }));
     const links = issues.slice(1).map(({ n }): LinkSpec => [n - 1, "related", n]);
     const first = outline(snapshot(issues, links), 1).split("\n");
-    assert.deepEqual(first.slice(2, 5), ["**At the top: 12** — oldest first · page 1 of 2", "- #1 Issue 1 — 1 Related", "- #2 Issue 2 — 2 Related"]);
+    assert.deepEqual(first.slice(2, 5), ["**At the top: 12** — oldest first · page 1 of 2", "- #1 Issue 1 — 1 Unblocked · 1 Related", "- #2 Issue 2 — 1 Unblocked · 2 Related"]);
     assert.equal(first.length, 15);
     assert.equal(first.at(-1), "_`more` for the next 10 · `map` for the Map_");
     assert.deepEqual(outline(snapshot(issues, links), 1, 2).split("\n").slice(2), [
       "**At the top: 12** — oldest first · page 2 of 2",
-      "- #11 Issue 11 — 2 Related",
-      "- #12 Issue 12 — 1 Related",
+      "- #11 Issue 11 — 1 Unblocked · 2 Related",
+      "- #12 Issue 12 — 1 Unblocked · 1 Related",
       "",
       "_`map` for the Map_",
     ]);
@@ -517,11 +550,11 @@ describe("a Group's outline (ADR 0008)", () => {
     assert.equal(
       outline(s, 1),
       [
-        "**Group 1 of 1** · ↗fixture-org/plans#7 Q3 importer epic (an Outside Issue) — 3 Issues, 1↗",
+        "**Group 1 of 1** · ↗fixture-org/plans#7 Q3 importer epic (an Outside Issue) — 3 Issues, 2 Unblocked, 1↗ Outside",
         "",
         "**Under ↗fixture-org/plans#7, alone at the top: 2** — most under it first",
-        "- #2 Issue 2 — 1 under it",
-        "- #1 Issue 1",
+        "- #2 Issue 2 — 1 under it · 1 Unblocked",
+        "- #1 Issue 1 — 1 Unblocked",
         "",
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
@@ -532,16 +565,16 @@ describe("a Group's outline (ADR 0008)", () => {
   test("an Outside Issue this login can't read heads its Group without a name, still as an Outside Issue", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }], [[{ hidden: "h1" }, "parent", 1], [1, "parent", 2]]);
     assert.deepEqual(outline(s, 1).split("\n").slice(0, 4), [
-      "**Group 1 of 1** · ↗ an Issue this login can't read (an Outside Issue) — 2 Issues, 1↗",
+      "**Group 1 of 1** · ↗ an Issue this login can't read (an Outside Issue) — 2 Issues, 1 Unblocked, 1↗ Outside",
       "",
       "**Under ↗ an Outside Issue this login can't read, alone at the top: 1** — most under it first",
-      "- #1 Issue 1 — 1 under it",
+      "- #1 Issue 1 — 1 under it · 1 Unblocked",
     ]);
   });
 
   test("where Links run in a circle, the oldest Issue in it stands at the top", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "blocks", 2], [2, "blocks", 3], [3, "blocks", 1]]);
-    assert.deepEqual(outline(s, 1).split("\n").slice(2, 6), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — Blocked by it · 2 under it", "", "_Name one to open the level below it · `map` for the Map_"]);
+    assert.deepEqual(outline(s, 1).split("\n").slice(2, 6), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — Blocked by it · 2 under it · 0 Unblocked", "", "_Name one to open the level below it · `map` for the Map_"]);
   });
 
   test("says so when the Issue named has nothing beneath it, is Unlinked, isn't there, or the Group doesn't exist", () => {
@@ -573,8 +606,8 @@ describe("the Group list", () => {
   test("pages every Group 15 at a time, largest first, numbered by the place that opens it", () => {
     const lines = list(1);
     assert.equal(lines[0], "**Groups: 20** — largest first, page 1 of 2");
-    assert.deepEqual(lines.slice(1, 3), ["1. #1 Issue 1 — 21 Issues", "2. #2 Issue 2 — 20 Issues"]);
-    assert.equal(lines[15], "15. #15 Issue 15 — 7 Issues");
+    assert.deepEqual(lines.slice(1, 3), ["1. #1 Issue 1 — 21 Issues, 20 Unblocked", "2. #2 Issue 2 — 20 Issues, 19 Unblocked"]);
+    assert.equal(lines[15], "15. #15 Issue 15 — 7 Issues, 6 Unblocked");
     assert.deepEqual(lines.slice(16), ["", "_`more` for the next 15 · a Group's number opens it · `map` for the Map_"]);
     for (const place of [1, 9, 15]) {
       const head = lines[place]!.replace(/^\d+\. /, "").split(" — ")[0];
@@ -585,7 +618,7 @@ describe("the Group list", () => {
   test("the last page carries on the numbering and offers the Map back; a page past the end shows the last", () => {
     assert.deepEqual(list(2), [
       "**Groups: 20** — largest first, page 2 of 2",
-      ...[16, 17, 18, 19, 20].map((g) => `${g}. #${g} Issue ${g} — ${22 - g} Issues`),
+      ...[16, 17, 18, 19, 20].map((g) => `${g}. #${g} Issue ${g} — ${22 - g} Issues, ${21 - g} Unblocked`),
       "",
       "_A Group's number opens it · `map` for the Map_",
     ]);
@@ -727,7 +760,7 @@ describe("the Project's band (ADR 0003)", () => {
     const lines = overview(snapshot(issues, links, {}, { untested })).split("\n");
     assert.equal(lines[0], "**fixture-org/tools** · 3 open · 2 on the Map · 1 Unlinked · Best effort");
     assert.equal(lines[1], `⚠ Best effort: ${untested} — the Map is untested here, and read-only: it writes nothing`);
-    assert.ok(lines.includes("- #1 Issue 1 — 2 Issues"), "the Map is still drawn");
+    assert.ok(lines.includes("- #1 Issue 1 — 2 Issues, 1 Unblocked"), "the Map is still drawn");
   });
 
   test("a Link kind the Map can't read is named with why, since Links of it may be missing; one the Project can't record is named only on Best effort", () => {

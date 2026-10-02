@@ -34,7 +34,7 @@ describe("recorded Snapshots", () => {
   test("opentofu/opentofu: Take next opens with #3414's children, carrying its count", () => {
     const lines = section(draw(recorded("opentofu__opentofu"), { kind: "overview" }).text, "**Take next");
     assert.match(lines[0]!, /^\*\*Take next: 15\*\* — most waited on first · 10 more not listed · 4 taken by others · Closing Requests unread \(the recording didn't read them\)/);
-    assert.deepEqual(lines.slice(1, 4).map((l) => l.replace(/^(- #\d+) .* — /, "$1 — ")), ["- #4227 — ▶4 via #3414", "- #4297 — ▶4 via #3414", "- #4390 — ▶4 via #3414"]);
+    assert.deepEqual(lines.slice(1, 4).map((l) => l.replace(/^(- #\d+) .* — /, "$1 — ")), ["- #4227 — ▶4 wait on it, via #3414", "- #4297 — ▶4 wait on it, via #3414", "- #4390 — ▶4 wait on it, via #3414"]);
   });
 
   // #20 measured it: 7 open Issues have a closed blocker, and for 6 it's their only Link, so they're Unlinked and still in Take next.
@@ -42,6 +42,15 @@ describe("recorded Snapshots", () => {
     const page = draw(recorded("opentofu__opentofu"), { kind: "unlinked", page: 6 }).text.split("\n");
     assert.ok(page.includes(String.raw`- #3107 \`-detailed-exitcode\` should exit with status 2 when \`-refre… — unblocked since #3595 closed`), page.join("\n"));
     assert.ok(page.some((l) => l.startsWith("- #3163 ") && l.endsWith(" — unblocked since ↗golang/go#71924 closed")), "an Outside blocker too");
+  });
+
+  test("opentofu/opentofu: the Group lines' Unblocked counts, with the Unlinked Issues a closed blocker left Unblocked, are Take next's and those taken by others", () => {
+    const snapshot = recorded("opentofu__opentofu");
+    const pages = (kind: "groups" | "unlinked", count: number) => Array.from({ length: count }, (_, i) => draw(snapshot, { kind, page: i + 1 }).text.split("\n")).flat();
+    const inGroups = pages("groups", 1).flatMap((l) => /^\d+\. .* (\d+) Unblocked/.exec(l)?.[1] ?? []).reduce((sum, n) => sum + Number(n), 0);
+    const unlinked = pages("unlinked", 16).filter((l) => / — unblocked /.test(l)).length;
+    assert.match(draw(snapshot, { kind: "overview" }).text, /^\*\*Take next: 15\*\* — .* · 4 taken by others/m);
+    assert.deepEqual([inGroups, unlinked], [13, 6]);
   });
 
   test("microsoft/playwright: no Links, so no Map", () => {
@@ -57,7 +66,7 @@ describe("recorded Snapshots", () => {
     assert.equal(text.split("\n")[0], "**rust-lang/rust** · 11,219 open · 263 on the Map · 10,956 Unlinked · Promised");
     const groups = section(text, "**Groups");
     assert.equal(groups[0], "**Groups: 70** — largest first");
-    assert.match(groups[1]!, / — 29 Issues(, \d+↗)?$/);
+    assert.match(groups[1]!, / — 29 Issues, \d+ Unblocked(, \d+↗ Outside)?$/);
   });
 
   describe("gitlab-org/gitlab, the largest", () => {
@@ -69,7 +78,7 @@ describe("recorded Snapshots", () => {
       assert.equal(lines[0], "**gitlab-org/gitlab** · 48,243 open · 22,797 on the Map · 25,446 Unlinked · Promised");
       const groups = section(overview, "**Groups");
       assert.equal(groups[0], "**Groups: 5,812** — largest first");
-      assert.match(groups[1]!, / — 306 Issues(, \d+↗)?$/);
+      assert.match(groups[1]!, / — 306 Issues, [\d,]+ Unblocked(, \d+↗ Outside)?$/);
     });
 
     test(`the overview holds its line budget of ${OVERVIEW_LINES}`, () => {
@@ -82,7 +91,7 @@ describe("recorded Snapshots", () => {
       const outline = draw(snapshot, { kind: "group", group: 1, page: 1 }).text;
       const lines = outline.split("\n");
       assert.ok(lines.length <= OUTLINE_LINES, `${lines.length} lines:\n${outline}`);
-      assert.match(lines[0]!, /^\*\*Group 1 of 5,812\*\* · ↗gitlab-org&8918 .* \(an Outside Issue\) — 306 Issues, 1↗$/);
+      assert.match(lines[0]!, /^\*\*Group 1 of 5,812\*\* · ↗gitlab-org&8918 .* \(an Outside Issue\) — 306 Issues, [\d,]+ Unblocked, 1↗ Outside$/);
       assert.match(lines[2]!, /^\*\*Under ↗gitlab-org&8918, alone at the top: 306\*\* — oldest first · page 1 of 31$/);
       assert.equal(lines.filter((l) => l.startsWith("- ")).length, 10);
       for (const page of [2, 31]) {

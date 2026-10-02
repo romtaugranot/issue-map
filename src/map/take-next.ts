@@ -35,6 +35,8 @@ export type TakeNext =
       picks: Pick[];
       /** Unblocked Issues left out because someone else has them: assigned, or an open Closing Request. */
       takenByOthers: number;
+      /** The Unblocked Issues it counts, picked or taken by others; a Parent that gives way isn't one, its children are. */
+      unblocked: ReadonlySet<OpenIssue>;
       /** Why Closing Requests couldn't be read, when they couldn't: then none leaves an Issue out. */
       closingRequestsUnread: string | null;
     };
@@ -121,7 +123,7 @@ export function takeNext(snapshot: Snapshot, { unlinked }: Layout): TakeNext {
   const picks = free
     .map((issue) => ({ issue, waiting: waitingFor(issue), yours: yours(issue), closedBlockers: closedBlockers(issue) }))
     .sort((a, b) => b.waiting.count - a.waiting.count || earliestPlanned(a.issue, b.issue) || oldestFirst(a.issue, b.issue));
-  return { kind: "list", picks, takenByOthers: candidates.length - free.length, closingRequestsUnread: snapshot.unread.closingRequests ?? null };
+  return { kind: "list", picks, takenByOthers: candidates.length - free.length, unblocked: new Set(candidates), closingRequestsUnread: snapshot.unread.closingRequests ?? null };
 }
 
 /** Whether the Issue has a Link of this role to an open Issue whose identity passes `test`. */

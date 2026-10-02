@@ -5,7 +5,7 @@
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { bandName, bandOf, notes, refusal } from "./band.ts";
-import { layout, type Group, type Layout, type Member } from "./links.ts";
+import { layout, ownBeneath, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
 import { age, ago, count, howClosed, OUTSIDE, plural, short, title } from "./text.ts";
@@ -70,13 +70,25 @@ function drawn(snapshot: Snapshot, command: Command, home: string | undefined, s
       return overview(snapshot, home, shows);
     case "unlinked":
       return unlinkedPage(snapshot, layout(snapshot).unlinked, command.page, shows).join("\n");
-    case "groups":
-      return groupsPage(layout(snapshot).groups, command.page, shows);
+    case "groups": {
+      const laidOut = layout(snapshot);
+      return groupsPage(laidOut.groups, unblockedIn(takeNext(snapshot, laidOut)), command.page, shows);
+    }
     case "group":
-      return outline(snapshot, openGroup(layout(snapshot), command.group), command.page, shows);
-    case "under":
-      return outline(snapshot, openUnder(snapshot, layout(snapshot), command.ref), command.page, shows);
+    case "under": {
+      const laidOut = layout(snapshot);
+      const opened = command.kind === "group" ? openGroup(laidOut, command.group) : openUnder(snapshot, laidOut, command.ref);
+      return outline(snapshot, opened, unblockedIn(takeNext(snapshot, laidOut)), command.page, shows);
+    }
   }
+}
+
+/** Says how many of some of the Project's Issues are Unblocked, as Take next counts them, so it agrees with the overview; nothing of none, or where it calls no Issue Unblocked. */
+type Unblocked = (issues: OpenIssue[]) => string;
+
+function unblockedIn(next: TakeNext): Unblocked {
+  if (next.kind === "blocks-unread") return () => "";
+  return (issues) => (issues.length === 0 ? "" : `${count(issues.filter((issue) => next.unblocked.has(issue)).length)} Unblocked`);
 }
 
 /** How far a first read has got; `elapsedMs` is the time it has spent reading so far. */
@@ -128,7 +140,8 @@ function overview(snapshot: Snapshot, home: string | undefined, shows: Shows): s
   }
   const shownGroups = groups.slice(0, GROUP_LINES);
   for (const { head } of shownGroups) if (head.kind === "issue") shows(head.issue);
-  const lines = [header, "", ...takeNextSection(snapshot, next, shows), "", `**Groups: ${count(groups.length)}** — largest first`, ...shownGroups.map(groupLine)];
+  const unblocked = unblockedIn(next);
+  const lines = [header, "", ...takeNextSection(snapshot, next, shows), "", `**Groups: ${count(groups.length)}** — largest first`, ...shownGroups.map((group) => groupLine(group, unblocked))];
   const rest = groups.slice(GROUP_LINES);
   if (rest.length > 0) {
     lines.push(`- … ${count(rest.length)} more Groups, ${plural(rest.reduce((sum, g) => sum + g.issues.length, 0), "Issue")}. Ask to list them.`);
@@ -190,7 +203,7 @@ function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): { lines: st
 /** One line of Take next, less its `- `: the overview's and, with its title `named` as plain text, the status line's alike. */
 export function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows = () => {}, named = title): string {
   shows(issue);
-  const waits = n === 0 ? "" : carried ? `▶${count(n)} via ${via!.ref}` : `▶${count(n)} wait on it`;
+  const waits = n === 0 ? "" : carried ? `▶${count(n)} wait on it, via ${via!.ref}` : `▶${count(n)} wait on it`;
   const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
   const reasons = [
     waits,
@@ -237,7 +250,7 @@ function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number, s
 }
 
 /** Group lines, numbered by their place, which `group <n>` opens them by. */
-function groupsPage(groups: Group[], page: number, shows: Shows): string {
+function groupsPage(groups: Group[], unblocked: Unblocked, page: number, shows: Shows): string {
   if (groups.length === 0) return "No Issue here has a Link, so there's no Group to list. `map` for the Map.";
   const pages = Math.ceil(groups.length / PAGE);
   const at = Math.min(Math.max(1, page), pages);
@@ -246,13 +259,13 @@ function groupsPage(groups: Group[], page: number, shows: Shows): string {
   for (const { head } of shown) if (head.kind === "issue") shows(head.issue);
   return [
     `**Groups: ${count(groups.length)}** — largest first, page ${count(at)} of ${count(pages)}`,
-    ...shown.map((group, i) => `${from + i + 1}. ${groupLine(group).slice(2)}`),
+    ...shown.map((group, i) => `${from + i + 1}. ${groupLine(group, unblocked).slice(2)}`),
     "",
     at < pages ? `_\`more\` for the next ${PAGE} · a Group's number opens it · \`map\` for the Map_` : "_A Group's number opens it · `map` for the Map_",
   ].join("\n");
 }
 
-function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows): string {
+function outline(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, page: number, shows: Shows): string {
   if (opened.kind === "no-group") {
     if (opened.groups === 0) return "No Issue here has a Link, so there's no Group to open. `map` for the Map.";
     return `There ${opened.groups === 1 ? "is" : "are"} only ${plural(opened.groups, "Group")} on the Map of ${snapshot.project.path}. \`map\` for the Map.`;
@@ -263,7 +276,7 @@ function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows)
   }
   const { place, groups, group, above, alone, entries } = opened;
   const head = `${name(group.head)}${group.head.kind === "outside" ? " (an Outside Issue)" : ""}`;
-  const lines = [`**Group ${count(place)} of ${count(groups)}** · ${head} — ${groupSize(group)}`, ""];
+  const lines = [`**Group ${count(place)} of ${count(groups)}** · ${head} — ${groupSize(group, unblocked)}`, ""];
   if (above && entries.length === 0) {
     lines.push(`Nothing sits beneath ${label(above)} in this Group.`, "_`map` for the Map_");
     return lines.join("\n");
@@ -276,7 +289,7 @@ function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows)
   lines.push(`**${where}: ${count(entries.length)}** — ${deeper ? "most under it first" : "oldest first"}${pages > 1 ? ` · page ${count(at)} of ${count(pages)}` : ""}`);
   const shown = entries.slice((at - 1) * OUTLINE_PAGE, at * OUTLINE_PAGE);
   for (const member of [above, ...shown.map((entry) => entry.member)]) if (member?.kind === "issue") shows(member.issue);
-  lines.push(...shown.map(entryLine));
+  lines.push(...shown.map((entry) => entryLine(entry, group, unblocked)));
   const hints = [
     at < pages ? `\`more\` for the next ${OUTLINE_PAGE}` : "",
     deeper ? "name one to open the level below it" : "",
@@ -287,8 +300,9 @@ function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows)
   return lines.join("\n");
 }
 
-function entryLine({ member, how, under, related }: Entry): string {
-  const reasons = [how === "blocked" ? "Blocked by it" : "", under > 0 ? `${count(under)} under it` : "", related > 0 ? `${count(related)} Related` : ""];
+function entryLine({ member, how, under, related }: Entry, group: Group, unblocked: Unblocked): string {
+  const held = [...(member.kind === "issue" ? [member.issue] : []), ...ownBeneath(group, member.id)];
+  const reasons = [how === "blocked" ? "Blocked by it" : "", under > 0 ? `${count(under)} under it` : "", unblocked(held), related > 0 ? `${count(related)} Related` : ""];
   const said = reasons.filter(Boolean);
   return `- ${name(member)}${said.length > 0 ? ` — ${said.join(" · ")}` : ""}`;
 }
@@ -299,13 +313,13 @@ function label(member: Member): string {
   return member.end.readable ? `${OUTSIDE}${member.end.ref}` : `${OUTSIDE} an Outside Issue this login can't read`;
 }
 
-function groupLine(group: Group): string {
-  return `- ${name(group.head)} — ${groupSize(group)}`;
+function groupLine(group: Group, unblocked: Unblocked): string {
+  return `- ${name(group.head)} — ${groupSize(group, unblocked)}`;
 }
 
-function groupSize(group: Group): string {
-  const outside = group.outside.length > 0 ? `, ${group.outside.length}${OUTSIDE}` : "";
-  return `${plural(group.issues.length, "Issue")}${outside}`;
+function groupSize(group: Group, unblocked: Unblocked): string {
+  const outside = group.outside.length > 0 ? `${group.outside.length}${OUTSIDE} Outside` : "";
+  return [plural(group.issues.length, "Issue"), unblocked(group.issues), outside].filter(Boolean).join(", ");
 }
 
 function name(member: Member): string {

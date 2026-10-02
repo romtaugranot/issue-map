@@ -64,9 +64,9 @@ test("a GitLab group's epic joins the Issues it parents into one Group, drawn as
   const overview = draw(snapshot, { kind: "overview" }).text;
   assert.deepEqual(section(overview, "**Groups"), [
     "**Groups: 3** — largest first",
-    "- ↗fixture-org#12 Q3 importer epic — 2 Issues, 1↗",
-    "- #3 Issue 3 — 2 Issues",
-    "- #5 Issue 5 — 2 Issues",
+    "- ↗fixture-org#12 Q3 importer epic — 2 Issues, 2 Unblocked, 1↗ Outside",
+    "- #3 Issue 3 — 2 Issues, 1 Unblocked",
+    "- #5 Issue 5 — 2 Issues, 2 Unblocked",
   ]);
   assert.match(overview, /^\*\*Unlinked: 1\*\*/m);
   const epic = draw(snapshot, { kind: "group", group: 1, page: 1 }).text;

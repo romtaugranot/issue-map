@@ -27,6 +27,8 @@ What `start` and `suggest` print has no line: it's for you, as said where they'r
 - **Moving**: `issue-map go`, `issue-map back` and `issue-map home` — see **Moving to another Project**.
 - **The status line**: `issue-map statusline --setup`, and `issue-map statusline --remove` — see **The status line**.
 
+**What the marks mean**, for when the user asks: `↗` marks an Outside Issue, one in another Project that a Link reaches, drawn but not followed; `1↗ Outside` on a Group line counts them. `▶4 wait on it` on a Take next line says 4 open Issues wait on that Issue; `▶4 wait on it, via #3` says it stands in for its Parent #3, and the 4 wait on #3. `N Unblocked` on a Group line or an outline entry counts the Unblocked Issues there as Take next counts them, those it lists and those taken by others, so it always agrees with the overview.
+
 
 ## Take next
 

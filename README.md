@@ -18,21 +18,21 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 > - #11 \[u2\] Keep the old parser working — unblocked 2d ago · #10 closed as not planned
 >
 > **Groups: 3** — largest first
-> - #4 \[p1\] Plan the release — 4 Issues, 1↗
-> - #1 \[b1\] Lay the foundation — 3 Issues
-> - ↗issue-map-fixtures-b/elsewhere#1 \[x1\] Publish the shared config — 1 Issue, 1↗
+> - #4 \[p1\] Plan the release — 4 Issues, 2 Unblocked, 1↗ Outside
+> - #1 \[b1\] Lay the foundation — 3 Issues, 1 Unblocked
+> - ↗issue-map-fixtures-b/elsewhere#1 \[x1\] Publish the shared config — 1 Issue, 0 Unblocked, 1↗ Outside
 >
 > **Unlinked: 6** — no Link to another open Issue. Ask to list them.
 
-`↗` marks an Outside Issue: an Issue in another Project that a Link reaches. It is drawn, and joins Issues into a Group, but the Map doesn't follow its own Links.
+`↗` marks an Outside Issue: an Issue in another Project that a Link reaches. It is drawn, and joins Issues into a Group, but the Map doesn't follow its own Links. Each Group line says how many of its Issues are Unblocked, counted as Take next counts them, so it agrees with the list above.
 
-Opening a Group lists what sits at its top, one level at a time:
+Opening a Group lists what sits at its top, one level at a time, each line with how many Unblocked Issues it and those beneath it hold:
 
-> **Group 1 of 3** · #4 \[p1\] Plan the release — 4 Issues, 1↗
+> **Group 1 of 3** · #4 \[p1\] Plan the release — 4 Issues, 2 Unblocked, 1↗ Outside
 >
 > **Under #4, alone at the top: 3** — most under it first
-> - #5 \[p2\] Write the release notes — 1 under it
-> - #6 \[p3\] Tag the build
+> - #5 \[p2\] Write the release notes — 1 under it · 1 Unblocked
+> - #6 \[p3\] Tag the build — 1 Unblocked
 > - ↗issue-map-fixtures/site#1 \[s1\] Update the website for the release
 >
 > _Name one to open the level below it · `map` for the Map_
