@@ -59,7 +59,7 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 - Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.)
 - Node.js 22.18 or later on your `PATH`. The plugin is TypeScript that Node runs directly, with no runtime dependencies, and a release holds only what it runs, so there is nothing to install or build.
 - `bash`, which the plugin's entry points are written in, and `git`, which it reads the checkout's remotes with.
-- For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing a Link or assigning needs the triage role or above in the Project, and the `repo` scope on a classic token. `gh` 2.64 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
+- For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing a Link or assigning needs the triage role or above in the Project, and the `repo` scope on a classic token. `gh` 2.81 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
 - For GitLab, the [GitLab CLI](https://gitlab.com/gitlab-org/cli) logged in to the host: `glab auth login --hostname <host>`. Writing a Link needs the Guest role or above in the Project (Reporter before GitLab 17.0), assigning needs Reporter, and both need a token with the `api` scope.
 
 The Map reads and writes only through `gh` and `glab`, as whichever login they hold. It never asks for a token of its own.
