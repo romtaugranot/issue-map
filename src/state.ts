@@ -3,16 +3,23 @@
  * state directory, readable only by this OS user. Shared by the CLI and the
  * status line, so both find the same Home Project.
  */
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { LastHome } from "./home/home.ts";
+import type { Declines } from "./map/suggest.ts";
+import type { SnapshotKey } from "./snapshot/store.ts";
 import type { Project } from "./tracker/tracker.ts";
 
-/** Where Snapshots are kept: `ISSUE_MAP_STATE_DIR`, or the XDG state directory. */
+/**
+ * Where Snapshots are kept: `ISSUE_MAP_STATE_DIR`, or the XDG state directory.
+ * Each counts only as an absolute path, so a relative one can't put private
+ * titles in the working tree.
+ */
 export function stateDir(env: Record<string, string | undefined> = process.env): string {
-  return env.ISSUE_MAP_STATE_DIR ?? join(env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "issue-map");
+  const absolute = (dir: string | undefined) => (dir && isAbsolute(dir) ? dir : undefined);
+  return absolute(env.ISSUE_MAP_STATE_DIR) ?? join(absolute(env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state"), "issue-map");
 }
 
 /** The Home Project last resolved for the checkout at `root`, kept in `dir`. */
@@ -25,6 +32,35 @@ export function lastHomeOf(root: string, dir: string = stateDir()): LastHome {
   };
 }
 
+/**
+ * The Link Suggestions each login declined, per Tracker and Project, kept in
+ * `dir`: a line each, only ever appended, so two sessions declining at once
+ * both keep theirs.
+ */
+export function declinesOf(dir: string = stateDir()): Declines {
+  const declined = join(dir, "declined");
+  const path = (key: SnapshotKey) => join(declined, `${createHash("sha256").update(JSON.stringify([key.tracker, key.project, key.login])).digest("hex")}.jsonl`);
+  return {
+    async get(key) {
+      const lines = (await readFile(path(key), "utf8").catch(() => "")).split("\n");
+      // A line cut short by a crash is skipped.
+      return [...new Set(lines.flatMap((line) => readJsonLine<string>(line)))];
+    },
+    async add(key, more) {
+      await mkdir(declined, { recursive: true, mode: 0o700 });
+      await appendFile(path(key), more.map((decline) => `${JSON.stringify(decline)}\n`).join(""), { mode: 0o600 });
+    },
+  };
+}
+
+function readJsonLine<T>(line: string): T[] {
+  try {
+    return [JSON.parse(line) as T];
+  } catch {
+    return [];
+  }
+}
+
 export async function readJson<T>(path: string, none: T): Promise<T> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as T;
@@ -33,8 +69,19 @@ export async function readJson<T>(path: string, none: T): Promise<T> {
   }
 }
 
-/** Readable only by this OS user. */
+/** Written whole or not at all, and readable only by this OS user. */
 export async function writeJson(dir: string, path: string, value: unknown): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  await writeFile(path, JSON.stringify(value), { mode: 0o600 });
+  await writeWhole(path, JSON.stringify(value));
+}
+
+/**
+ * Written as the Snapshot store saves: to a temporary file of its own, then
+ * renamed into place, so a reader finds the old text or the new, never part
+ * of either. Readable only by this OS user.
+ */
+export async function writeWhole(path: string, text: string): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  await writeFile(temporary, text, { mode: 0o600 });
+  await rename(temporary, path);
 }

@@ -265,8 +265,9 @@ export async function offer(deps: SuggestDeps, tracker: Tracker, project: Projec
 
 /**
  * Writes the offered suggestions `picked` names, by their numbers, each read
- * again first; the rest of those offered are declined. A refusal of a write
- * stops the rest.
+ * again first; the rest of those offered are declined. A refusal of a write,
+ * or a write whose answer is lost, stops the rest; a Snapshot that can't
+ * take a write in doesn't.
  */
 export async function confirm(deps: SuggestDeps, tracker: Tracker, project: Project, picked: number[]): Promise<string> {
   const pending = await pendingFor(deps, tracker, project);
@@ -284,6 +285,8 @@ export async function confirm(deps: SuggestDeps, tracker: Tracker, project: Proj
 
   const lines: string[] = [];
   let stopped = false;
+  /** Why the Snapshot couldn't take in a Link written, once it couldn't. */
+  let unsaved: string | null = null;
   for (const n of [...new Set(picked)]) {
     const suggestion = offered[n - 1]!;
     const named = label(suggestion, project.path);
@@ -309,17 +312,29 @@ export async function confirm(deps: SuggestDeps, tracker: Tracker, project: Proj
     const wrote = await tracker.link(from.issue.ref, suggestion.kind, to.issue.ref);
     if (wrote.kind === "linked") {
       lines.push(`Wrote ${named} to ${tracker.product}.`);
-      await deps.store.linked(key, [
-        { issue: from.issue.id, link: { role: FAR_ROLE[suggestion.kind], to: farEnd(to.issue) } },
-        { issue: to.issue.id, link: { role: NEAR_ROLE[suggestion.kind], to: farEnd(from.issue) } },
-      ]);
+      // Once the Snapshot can't take one in, the rest are left to the next refresh too, rather than each waiting on it.
+      if (unsaved === null) {
+        try {
+          await deps.store.linked(key, [
+            { issue: from.issue.id, link: { role: FAR_ROLE[suggestion.kind], to: farEnd(to.issue) } },
+            { issue: to.issue.id, link: { role: NEAR_ROLE[suggestion.kind], to: farEnd(from.issue) } },
+          ]);
+        } catch (error) {
+          unsaved = (error as Error).message;
+        }
+      }
     } else if (wrote.kind === "cant-record" || wrote.kind === "not-found") {
       lines.push(`Not written: ${named} — ${wrote.reason}.`);
+    } else if (wrote.kind === "cant-tell") {
+      // The write may have reached the Tracker though its answer was lost; one that doesn't answer isn't written to again.
+      stopped = true;
+      lines.push(`Can't tell whether ${named} was written — ${wrote.reason}. Open ${short(from.issue.ref, project.path)}'s card again to see.`);
     } else {
       stopped = true;
       lines.push(`Not written: ${named} — ${wrote.kind === "not-allowed" ? `${tracker.product} refused the write — ${wrote.reason}` : why(tracker, wrote)}.`);
     }
   }
+  if (unsaved !== null) lines.push(`The Map shows what was written after the next refresh: ${unsaved}`);
   const unpicked = offered.filter((_, i) => !picked.includes(i + 1));
   if (unpicked.length > 0) {
     await deps.declines.add(key, unpicked.map(declineKey));
