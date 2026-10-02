@@ -51,14 +51,16 @@ describe("an Issue card", () => {
     assert.equal(
       card(issue).text,
       [
-        "**#12 Import state from S3**",
-        "https://github.com/fixture-org/tools/issues/12",
+        "**#12 Import state from S3**\\",
+        "https://github.com/fixture-org/tools/issues/12\\",
         "**Blocked** — 1 open Issue Blocks it · unassigned",
         "",
         "**Parent issue**",
         "- #3 Plan the importer",
+        "",
         "**Blocked by**",
         "- #5 Issue 5",
+        "",
         "**Sub-issues: 2**",
         "- #14 Issue 14",
         "- #13 Issue 13",
@@ -140,8 +142,8 @@ describe("an Issue card", () => {
     const first = card(issue);
     const lines = first.text.split("\n");
     const ids = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
-    assert.deepEqual(lines.slice(6, 18), ["**Blocked by: 12**", ...ids(200, 210).map((n) => `- #${n} Issue ${n}`), "- … 2 more — `more` for the next 10"]);
-    assert.deepEqual(lines.slice(18), ["**Sub-issues: 25**", ...ids(105, 115).map((n) => `- #${n} Issue ${n}`), "- … 15 more — `more` for the next 10"]);
+    assert.deepEqual(lines.slice(6, 19), ["", "**Blocked by: 12**", ...ids(200, 210).map((n) => `- #${n} Issue ${n}`), "- … 2 more — `more` for the next 10"]);
+    assert.deepEqual(lines.slice(19), ["", "**Sub-issues: 25**", ...ids(105, 115).map((n) => `- #${n} Issue ${n}`), "- … 15 more — `more` for the next 10"]);
     assert.equal(first.choices.length, 21, "every Link the card shows, and no more");
 
     const second = drawCard(issue, PROJECT, 2).text.split("\n");
@@ -150,6 +152,7 @@ describe("an Issue card", () => {
       "**Blocked by: 12** · 11–12",
       "- #210 Issue 210",
       "- #211 Issue 211",
+      "",
       "**Sub-issues: 25** · 11–20",
       ...ids(115, 125).map((n) => `- #${n} Issue ${n}`),
       "- … 5 more — `more` for the next 10",
@@ -266,8 +269,8 @@ describe("a reduced card", () => {
     const outside = { ...read(7, busy), project: "fixture-org/plans", ref: "fixture-org/plans#7", title: "Q3 importer epic", url: "https://github.com/fixture-org/plans/issues/7" };
     assert.deepEqual(card(outside), {
       text: [
-        "**↗fixture-org/plans#7 Q3 importer epic**",
-        "https://github.com/fixture-org/plans/issues/7",
+        "**↗fixture-org/plans#7 Q3 importer epic**\\",
+        "https://github.com/fixture-org/plans/issues/7\\",
         "Open · an Outside Issue, in fixture-org/plans. The Map hasn't read that Project, so this card shows none of its Links.",
       ].join("\n"),
       choices: [],
@@ -283,8 +286,8 @@ describe("a reduced card", () => {
   test("a closed Issue's card shows its name, URL and how it closed, and no Links, since closed Issues aren't on the Map", () => {
     assert.deepEqual(card(read(10, { ...busy, open: false, closedAs: "not planned" })), {
       text: [
-        "**#10 Issue 10**",
-        "https://github.com/fixture-org/tools/issues/10",
+        "**#10 Issue 10**\\",
+        "https://github.com/fixture-org/tools/issues/10\\",
         "Closed as not planned. A closed Issue isn't on the Map, so this card shows none of its Links.",
       ].join("\n"),
       choices: [],

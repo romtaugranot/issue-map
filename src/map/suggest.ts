@@ -19,7 +19,7 @@ import { draw, type Command } from "./draw.ts";
 import { isOpen } from "./links.ts";
 import { issueLocator, typedRef, why } from "./show.ts";
 import { commentBlock } from "./start.ts";
-import { count, cut, fenced, FENCED_NOTE, fenceTag, plural, short } from "./text.ts";
+import { clip, count, cut, fenced, FENCED_NOTE, fenceTag, oneLine, plural, short } from "./text.ts";
 
 /** A Link Claude proposes, as it pipes it to `offer`: `from` Blocks `to`, is its Parent, or is Related to it, as `source`'s text says in `quote`. */
 export interface Proposal {
@@ -444,7 +444,7 @@ async function snapshotOf(store: SnapshotStore, key: SnapshotKey): Promise<Snaps
 /** One Issue's part of what `suggest` hands over: its name, Links and text, and what mentions of it say; `thread` is why it couldn't be read, where it couldn't. */
 function issueSection(issue: IssueRead, thread: Thread | string, mentions: string[], project: string): string[] {
   const links = issue.links.map(({ role, to }) => `${ROLE_NAMES[role]} ${to.readable ? short(to.ref, project) : "an Issue this login can't read"}${to.readable && !to.open ? " (closed)" : ""}`);
-  const lines = [`**${short(issue.ref, project)} ${issue.title}**`, links.length > 0 ? `Recorded: ${links.join(" · ")}` : "Recorded: no Links"];
+  const lines = [`**${short(issue.ref, project)} ${oneLine(issue.title)}**`, links.length > 0 ? `Recorded: ${links.join(" · ")}` : "Recorded: no Links"];
   if (typeof thread === "string") return [...lines, `Its text couldn't be read: ${thread}.`, ...mentions];
   lines.push("Body:", cut(thread.body.trim(), BODY) || "(none)");
   let room = COMMENTS;
@@ -470,7 +470,7 @@ function naming(thread: Thread, issue: IssueRead, project: string): string | nul
   const lines = text.split("\n").filter((line) => names.some((name) => new RegExp(`(?<![\\w/#])${escape(name)}(?!\\d)`).test(line)));
   if (lines.length === 0) return null;
   const said = lines.map((line) => line.trim()).join(" … ");
-  return said.length <= MENTION ? said : `${said.slice(0, MENTION - 1)}…`;
+  return clip(said, MENTION);
 }
 
 /** Where `quote` is word for word in the Issue's text, such as `#12's body`, whatever its line breaks; `null` where it isn't. */
@@ -512,7 +512,7 @@ function label({ from, kind, to }: Planned, project: string): string {
 /** A suggestion's choice in the multi-select: its quote and where it is, or what the Map found. */
 function describe({ quote, where }: Suggestion): string {
   if (!where) return `${quote} — found by the Map`;
-  return `"${quote.length <= QUOTE ? quote : `${quote.slice(0, QUOTE - 1)}…`}" — ${where}`;
+  return `"${clip(quote, QUOTE)}" — ${where}`;
 }
 
 /** What a declined suggestion is remembered by: its ends' identities and its kind; a Related Link has no direction. */

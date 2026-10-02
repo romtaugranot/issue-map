@@ -10,7 +10,7 @@ import { remoteAddress } from "../home/remote-address.ts";
 import { FRESH_MS, snapshotStore, type Glance } from "../snapshot/store.ts";
 import { lastHomeOf, stateDir } from "../state.ts";
 import type { Project } from "../tracker/tracker.ts";
-import { age, count, ROW } from "../map/text.ts";
+import { age, count, oneLine, ROW } from "../map/text.ts";
 
 export interface StatusDeps {
   /** The git checkout a directory is in, or `null` outside one. */
@@ -54,7 +54,8 @@ export async function homeRow(deps: StatusDeps, dir: string): Promise<string> {
       return `${head} · reading it for the first time: ${count(glance.read)} of ${count(glance.total)} Issues (${percent}%)`;
     }
     case "ready":
-      return glance.ageMs > FRESH_MS ? `${glance.line} · read ${age(glance.ageMs)} ago` : glance.line;
+      // A row kept by an earlier version may hold a title as it was typed.
+      return `${oneLine(glance.line)}${glance.ageMs > FRESH_MS ? ` · read ${age(glance.ageMs)} ago` : ""}`;
   }
 }
 

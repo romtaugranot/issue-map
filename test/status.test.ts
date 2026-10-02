@@ -19,11 +19,11 @@ function recorded(name: string): Snapshot {
   return JSON.parse(gunzipSync(readFileSync(file)).toString("utf8")) as Snapshot;
 }
 
-/** The overview's first Take next line, less its `- `. */
+/** The overview's first Take next line, less its `- `, as it reads once rendered: the status line is plain text, so escapes nothing. */
 function firstTakeNext(s: Snapshot): string | undefined {
   const lines = draw(s, { kind: "overview" }).text.split("\n");
   const heading = lines.findIndex((l) => l.startsWith("**Take next"));
-  return lines[heading + 1]?.startsWith("- ") ? lines[heading + 1]!.slice(2) : undefined;
+  return lines[heading + 1]?.startsWith("- ") ? lines[heading + 1]!.slice(2).replace(/\\(.)/g, "$1") : undefined;
 }
 
 describe("the status line's row", () => {
@@ -128,6 +128,11 @@ describe("the status line", () => {
     for (const remotes of [[], ["/srv/git/tools.git"], ["git@bitbucket.org:fixture-org/tools.git"], ["https://gitea.com/fixture-org/tools.git", "https://codeberg.org/fixture-org/tools"]]) {
       assert.equal(await homeRow(deps({}, { home: null, remotes }), "/work/tools"), "", remotes.join(" "));
     }
+  });
+
+  test("shows no escape sequence or line break from a row kept before titles were cleaned", async () => {
+    const kept = "◆ fixture-org/tools · Take next: 1 · #1 \x1b[2J\x1b]0;owned\x07Land\nthe API";
+    assert.equal(await homeRow(deps({ "github.com github.com#1": { kind: "ready", line: kept, ageMs: 0 } }), "/work/tools"), "◆ fixture-org/tools · Take next: 1 · #1 Land the API");
   });
 
   test("outside a git checkout, shows nothing", async () => {

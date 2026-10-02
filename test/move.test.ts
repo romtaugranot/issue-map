@@ -137,7 +137,7 @@ describe("a typed target", () => {
   test("an Issue's URL lands on its card inside its own Project's Map, which shows its Links", async () => {
     const w = await world();
     const answer = await w.go({ kind: "go", target: `https://github.com/${PLANS}/issues/7` });
-    assert.match(answer.text, /^\*\*#7 Issue 7\*\*$/m, "named inside its own Project, not as an Outside Issue");
+    assert.match(answer.text, /^\*\*#7 Issue 7\*\*\\$/m, "named inside its own Project, not as an Outside Issue");
     assert.match(answer.text, /^\*\*Sub-issues: 2\*\*$/m);
     assert.deepEqual(answer.links.map((c) => c.label), [`${HOME}#12`, "#8"]);
     assert.deepEqual(where(w), [`${HOME} overview`, `${PLANS} #7`]);
@@ -147,7 +147,7 @@ describe("a typed target", () => {
   test("an owner/repo moves to its overview, and an owner/repo#n to that Issue's card", async () => {
     const w = await world();
     assert.equal((await w.go({ kind: "go", target: PLANS })).text, `MAP ${PLANS} overview · ⌂ ${HOME}`);
-    assert.match((await w.go({ kind: "go", target: `${PLANS}#7` })).text, /^\*\*#7 Issue 7\*\*$/m);
+    assert.match((await w.go({ kind: "go", target: `${PLANS}#7` })).text, /^\*\*#7 Issue 7\*\*\\$/m);
     assert.deepEqual(where(w), [`${HOME} overview`, `${PLANS} overview`, `${PLANS} #7`]);
   });
 
@@ -198,7 +198,7 @@ describe("a typed target", () => {
 
   test("a reference like #7 names an Issue in the Project on screen", async () => {
     const w = await world({ trail: [{ project: { id: "github.com#fixture-org/plans", host: "github.com", path: PLANS, url: `https://github.com/${PLANS}`, issues: { open: 5 } }, view: { kind: "overview" } }] });
-    assert.match((await w.go({ kind: "go", target: "#7" })).text, /^\*\*#7 Issue 7\*\*$/m);
+    assert.match((await w.go({ kind: "go", target: "#7" })).text, /^\*\*#7 Issue 7\*\*\\$/m);
   });
 });
 
@@ -266,7 +266,7 @@ describe("assigning an Issue to yourself from its card", () => {
     const card = await w.go({ kind: "view", view: { kind: "card", ref: "#12", page: 1 } });
     assert.deepEqual(card.choices[0], { label: "Assign #12 to me", description: "writes to GitHub: assigns #12 to fixture-viewer", run: "issue-map assign '#12'" });
     const assigned = await w.go({ kind: "assign", ref: "#12" });
-    assert.match(assigned.text, /^Assigned #12 to you on GitHub\.\n\n\*\*#12 Issue 12\*\*$/m);
+    assert.match(assigned.text, /^Assigned #12 to you on GitHub\.\n\n\*\*#12 Issue 12\*\*\\$/m);
     assert.match(assigned.text, /^Not Blocked · assigned to you$/m);
     assert.deepEqual(assigned.choices.map((c) => c.label), ["Start work on #12"]);
     assert.deepEqual(assigned.links.map((l) => l.label), [`${PLANS}#7`]);
@@ -314,7 +314,7 @@ describe("starting work on an Issue from its card", () => {
     const before = where(w);
     await w.go({ kind: "start", ref: "#12" });
     assert.deepEqual(where(w), before);
-    assert.match((await w.go({ kind: "back" })).text, /^\*\*#12 Issue 12\*\*$/m, "back retraces from the card the user was on");
+    assert.match((await w.go({ kind: "back" })).text, /^\*\*#12 Issue 12\*\*\\$/m, "back retraces from the card the user was on");
   });
 
   test("starts work on an Outside Issue by its full reference, from the Project on screen", async () => {
@@ -343,9 +343,9 @@ describe("back, map and home", () => {
     assert.equal((await w.go({ kind: "view", view: { kind: "overview" } })).text, `MAP ${PLANS} overview · ⌂ ${HOME}`);
     assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} #12`, `${HOME} ${PLANS}#7`, `${PLANS} #7`, `${PLANS} overview`]);
 
-    assert.match((await w.go({ kind: "back" })).text, /^\*\*#7 Issue 7\*\*$/m);
+    assert.match((await w.go({ kind: "back" })).text, /^\*\*#7 Issue 7\*\*\\$/m);
     assert.match((await w.go({ kind: "back" })).text, /an Outside Issue, in fixture-org\/plans/, "back to the Outside Issue's card that was left");
-    assert.match((await w.go({ kind: "back" })).text, /^\*\*#12 Issue 12\*\*$/m);
+    assert.match((await w.go({ kind: "back" })).text, /^\*\*#12 Issue 12\*\*\\$/m);
     assert.equal((await w.go({ kind: "back" })).text, `MAP ${HOME} overview (kept warm)`);
     assert.equal((await w.go({ kind: "back" })).text, "Nothing to go back to: this is where this session's trail starts.");
     assert.deepEqual(where(w), [`${HOME} overview`]);

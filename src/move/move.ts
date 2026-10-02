@@ -17,7 +17,7 @@ import type { Card, Choice as LinkChoice } from "../map/card.ts";
 import type { Command } from "../map/draw.ts";
 import { typedRef, type Shown, type ShownCard } from "../map/show.ts";
 import type { Offer, OnScreen, Proposal } from "../map/suggest.ts";
-import { ago, plural, short } from "../map/text.ts";
+import { ago, plainTitle, plural, short } from "../map/text.ts";
 import type { IssueRead, Project, Tracker, Trackers } from "../tracker/tracker.ts";
 
 /** What is on screen: one of a Map's drawings, or an Issue card read live. */
@@ -357,7 +357,7 @@ async function find(deps: MoveDeps, typed: string, here: Position | undefined, p
       text: `More than one Tracker holds ${target}: ask which one to open.`,
       choices: found.map(({ host, found }) => ({
         label: `${host}/${target}`,
-        description: `${found.tracker.product} · ${found.kind === "issue" ? found.issue.title : issueCount(found.project)}`,
+        description: `${found.tracker.product} · ${found.kind === "issue" ? plainTitle(found.issue.title) : issueCount(found.project)}`,
         run: `issue-map go ${quote(`${host}/${target}`)}`,
       })),
     };

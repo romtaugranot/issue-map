@@ -8,7 +8,7 @@ import { bandName, bandOf, notes, refusal } from "./band.ts";
 import { layout, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
-import { age, ago, count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
+import { age, ago, count, howClosed, OUTSIDE, plural, short, title } from "./text.ts";
 
 export type Command =
   | { kind: "overview" }
@@ -183,8 +183,8 @@ function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): { lines: st
   return { lines, untold: picks.length - told };
 }
 
-/** One line of Take next, less its `- `: the overview's and the status line's alike. */
-export function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows = () => {}): string {
+/** One line of Take next, less its `- `: the overview's and, with its title `named` as plain text, the status line's alike. */
+export function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows = () => {}, named = title): string {
   shows(issue);
   const waits = n === 0 ? "" : carried ? `▶${count(n)} via ${via!.ref}` : `▶${count(n)} wait on it`;
   const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
@@ -195,7 +195,7 @@ export function pickLine({ issue, waiting: { count: n, via, carried }, yours, cl
     issue.planned ? `due ${issue.planned.slice(0, 10)}` : "",
     yours ? "yours" : "",
   ].filter(Boolean);
-  return `${issue.ref} ${trim(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
+  return `${issue.ref} ${named(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
 }
 
 /**
@@ -225,8 +225,9 @@ function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number, s
     ...shown.map((issue) => {
       // With no Link to an open Issue, nothing open Blocks it: a closed blocker left it Unblocked, where Blocks Links can be read.
       const unblocked = snapshot.unread.blocks === undefined ? unblockedBy(closedBlockers(issue), snapshot) : [];
-      return `- ${issue.ref} ${trim(issue.title)}${unblocked.length > 0 ? ` — ${unblocked.join(" · ")}` : ""}`;
+      return `- ${issue.ref} ${title(issue.title)}${unblocked.length > 0 ? ` — ${unblocked.join(" · ")}` : ""}`;
     }),
+    "",
     at < pages ? `_\`more\` for the next ${PAGE}_` : "_That's all of them. `map` for the Map._",
   ];
 }
@@ -262,7 +263,7 @@ function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows)
     "`map` for the Map",
   ].filter(Boolean);
   const hint = hints.join(" · ");
-  lines.push(`_${hint[0]!.toUpperCase()}${hint.slice(1)}_`);
+  lines.push("", `_${hint[0]!.toUpperCase()}${hint.slice(1)}_`);
   return lines.join("\n");
 }
 
@@ -288,7 +289,7 @@ function groupSize(group: Group): string {
 }
 
 function name(member: Member): string {
-  if (member.kind === "issue") return `${member.issue.ref} ${trim(member.issue.title)}`;
+  if (member.kind === "issue") return `${member.issue.ref} ${title(member.issue.title)}`;
   if (!member.end.readable) return `${OUTSIDE} an Issue this login can't read`;
-  return `${OUTSIDE}${member.end.ref} ${trim(member.end.title)}`;
+  return `${OUTSIDE}${member.end.ref} ${title(member.end.title)}`;
 }

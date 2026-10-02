@@ -21,8 +21,8 @@ function recorded(name: string): Snapshot {
  */
 const OVERVIEW_LINES = 21;
 
-/** One level of a Group's outline, whatever the Group holds: the header, a blank line, the level's heading, 10 lines and a hint. */
-const OUTLINE_LINES = 14;
+/** One level of a Group's outline, whatever the Group holds: the header, a blank line, the level's heading, 10 lines, a blank line and a hint. */
+const OUTLINE_LINES = 15;
 
 describe("recorded Snapshots", () => {
   test("opentofu/opentofu: 277 open, 233 of them Unlinked", () => {
@@ -40,7 +40,7 @@ describe("recorded Snapshots", () => {
   // #20 measured it: 7 open Issues have a closed blocker, and for 6 it's their only Link, so they're Unlinked and still in Take next.
   test("opentofu/opentofu: an Unlinked Issue whose blocker closed is marked on the Unlinked list, by the blocker, since the recording has no close dates", () => {
     const page = draw(recorded("opentofu__opentofu"), { kind: "unlinked", page: 6 }).text.split("\n");
-    assert.ok(page.includes("- #3107 `-detailed-exitcode` should exit with status 2 when `-refre… — unblocked since #3595 closed"), page.join("\n"));
+    assert.ok(page.includes(String.raw`- #3107 \`-detailed-exitcode\` should exit with status 2 when \`-refre… — unblocked since #3595 closed`), page.join("\n"));
     assert.ok(page.some((l) => l.startsWith("- #3163 ") && l.endsWith(" — unblocked since ↗golang/go#71924 closed")), "an Outside blocker too");
   });
 
