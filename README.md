@@ -95,6 +95,7 @@ Run Claude Code in a git checkout. The Map opens on the checkout's Home Project,
 | You say | What happens |
 |---|---|
 | `map` | The overview of the Project on screen |
+| `refresh the Map` | The overview, its Snapshot refreshed now even if it's under two minutes old, so a Link you just recorded in the browser shows |
 | `what should I take next?` | The overview, pointing at Take next. Ask what Claude would pick and it says so separately, without reordering the list |
 | `open group 1` | The outline of the first Group on the overview |
 | `what's under #5?` | The level beneath an Issue in its Group |

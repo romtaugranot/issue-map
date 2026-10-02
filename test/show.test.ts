@@ -149,6 +149,18 @@ describe("drawing from a Snapshot that's been read (ADR 0006)", () => {
     assert.doesNotMatch(map, /⚠/);
   });
 
+  test("refreshing the Map refreshes it now, inside the two minutes, so a Link recorded in the browser a moment ago shows (#73)", async () => {
+    const { store, tracker, later } = await readStore();
+    later(30_000);
+    const four = { id: "I_4", readable: true, open: true, project: project.path, ref: `${project.path}#4`, title: "Issue 4", url: `${project.url}/issues/4` };
+    const linked: ChangesAnswer = { kind: "changes", open: [{ ...issue(3), links: [{ role: "parent", to: four }] }], ends: [], requests: [], caughtUp: true, unread: {} };
+    const browsed = { ...tracker, changes: async () => linked };
+    assert.match((await showMap(deps(store), browsed, project, { kind: "overview" })).text, / · 2 on the Map · /, "a plain draw waits out the two minutes");
+    const map = (await showMap(deps(store), browsed, project, { kind: "overview" }, { refresh: true })).text;
+    assert.match(map, /^\*\*fixture-org\/tools\*\* · 150 open · 4 on the Map · 146 Unlinked · Promised$/m);
+    assert.doesNotMatch(map, /⚠/);
+  });
+
   test("an older one is refreshed first, so the Map shows what changed", async () => {
     const { store, tracker, later } = await readStore();
     later(3 * 60_000);

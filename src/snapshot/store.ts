@@ -3,7 +3,8 @@
  * Tracker, Project and login. A first read saves itself a page at a time, so
  * an interrupted read resumes, but only a finished read is ever handed over
  * as a Snapshot: until then the store hands over progress. A draw is
- * handed a Snapshot refreshed first when it's more than two minutes old.
+ * handed a Snapshot refreshed first when it's more than two minutes old,
+ * or whatever its age when the user asks to refresh the Map.
  * A Snapshot is read in full again when a refresh couldn't prove it caught
  * up, and otherwise weekly; that read runs beside refreshes of the Snapshot
  * it replaces, which is drawn meanwhile. One refresher at a time may claim a
@@ -105,8 +106,8 @@ export interface SnapshotStore {
   read(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ReadOutcome>;
   /** Brings a finished Snapshot up to date with only what changed since it was read. */
   refresh(key: SnapshotKey, tracker: Tracker, project: Project): Promise<RefreshOutcome>;
-  /** The Snapshot to draw: refreshed first when it's more than two minutes old, or, when it can't be, as it is and why. */
-  forDraw(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ForDraw>;
+  /** The Snapshot to draw: refreshed first when it's more than two minutes old, or with `now` whatever its age; when it can't be, as it is and why. */
+  forDraw(key: SnapshotKey, tracker: Tracker, project: Project, now?: boolean): Promise<ForDraw>;
   /**
    * Takes in a write the Map made, so the next draw shows it without waiting
    * for a refresh: the Issue `issue` names is assigned to `assignees` now.
@@ -415,10 +416,10 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       }
     },
 
-    async forDraw(key, tracker, project) {
+    async forDraw(key, tracker, project, now = false) {
       await look(key.tracker, key.project);
       const state = await this.state(key);
-      if (state.kind !== "ready" || state.ageMs <= FRESH_MS) return state;
+      if (state.kind !== "ready" || (!now && state.ageMs <= FRESH_MS)) return state;
       const outcome = await this.refresh(key, tracker, project);
       if (outcome.kind === "refused") return outcome;
       const after = await this.state(key);
