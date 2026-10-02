@@ -56,6 +56,17 @@ test("an output ends by telling Claude the line that shows it, and that line sho
   assert.equal(await displayed(d, lines[4]!), card);
 });
 
+test("`--shown`, for a caller that shows the output itself, prints it plain, and keeps nothing that would sway the session's judgement of the hook", async () => {
+  const d = await dir();
+  await withLine(d, "the overview", "session-1");
+  const before = await readdir(join(d, "shown"));
+  const bin = fileURLToPath(new URL("../bin/issue-map", import.meta.url));
+  const { stdout } = await promisify(execFile)(bin, ["map", "--shown"], { cwd: tmpdir(), env: { ...process.env, ISSUE_MAP_STATE_DIR: d, CLAUDE_CODE_SESSION_ID: "session-1" } });
+  assert.match(stdout, /^No Home Project: .* isn't inside a git checkout\./);
+  assert.doesNotMatch(stdout, /⟦issue-map|To show the user|reprint/);
+  assert.deepEqual(await readdir(join(d, "shown")), before);
+});
+
 describe("when the display hook isn't running, as with hooks disabled", () => {
   /** When a command run a while after the last, as on the user's next ask, started. */
   const nextAsk = () => Date.now() + 31_000;
