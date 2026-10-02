@@ -22,6 +22,9 @@ const cases: [remote: string, host: string, path: string][] = [
   ["http://git.example.com/group/project.git", "git.example.com", "group/project"],
   ["my-alias:group/project.git", "gitlab.example.com", "group/project"],
   ["ssh://git@my-alias/group/project.git", "gitlab.example.com", "group/project"],
+  ["git@[2001:db8::1]:group/project.git", "[2001:db8::1]", "group/project"],
+  ["ssh://git@[2001:DB8::1]:2222/group/project.git", "[2001:db8::1]", "group/project"],
+  ["https://github.com/cli/my%20cli.git", "github.com", "cli/my cli"],
 ];
 
 for (const [remote, host, path] of cases) {
@@ -36,6 +39,9 @@ const notTrackers = [
   "./sibling:checkout",
   "../project.git",
   "hg::https://example.com/repo",
+  "https://github.com/cli/c%zzli.git",
+  "C:/srv/git/project.git",
+  "C:\\srv\\git\\project.git",
   "https://github.com/",
   "",
 ];

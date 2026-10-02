@@ -185,6 +185,30 @@ test("GH_REPO settles a tie ahead of a saved gh default", async () => {
   assert.equal(answer.text, "Home Project: github.com/fixture-user/cli — 12 open Issues");
 });
 
+test("GH_REPO in URL form, and GH_HOST in mixed case or with a scheme, name the hosts gh would, and probe no other", async () => {
+  const projects: FakeProject[] = [
+    { path: "fixture-org/a", open: 3 },
+    { path: "fixture-org/b", open: 4 },
+  ];
+  const fake = fakeTrackers({ "github.com": { product: "GitHub", projects }, "ghes.example.com": { product: "GitHub", projects } });
+  const asked: string[] = [];
+  const trackers: Trackers = { at: (host) => (asked.push(host), fake.at(host)) };
+  const tie = { upstream: "https://ghes.example.com/fixture-org/a.git", origin: "https://ghes.example.com/fixture-org/b.git" };
+  for (const GH_HOST of ["GHES.Example.com", "https://ghes.example.com/"]) {
+    const answer = await home(checkout(tie), trackers, { env: { GH_REPO: "fixture-org/b", GH_HOST } });
+    assert.equal(answer.text, "Home Project: ghes.example.com/fixture-org/b — 4 open Issues", GH_HOST);
+  }
+  const answer = await home(checkout({ upstream: "https://github.com/fixture-org/a.git", origin: "https://github.com/fixture-org/b.git" }), trackers, { env: { GH_REPO: "https://GitHub.com/fixture-org/b.git" } });
+  assert.equal(answer.text, "Home Project: github.com/fixture-org/b — 4 open Issues");
+  assert.deepEqual([...new Set(asked)].sort(), ["ghes.example.com", "github.com"]);
+});
+
+test("a remote with a malformed percent-escape is passed over, and the others still lead home", async () => {
+  const dir = checkout({ upstream: "https://github.com/opentofu/open%zztofu.git", origin: "https://github.com/opentofu/opentofu.git" });
+  const answer = await home(dir, fakeTrackers({ "github.com": { product: "GitHub", projects: [tofu] } }));
+  assert.equal(answer.text, "Home Project: github.com/opentofu/opentofu — 274 open Issues");
+});
+
 test("the plugin's own pick outranks the gh default", async () => {
   const dir = checkout(
     { origin: "https://github.com/fixture-user/cli.git" },

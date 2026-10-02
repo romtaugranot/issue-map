@@ -136,6 +136,35 @@ describe("GHES by release: each Link kind is known from the GHES's own schema, n
   });
 });
 
+describe("a classic token with only the public_repo scope writes public repositories only", () => {
+  async function write(isPrivate: boolean) {
+    const world: World = { token: "public-writes", projects: [{ path: "fixture-org/tools", number: 1, open: 1, private: isPrivate }] };
+    const kind = github({ env: {}, cli: async (_command, args) => (args[0] === "auth" ? authStatus(world, args) : ghApi(world, args)), http: async (url) => probe(world, new URL(url)) });
+    const tracker = (await kind.recognise("github.com"))!;
+    const resolved = (await tracker.resolveProject("fixture-org/tools")) as Extract<ProjectResolution, { kind: "project" }>;
+    const said = await tracker.capabilities(resolved.project);
+    assert.equal(said.kind, "capabilities", JSON.stringify(said));
+    return (said as Extract<typeof said, { kind: "capabilities" }>).write;
+  }
+
+  test("on a public repository it can", async () => {
+    assert.deepEqual(await write(false), { kind: "can" });
+  });
+
+  test("on a private repository it can't, and says which scope it lacks", async () => {
+    const answer = await write(true);
+    assert.equal(answer.kind, "cant");
+    assert.match(answer.kind === "cant" ? answer.reason : "", /`repo` scope/);
+  });
+});
+
+test("GH_HOST names its host in mixed case or with a scheme, so a GHES it names that can't be reached is still known", async () => {
+  for (const GH_HOST of ["GHES.Example.com", "https://ghes.example.com/"]) {
+    const kind = github({ env: { GH_HOST }, cli: async (_command, args) => authStatus({}, args), http: async () => ({ kind: "unreachable", reason: "ETIMEDOUT" }) });
+    assert.equal((await kind.probe("ghes.example.com")).kind, "identified", GH_HOST);
+  }
+});
+
 test("GitHub: only the repository itself missing is not-found, not a pull request gone from a page mid-read", async () => {
   const tools = "fixture-org/tools";
   const world: World = { projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }], closingRequests: [{ closes: `${tools}#1`, number: 40, author: "fixture-bot" }] };

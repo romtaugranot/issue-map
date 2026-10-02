@@ -43,10 +43,23 @@ export function atLeast(version: string, since: string): boolean {
   return true;
 }
 
-/** The host an environment variable names, which may be written as a URL; `null` where it names none. */
+/**
+ * The host a value names, which may be written as a URL, the way `gh`
+ * names it: in lower case, an IPv6 host in brackets, without the user or
+ * port, and github.com for its subdomains. `null` where it names none.
+ */
 export function hostNamed(value: string | undefined): string | null {
-  const name = value?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  return name || null;
+  const named = value?.trim();
+  if (!named) return null;
+  let host: string;
+  try {
+    host = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(named) ? named : `https://${named}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (host === "github.com" || host.endsWith(".github.com")) return "github.com";
+  if (host === "altssh.gitlab.com") return "gitlab.com";
+  return host || null;
 }
 
 /** A JSON object, or `null` for anything else. */

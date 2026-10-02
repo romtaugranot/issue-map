@@ -11,7 +11,7 @@ export function authStatus(world: World, args: string[]): CliResult {
   if (world.token === "cant-ask" && args.includes("--json")) return exited(1, "", "unknown flag: --json\n");
   const hosts = [...(world.login === "none" ? [] : ["github.com"]), ...(world.loggedInTo ?? [])];
   // A classic or OAuth token lists its scopes; a fine-grained one lists none.
-  const scopes = { writes: "gist, read:org, repo", reads: "read:org", unknown: "", "cant-ask": "" }[world.token ?? "writes"];
+  const scopes = { writes: "gist, read:org, repo", reads: "read:org", unknown: "", "cant-ask": "", "public-writes": "public_repo, read:org" }[world.token ?? "writes"];
   const held = (host: string) => [{ state: world.login === "refused" ? "error" : "success", active: true, host, login: world.viewer ?? "fixture-viewer", scopes }];
   const asked = args.includes("--hostname") ? args[args.indexOf("--hostname") + 1]! : null;
   return exited(0, JSON.stringify({ hosts: Object.fromEntries(hosts.filter((h) => asked === null || h === asked).map((h) => [h, held(h)])) }));
@@ -441,6 +441,7 @@ function repository(spec: ProjectSpec, host: string) {
     databaseId: 679421000 + spec.number,
     nameWithOwner: spec.path,
     url: `https://${host}/${spec.path}`,
+    isPrivate: spec.private ?? false,
     hasIssuesEnabled: spec.open !== "off",
     issues: { totalCount: spec.open === "off" ? 0 : spec.open },
   };

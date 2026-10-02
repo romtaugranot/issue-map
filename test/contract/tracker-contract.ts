@@ -23,6 +23,8 @@ export interface ProjectSpec {
   issues?: IssueSpec[];
   /** Not a Project but a namespace above them, such as a GitLab group, holding Issues of its own such as epics. */
   namespace?: boolean;
+  /** Only its members can see it; public by default. */
+  private?: boolean;
 }
 
 export interface IssueSpec {
@@ -111,9 +113,10 @@ export interface World {
    * What the login's token may do: write, the default; only read; or not
    * say, as a GitHub fine-grained token doesn't. `cant-ask`: asking fails,
    * as with a `gh` too old to answer in JSON, or a CI job's token GitLab
-   * answers nothing about.
+   * answers nothing about. `public-writes`: write public Projects only, as
+   * a GitHub classic token with only the `public_repo` scope may.
    */
-  token?: "writes" | "reads" | "unknown" | "cant-ask";
+  token?: "writes" | "reads" | "unknown" | "cant-ask" | "public-writes";
 }
 
 export interface Stage {
