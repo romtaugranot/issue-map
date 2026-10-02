@@ -18,4 +18,4 @@ The Map is drawn from a Snapshot on disk, not from a live read. A full read take
 - **A refresher runs outside the conversation**, as a detached process with one lock per Snapshot, so concurrent sessions share one refresh.
 - **A Snapshot nobody draws expires.** Besides a refused login, a month untouched deletes a Snapshot, and any read towards one, unless a refresher keeps it warm, so Projects visited once don't keep their titles forever.
 
-_Amended by ADR 0010: a local Picture is kept and deleted with its Snapshot, and an Artifact sends titles off the machine only on the user's yes to each publish._
+_Amended by ADR 0010: a local HTML Picture is kept and deleted with its Snapshot, and an Artifact sends titles off the machine only on the user's yes to each publish._

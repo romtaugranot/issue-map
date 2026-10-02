@@ -14,4 +14,4 @@ Every existing Map of Issue Links is a web page or a separate app, and none of t
 - No surface can draw an interactive Map inside Claude Code. The Map is text in the conversation, and the user moves through it with pickers, so a large Project can't be seen whole at once and has to be summarised.
 - A status line is terminal-only, and a user has just one. The plugin can't declare one itself, so a setup command has to write it into the user's settings.
 
-_Amended by ADR 0010: a read-only Picture of the Map may be opened outside Claude Code, beside it._
+_Amended by ADR 0010: a read-only HTML Picture of the Map may be opened outside Claude Code, beside it._
