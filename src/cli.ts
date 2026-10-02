@@ -11,7 +11,7 @@
  * `issue-map next [--page <n>]`: lists every Issue in Take next, 15 a page, in its order.
  * `issue-map taken [--page <n>]`: lists the Unblocked Issues taken by others, 15 a page, in Take next's order, each with who has it.
  * `issue-map group <n | ref> [--page <n>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
- * `issue-map picture <n | ref>`: draws Group `n` of the overview whole, or its outline when it's too large for a Picture; or the Picture around the Issue `ref` names, what it waits on and what waits on it.
+ * `issue-map picture <n | ref>`: draws Group `n` of the overview whole, or its outline when it's too large for a Picture; or the Picture around the Issue `ref` names, what it waits on and what waits on it. `--mermaid` or `--dot` prints that Picture as Mermaid or DOT, to paste where GitHub or GitLab render it.
  * `issue-map html`: writes the HTML Picture of the whole Map of the Project on screen beside its Snapshot, and says where it is and how to open it; where the user is doesn't change.
  * `issue-map html --artifact`: writes the same page, and prints for Claude the question to ask before publishing it as a private claude.ai Artifact, or why it can't be here; it publishes nothing itself.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
@@ -48,6 +48,7 @@ import { homeRowHere } from "./status/line.ts";
 import { installStatusLine, removeStatusLine, repointStatusLine, userSettings } from "./status/install.ts";
 import { showCard, showMap, type MapCommand } from "./map/show.ts";
 import type { Command } from "./map/draw.ts";
+import type { Export } from "./map/picture.ts";
 import { withLine } from "./show/shown.ts";
 import { assignToViewer } from "./map/assign.ts";
 import { startWork } from "./map/start.ts";
@@ -55,7 +56,7 @@ import { confirm, offer, suggest, type Pending, type PendingSuggestions, type Pr
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
 
 /** The status line's process, where this plugin is now. */
 const STATUS_LINE = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
@@ -74,15 +75,18 @@ async function main(argv: string[]): Promise<number> {
       "pick-there": { type: "string" },
       setup: { type: "boolean" },
       remove: { type: "boolean" },
+      mermaid: { type: "boolean" },
+      dot: { type: "boolean" },
       artifact: { type: "boolean" },
     },
   });
   const [verb, ...rest] = positionals;
   const page = values.page === undefined ? 1 : Number(values.page);
-  const opening = verb === "group" ? toOpen(rest.shift(), page) : verb === "picture" ? toPicture(rest.shift()) : undefined;
+  const opening = verb === "group" ? toOpen(rest.shift(), page) : verb === "picture" ? toPicture(rest.shift(), values.mermaid ? "mermaid" : values.dot ? "dot" : undefined) : undefined;
   const cardRef = verb === "issue" || verb === "assign" || verb === "start" ? rest.shift() : undefined;
   const target = verb === "go" ? rest.shift() : undefined;
   const picked = verb === "confirm" ? rest.splice(0).map(Number) : [];
+  if ((values.mermaid || values.dot) && (verb !== "picture" || (values.mermaid && values.dot))) return usage();
   if (rest.length > 0 || !Number.isInteger(page) || page < 1 || picked.some((n) => !Number.isInteger(n) || n < 1)) return usage();
   const deps = { cli: processCli, http: anonymousHttp, env: process.env };
   const known = trackers([github(deps), gitlab(deps)]);
@@ -218,10 +222,10 @@ function toOpen(arg: string | undefined, page: number): Command | undefined {
 }
 
 /** `picture`'s argument: a bare number is a Group's place on the overview, from 1; anything else names an Issue to draw the Picture around. */
-function toPicture(arg: string | undefined): Command | undefined {
+function toPicture(arg: string | undefined, as: Export | undefined): Command | undefined {
   if (!arg?.trim()) return undefined;
-  if (!/^\d+$/.test(arg)) return { kind: "around", ref: arg };
-  return Number(arg) >= 1 ? { kind: "picture", group: Number(arg) } : undefined;
+  if (!/^\d+$/.test(arg)) return { kind: "around", ref: arg, as };
+  return Number(arg) >= 1 ? { kind: "picture", group: Number(arg), as } : undefined;
 }
 
 /** How long a full read may run in all: well past the 37 minutes `gitlab-org/gitlab` takes. */

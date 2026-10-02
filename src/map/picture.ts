@@ -9,7 +9,7 @@
  */
 import { byRank, under, type Beneath, type Group, type Member } from "./links.ts";
 import { related, topOf } from "./outline.ts";
-import { clip, count, OUTSIDE, oneLine } from "./text.ts";
+import { clip, count, OUTSIDE, oneLine, plainTitle } from "./text.ts";
 
 /** Issues a Picture draws at most, Outside Issues among them: about 99% of recorded Groups hold no more. */
 export const PICTURE_ISSUES = 25;
@@ -20,11 +20,11 @@ export const PICTURE_COLUMNS = 72;
 /** The fewest characters a title is cut to; a row that leaves less shows no title. */
 const TITLE_MIN = 16;
 
-/** The Group's rows, top first; `null` when it doesn't fit the budget. */
-export function picture(group: Group): string[] | null {
+/** The Group's rows, top first, and the members drawn; `null` when it doesn't fit the budget. */
+export function picture(group: Group): { rows: string[]; drawn: Member[] } | null {
   if (group.members.size > PICTURE_ISSUES) return null;
   const drawn = rowsOf(group, topOf(group).sort(ranked(group)), (member) => ({ next: beneathOf(group, member), more: 0 }));
-  return drawn && drawn.rows;
+  return drawn && { rows: drawn.rows, drawn: drawn.members };
 }
 
 /** Steps a Picture around an Issue goes above and beneath it at most. */
@@ -163,4 +163,57 @@ function rowOf(lead: string, member: Member, cut = 0): string | null {
 function ref(member: Member): string {
   if (member.kind === "issue") return member.issue.ref;
   return member.end.readable ? `${OUTSIDE}${member.end.ref}` : `${OUTSIDE} an Issue this login can't read`;
+}
+
+/** A text format GitHub or GitLab render, or Graphviz draws. */
+export type Export = "mermaid" | "dot";
+
+/**
+ * The members a Picture drew, as Mermaid or DOT to paste elsewhere (#83):
+ * each a box named as its row names it, `center` marked, joined by the
+ * recorded Parent and Blocks Links between them; Blocks point at the Issue
+ * that waits, a Parent's line has no arrow. Related Links stay a count.
+ */
+export function exported(group: Group, drawn: Member[], as: Export, center?: Member): string[] {
+  const id = new Map(drawn.map((member, i) => [member.id, `n${i + 1}`]));
+  const boxes = drawn.map((member) => [id.get(member.id)!, `${member === center ? "● " : ""}${named(member)}`] as const);
+  const lines = drawn.flatMap((member) => beneathOf(group, member).filter((next) => id.has(next.member.id)).map((next) => [id.get(member.id)!, id.get(next.member.id)!, next.how] as const));
+  if (as === "mermaid") {
+    return [
+      "flowchart TD",
+      ...boxes.map(([n, label]) => `  ${n}["${mermaidText(label)}"]`),
+      ...lines.map(([a, b, how]) => (how === "blocked" ? `  ${a} -->|blocks| ${b}` : `  ${a} ---|parent of| ${b}`)),
+    ];
+  }
+  return [
+    "digraph {",
+    "  node [shape=box];",
+    ...boxes.map(([n, label]) => `  ${n} [label="${label.replace(/["\\]/g, "\\$&").replace(/&/g, "&amp;")}"];`),
+    ...lines.map(([a, b, how]) => `  ${a} -> ${b} ${how === "blocked" ? '[label="blocks"]' : '[label="parent of", arrowhead=none, style=dashed]'};`),
+    "}",
+  ];
+}
+
+/** A member as its row names it, its title whole on one line rather than cut to the row. */
+function named(member: Member): string {
+  const title = member.kind === "issue" ? member.issue.title : member.end.readable ? member.end.title : null;
+  if (title === null) return ref(member);
+  const n = related(member);
+  return `${ref(member)}${n > 0 ? ` (${n} Related)` : ""} ${plainTitle(title)}`;
+}
+
+/**
+ * Text inside a quoted Mermaid label: what would end it, start an entity,
+ * or be read as HTML or Markdown, written as Mermaid's entity codes. After
+ * a backslash, or a non-breaking space even written as an entity, Mermaid
+ * drops the rest of the diagram: the one is written as its code, every
+ * space as a plain one.
+ */
+function mermaidText(text: string): string {
+  const codes: Record<string, string> = { '"': "#quot;", "<": "#lt;", ">": "#gt;", "&": "#amp;", "`": "#96;" };
+  return text
+    .replace(/#(?=\w+;)/g, "#35;")
+    .replace(/["<>&`]/g, (c) => codes[c]!)
+    .replace(/\\/g, "#92;")
+    .replace(/\s/g, " ");
 }

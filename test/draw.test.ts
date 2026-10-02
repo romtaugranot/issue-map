@@ -1004,3 +1004,102 @@ describe("a Picture around one Issue", () => {
     assert.deepEqual(rows(around(s, "↗fixture-org/plans#7")), ["● ↗fixture-org/plans#7 Roadmap", "└─ #1 Issue 1"]);
   });
 });
+
+describe("a Picture as Mermaid or DOT, to paste where GitHub or GitLab render it (#83)", () => {
+  // #1 is the Parent of #2 and #3; #2 Blocks #4.
+  const family = () => snapshot([{ n: 1, title: "Lay the foundation" }, { n: 2 }, { n: 3 }, { n: 4 }], [[1, "parent", 2], [1, "parent", 3], [2, "blocks", 4]]);
+
+  test("Mermaid draws the Picture's Issues and the recorded Links between them, Blocks pointing at the Issue that waits", () => {
+    const s = family();
+    assert.equal(
+      draw(s, { kind: "picture", group: 1, as: "mermaid" }).text,
+      [
+        "**Picture of Group 1 of 1, as Mermaid** · #1 Lay the foundation — 4 Issues, 2 Unblocked",
+        "Paste it where GitHub or GitLab render Mermaid, such as a comment on the Group's head Issue. The Map writes nothing to the Tracker.",
+        "",
+        "```mermaid",
+        "flowchart TD",
+        '  n1["#1 Lay the foundation"]',
+        '  n2["#2 Issue 2"]',
+        '  n3["#4 Issue 4"]',
+        '  n4["#3 Issue 3"]',
+        "  n1 ---|parent of| n2",
+        "  n1 ---|parent of| n4",
+        "  n2 -->|blocks| n3",
+        "```",
+        "_`picture 1` for the Picture · `group 1` for its outline · `map` for the Map_",
+      ].join("\n"),
+    );
+    assert.deepEqual(draw(s, { kind: "picture", group: 1, as: "mermaid" }).issues?.sort(), ["#1", "#2", "#3", "#4"]);
+  });
+
+  test("DOT draws the same, a Parent Link a dashed line with no arrow", () => {
+    assert.deepEqual(draw(family(), { kind: "picture", group: 1, as: "dot" }).text.split("\n").slice(3, -1), [
+      "```dot",
+      "digraph {",
+      "  node [shape=box];",
+      '  n1 [label="#1 Lay the foundation"];',
+      '  n2 [label="#2 Issue 2"];',
+      '  n3 [label="#4 Issue 4"];',
+      '  n4 [label="#3 Issue 3"];',
+      '  n1 -> n2 [label="parent of", arrowhead=none, style=dashed];',
+      '  n1 -> n4 [label="parent of", arrowhead=none, style=dashed];',
+      '  n2 -> n3 [label="blocks"];',
+      "}",
+      "```",
+    ]);
+  });
+
+  test("Related Links are a suffix, never a line; Outside Issues are marked, and one this login can't read has no name", () => {
+    const s = snapshot(
+      [{ n: 1 }, { n: 2 }, { n: 9 }],
+      [[{ outside: "fixture-org/plans#7", title: "Roadmap" }, "parent", 1], [{ hidden: "fixture-org/secret#1" }, "blocks", 1], [1, "blocks", 2], [2, "related", 9]],
+    );
+    const lines = draw(s, { kind: "picture", group: 1, as: "mermaid" }).text.split("\n");
+    assert.deepEqual(lines.filter((l) => l.startsWith("  n")).filter((l) => l.includes("[")), [
+      '  n1["↗fixture-org/plans#7 Roadmap"]',
+      '  n2["#1 Issue 1"]',
+      '  n3["#2 (1 Related) Issue 2"]',
+      "  n4[\"↗ an Issue this login can't read\"]",
+    ]);
+    assert.ok(!lines.some((l) => l.includes("#9")), "a Related Link is never drawn");
+  });
+
+  test("titles with quotes, brackets, backticks, tags and entities can't break the Mermaid or the DOT, and print as typed", () => {
+    const s = snapshot([{ n: 1, title: 'Say "hi" [now] {x} <b>y</b> & ```z``` #7; \\ end' }, { n: 2 }], [[1, "blocks", 2]]);
+    const mermaid = draw(s, { kind: "picture", group: 1, as: "mermaid" }).text.split("\n");
+    assert.ok(mermaid.includes('  n1["#1 Say #quot;hi#quot; [now] {x} #lt;b#gt;y#lt;/b#gt; #amp; #96;#96;#96;z#96;#96;#96; #35;7; #92; end"]'), mermaid.join("\n"));
+    assert.ok(mermaid.includes("```mermaid"));
+    const dot = draw(s, { kind: "picture", group: 1, as: "dot" }).text.split("\n");
+    assert.ok(dot.includes('  n1 [label="#1 Say \\"hi\\" [now] {x} <b>y</b> &amp; ```z``` #7; \\\\ end"];'), dot.join("\n"));
+    assert.ok(dot.includes("````dot"), "the fence outruns the title's backticks");
+  });
+
+  test("a backslash or a non-breaking space in a title, which end a Mermaid diagram early, are written as a code and a plain space", () => {
+    const s = snapshot([{ n: 1, title: "Fix\u00a0it with `\\n`" }, { n: 2 }], [[1, "blocks", 2]]);
+    assert.ok(draw(s, { kind: "picture", group: 1, as: "mermaid" }).text.split("\n").includes('  n1["#1 Fix it with #96;#92;n#96;"]'));
+  });
+
+  test("around an Issue, it draws the Issues that Picture draws, the Issue marked", () => {
+    const s = snapshot([{ n: 1, title: "Lay the foundation" }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }], [[1, "parent", 2], [1, "parent", 3], [2, "blocks", 4], [5, "blocks", 2]]);
+    const lines = draw(s, { kind: "around", ref: "#2", as: "mermaid" }).text.split("\n");
+    assert.equal(lines[0], "**Picture around #2, as Mermaid** · in Group 1 of 1 · #1 Lay the foundation — 5 Issues, 2 Unblocked");
+    assert.deepEqual(lines.slice(4, -2), [
+      "flowchart TD",
+      '  n1["#1 Lay the foundation"]',
+      '  n2["● #2 Issue 2"]',
+      '  n3["#4 Issue 4"]',
+      '  n4["#5 Issue 5"]',
+      "  n1 ---|parent of| n2",
+      "  n2 -->|blocks| n3",
+      "  n4 -->|blocks| n2",
+    ]);
+    assert.equal(lines.at(-1), "_`picture '#2'` for the Picture · `issue '#2'` for its card · `map` for the Map_");
+  });
+
+  test("a Group too large for a Picture opens as its outline, as the Picture does", () => {
+    const issues = Array.from({ length: 26 }, (_, i) => ({ n: i + 1 }));
+    const s = snapshot(issues, issues.slice(1).map(({ n }): LinkSpec => [1, "parent", n]));
+    assert.equal(draw(s, { kind: "picture", group: 1, as: "mermaid" }).text, draw(s, { kind: "picture", group: 1 }).text);
+  });
+});

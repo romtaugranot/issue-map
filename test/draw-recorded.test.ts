@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { draw } from "../src/map/draw.ts";
 import { layout } from "../src/map/links.ts";
-import { around, picture, PICTURE_COLUMNS, PICTURE_ROWS } from "../src/map/picture.ts";
+import { around, exported, picture, PICTURE_COLUMNS, PICTURE_ROWS } from "../src/map/picture.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
 
 function recorded(name: string): Snapshot {
@@ -136,7 +136,7 @@ describe("Pictures of the recorded Snapshots", () => {
   for (const [name, groups, drawn] of [["opentofu__opentofu", 12, 12], ["microsoft__playwright", 0, 0], ["rust-lang__rust", 70, 68], ["gitlab-org__gitlab", 5_812, 5_706]] as const) {
     test(`${name}: ${drawn} of ${groups} Groups draw whole, each within ${PICTURE_ROWS} rows of ${PICTURE_COLUMNS} characters`, () => {
       const laidOut = layout(recorded(name));
-      const pictures = laidOut.groups.map(picture).filter((rows) => rows !== null);
+      const pictures = laidOut.groups.map((group) => picture(group)?.rows).filter((rows) => rows !== undefined);
       assert.deepEqual([laidOut.groups.length, pictures.length], [groups, drawn]);
       for (const rows of pictures) {
         assert.ok(rows.length <= PICTURE_ROWS, rows.join("\n"));
@@ -184,3 +184,24 @@ function section(text: string, heading: string): string[] {
   const start = lines.findIndex((l) => l.startsWith(heading));
   return lines.slice(start, lines.indexOf("", start));
 }
+
+describe("Pictures of the recorded Snapshots as Mermaid (#83)", () => {
+  // Only a box's quoted label holds a title, and nothing in it can end the quote, open a tag or a Markdown string, start an entity Mermaid would decode, or end the diagram early: a backslash, or a space other than a plain one.
+  const box = /^ {2}n\d+\["(?:[^"<>&`#\\\s]| |#(?!\w+;)|#(?:quot|lt|gt|amp|\d+);)*"\]$/;
+  const line = /^ {2}n\d+ (?:-->\|blocks\||---\|parent of\|) n\d+$/;
+  for (const name of ["opentofu__opentofu", "rust-lang__rust", "gitlab-org__gitlab"]) {
+    test(`${name}: every Group drawn whole is a flowchart of quoted boxes and Blocks arrows`, () => {
+      let blocks = 0;
+      for (const group of layout(recorded(name)).groups) {
+        const drawn = picture(group);
+        if (!drawn) continue;
+        const [first, ...rest] = exported(group, drawn.drawn, "mermaid");
+        assert.equal(first, "flowchart TD");
+        assert.equal(rest.filter((l) => box.test(l)).length, drawn.drawn.length);
+        for (const l of rest) assert.ok(box.test(l) || line.test(l), l);
+        blocks += rest.filter((l) => l.includes("-->|blocks|")).length;
+      }
+      assert.ok(blocks > 0, "some Group has a Blocks Link, drawn as an arrow");
+    });
+  }
+});
