@@ -7,8 +7,9 @@
  * wrote, and the transcript, keep the line.
  */
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { writeWhole } from "../state.ts";
 
 /** A line standing for a kept output: only a whole line of its own, so a mention in a sentence is left as written. */
 const LINE = /^⟦issue-map ([0-9a-f]{12})⟧$/gm;
@@ -24,7 +25,7 @@ export async function keepShown(dir: string, text: string): Promise<string> {
     if (Date.now() - mtimeMs > KEPT_MS) await unlink(old).catch(() => {});
   }
   const id = randomBytes(6).toString("hex");
-  await writeFile(join(shown, `${id}.md`), text, { mode: 0o600 });
+  await writeWhole(join(shown, `${id}.md`), text);
   return `⟦issue-map ${id}⟧`;
 }
 
