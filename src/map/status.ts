@@ -9,7 +9,7 @@ import { bandOf } from "./band.ts";
 import { NO_MAP, noMapToDraw, pickLine, takeNextSaid } from "./draw.ts";
 import { layout } from "./links.ts";
 import { takeNext } from "./take-next.ts";
-import { ROW } from "./text.ts";
+import { plainTitle, ROW } from "./text.ts";
 
 export function statusRow(snapshot: Snapshot): string {
   const head = `${ROW} ${snapshot.project.path}`;
@@ -19,5 +19,5 @@ export function statusRow(snapshot: Snapshot): string {
   if (noMapToDraw(laidOut, next)) return `${head} · ${NO_MAP}`;
   const said = takeNextSaid(next);
   const first = next.kind === "list" ? next.picks[0] : undefined;
-  return first ? `${head} · ${said.head} · ${pickLine(first, snapshot)}` : `${head} · ${said.head} — ${said.why}`;
+  return first ? `${head} · ${said.head} · ${pickLine(first, snapshot, () => {}, plainTitle)}` : `${head} · ${said.head} — ${said.why}`;
 }
