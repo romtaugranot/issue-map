@@ -19,10 +19,12 @@ function issue(n: number): OpenIssue {
   return { id: `I_${n}`, ref: `#${n}`, title: `Issue ${n}`, url: `https://github.com/fixture-org/tools/issues/${n}`, createdAt: new Date(Date.UTC(2026, 0, n)).toISOString(), assignees: [], planned: null, taskLevel: false, links: [], closingRequests: [] };
 }
 
-/** 150 open Issues, #1 the Parent of #2; the second page waits until `release` is called. */
+/** 150 open Issues, #1 the Parent of #2; the second page waits until `release` is called, and `paged` settles once the first is saved and it's asked for. */
 function heldTracker() {
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
+  let asked!: () => void;
+  const paged = new Promise<void>((resolve) => (asked = resolve));
   const all = Array.from({ length: 150 }, (_, i) => issue(i + 1));
   all[0]!.links.push({ role: "child", to: { id: "I_2", readable: true, open: true, project: project.path, ref: `${project.path}#2`, title: "Issue 2", url: all[1]!.url } });
   all[1]!.links.push({ role: "parent", to: { id: "I_1", readable: true, open: true, project: project.path, ref: `${project.path}#1`, title: "Issue 1", url: all[0]!.url } });
@@ -41,16 +43,17 @@ function heldTracker() {
     viewer: async () => ({ kind: "viewer", login: "fixture-viewer" }),
     async openIssues(_, after) {
       if (after === null) return { kind: "page", issues: all.slice(0, 100), total: 150, next: "100", unread: {} };
+      asked();
       await held;
       return { kind: "page", issues: all.slice(100), total: 150, next: null, unread: {} };
     },
   };
-  return { tracker, release };
+  return { tracker, release, paged };
 }
 
 test("a first read shows progress and no Map until the Snapshot is complete, then the Map", async () => {
   const store = snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-show-")), { now: () => Date.parse("2026-09-23T10:00:00Z") });
-  const { tracker, release } = heldTracker();
+  const { tracker, release, paged } = heldTracker();
   let reading: Promise<unknown> | undefined;
   let started = 0;
   const deps = {
@@ -59,7 +62,8 @@ test("a first read shows progress and no Map until the Snapshot is complete, the
       started++;
       reading = store.read({ tracker: "github.com", project: project.id, login: "fixture-viewer" }, tracker, project);
     },
-    sleep: () => new Promise<void>((resolve) => setImmediate(resolve)),
+    // Waits for the first page to be saved, not a count of ticks a slow disk can outlast.
+    sleep: () => paged,
     startRefresher: async () => {},
   };
 
