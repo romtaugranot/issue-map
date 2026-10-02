@@ -21,6 +21,8 @@ export interface Card extends Drawing {
   choices: Choice[];
   /** A move to the Map of the Project an Outside Issue is in; `target` is what `go` takes to make it. */
   move?: Move;
+  /** For an open Outside Issue in a GitLab group, which has no Map (ADR 0005): the level beneath it on this Map; `ref` is what `group` takes. */
+  under?: Under;
   /** An offer to assign the Issue to the viewer; `ref` is what `assign` takes to make it. */
   assign?: Assign;
   /** An offer to start work on the Issue; `ref` is what `start` takes to make it. */
@@ -36,6 +38,10 @@ export interface Assign extends Choice {
 }
 
 export interface Start extends Choice {
+  ref: string;
+}
+
+export interface Under extends Choice {
   ref: string;
 }
 
@@ -63,13 +69,18 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
   const outside = issue.project !== project;
   if (outside || !issue.open) {
     const state = issue.open ? "Open" : `Closed${issue.closedAs ? ` as ${issue.closedAs}` : ""}`;
-    const why = outside
-      ? ` · an Outside Issue, in ${issue.project}. The Map hasn't read that Project, so this card shows none of its Links.`
-      : ". A closed Issue isn't on the Map, so this card shows none of its Links.";
+    const group = inGroup(issue.url);
+    const why = !outside
+      ? ". A closed Issue isn't on the Map, so this card shows none of its Links."
+      : group
+        ? ` · an Outside Issue, in the group ${issue.project}. There's no Map of a group, so this card shows none of its Links.`
+        : ` · an Outside Issue, in ${issue.project}. The Map hasn't read that Project, so this card shows none of its Links.`;
     const text = [...head, `${state}${why}`].join("\n");
     if (!outside) return { text, choices: [] };
-    // Its own Project's Map reads its Links, so the move lands on its card there.
     const start = issue.open ? { start: startOffer(short(issue.ref, project), issue.ref) } : {};
+    // A group has no Map; an open epic is on this one, with what it holds beneath it.
+    if (group) return { text, choices: [], ...start, ...(issue.open ? { under: { label: "Show what it holds here", description: "the level beneath it on this Map", ref: issue.ref } } : {}) };
+    // Its own Project's Map reads its Links, so the move lands on its card there.
     return { text, choices: [], ...start, move: { label: `Open ${issue.project}'s Map`, description: "on this Issue's card there, which shows its Links", target: issue.url } };
   }
   const lines = [...head, `${blocked(issue)} · ${assigned(issue, context.viewer)}`];
@@ -114,6 +125,11 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
     lines.push("", `Mentioned by ${plural(mentions, "other Issue")} — Mentions aren't Links. Ask for Link Suggestions to see whether any should be.`);
   }
   return { text: lines.join("\n"), choices, ...offered };
+}
+
+/** Whether the Issue at `url` is a GitLab group's, such as an epic, rather than a Project's: GitLab serves those under `/groups/`. */
+function inGroup(url: string): boolean {
+  return /^https?:\/\/[^/]+\/groups\/.+\/-\//.test(url);
 }
 
 /** Whom it's assigned to, the viewer first, as you. */

@@ -6,9 +6,10 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { drawCard } from "../src/map/card.ts";
 import { draw } from "../src/map/draw.ts";
 import { SNAPSHOT_FORMAT, type Snapshot } from "../src/snapshot/snapshot.ts";
-import type { IssuePage, OpenIssue, ProjectResolution, Unread } from "../src/tracker/tracker.ts";
+import type { IssueAnswer, IssuePage, OpenIssue, ProjectResolution, Unread } from "../src/tracker/tracker.ts";
 import type { World } from "./contract/tracker-contract.ts";
 import { arrange } from "./fakes/fake-glab.ts";
 import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
@@ -72,6 +73,18 @@ test("a GitLab group's epic joins the Issues it parents into one Group, drawn as
   assert.match(epic, /#1 Issue 1/);
   assert.match(epic, /#2 Issue 2/);
   assert.doesNotMatch(epic, /#4 /, "the Related Link from #4 joins nothing");
+});
+
+test("the epic's card offers what it holds on the Map, not a Map of its group, and its choice opens the level beneath it", async () => {
+  const snapshot = await snapshotOf(world);
+  const tracker = (await arrange(world).kind.recognise("gitlab.com"))!;
+  const read = (await tracker.issue("fixture-org#12")) as Extract<IssueAnswer, { kind: "issue" }>;
+  const card = drawCard(read.issue, tools);
+  assert.equal(card.move, undefined);
+  assert.equal(card.under?.label, "Show what it holds here");
+  const beneath = draw(snapshot, { kind: "under", ref: card.under!.ref, page: 1 }).text;
+  assert.match(beneath, /^- #1 Issue 1/m);
+  assert.match(beneath, /^- #2 Issue 2/m);
 });
 
 test("Take next orders by an Issue's own due date where it has one, and by its milestone's where it has none", async () => {
