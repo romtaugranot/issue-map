@@ -12,9 +12,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { confirm, offer, suggest, type Declines, type Pending, type PendingSuggestions, type Proposal } from "../src/map/suggest.ts";
 import { showMap } from "../src/map/show.ts";
-import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
+import { snapshotStore, type SnapshotKey, type SnapshotStore } from "../src/snapshot/store.ts";
 import type { CapabilitiesAnswer, FarEnd, IssueRead, LinkAnswer, LinkKind, NamedLink, OpenIssue, Project, Thread, Tracker } from "../src/tracker/tracker.ts";
 import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
+import { arrange as glab } from "./fakes/fake-glab.ts";
 
 const project: Project = { id: "gitlab.com#1", host: "gitlab.com", path: "fixture-org/tools", url: "https://gitlab.com/fixture-org/tools", issues: { open: 11 } };
 const key: SnapshotKey = { tracker: "gitlab.com", project: project.id, login: "fixture-viewer" };
@@ -337,5 +338,34 @@ describe("confirm writes the ticked suggestions and remembers the rest as declin
     assert.equal(writes.length, 1, "stops at the first refusal");
     assert.match(said, new RegExp(`^Not written: #6 Blocks #1 — GitLab refused the write — ${refuse.reason}\\.$`, "m"));
     assert.match(said, /^Not tried: #12 Blocks #10\.$/m);
+  });
+
+  test("a write whose answer is lost says it can't tell whether it landed, and to open the card again, not that it wasn't written", async () => {
+    const hung = (await glab({ network: "hangs", projects: [{ path: project.path, number: 1, open: 11, issues: world().held.map((h) => ({ number: h.n })) }] }).kind.recognise("gitlab.com"))!;
+    const { tracker, deps, writes } = await arrange({ refuse: await hung.link(full(6), "blocks", full(1)) });
+    await suggest(deps, tracker, project, { kind: "overview" });
+    await offer(deps, tracker, project, [CREDENTIALS]);
+    const said = await confirm(deps, tracker, project, [1, 2]);
+    assert.equal(writes.length, 1, "a Tracker that doesn't answer isn't written to again");
+    assert.match(said, /^Can't tell whether #6 Blocks #1 was written — gitlab\.com didn't answer in 60 s\. Open #6's card again to see\.$/m);
+    assert.doesNotMatch(said, /Not written/);
+  });
+
+  test("a write that landed is reported though the Snapshot can't take it in; the rest are still tried, and the unticked declined", async () => {
+    const { tracker, deps, writes } = await arrange();
+    const locked = "Gave up after a minute waiting for the Snapshot lock /snapshots/gitlab.com/1/fixture-viewer.lock, held by process 4242.";
+    const store: SnapshotStore = { ...deps.store, linked: async () => { throw new Error(locked); } };
+    await suggest(deps, tracker, project, { kind: "overview" });
+    const offered = await offer(deps, tracker, project, [CREDENTIALS, proposal("#7", "blocks", "#4", "This also depends on #7.", "#4")]);
+    assert.deepEqual(offered.confirm?.choices.map((c) => c.label), ["#6 Blocks #1", "#7 Blocks #4", "#12 Blocks #10"]);
+    const said = await confirm({ ...deps, store }, tracker, project, [1, 3]);
+    assert.deepEqual(writes, [`${full(6)} blocks ${full(1)}`, `${full(12)} blocks ${full(10)}`]);
+    assert.match(said, /^Wrote #6 Blocks #1 to GitLab\.$/m);
+    assert.match(said, /^Wrote #12 Blocks #10 to GitLab\.$/m);
+    assert.equal(said.split("\n").filter((line) => line.startsWith("The Map shows")).length, 1, "said once");
+    assert.match(said, new RegExp(`^The Map shows what was written after the next refresh: ${locked.replace(/[.]/g, "\\.")}$`, "m"));
+    assert.match(said, /^Declined 1: #7 Blocks #4 won't be suggested again\.$/m);
+    await suggest(deps, tracker, project, { kind: "overview" });
+    assert.match((await offer(deps, tracker, project, [proposal("#7", "blocks", "#4", "This also depends on #7.", "#4")])).text, /^1 declined before, not offered again\.$/m);
   });
 });

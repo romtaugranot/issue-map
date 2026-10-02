@@ -11,9 +11,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assignToViewer } from "../src/map/assign.ts";
 import { showCard, showMap } from "../src/map/show.ts";
-import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
+import { snapshotStore, type SnapshotKey, type SnapshotStore } from "../src/snapshot/store.ts";
 import type { AssignAnswer, CapabilitiesAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
+import { CALL_SECONDS } from "../src/tracker/boundary.ts";
+import { github } from "../src/tracker/github.ts";
 import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
+import { authStatus, ghApi } from "./fakes/fake-gh.ts";
+import type { World } from "./contract/tracker-contract.ts";
 
 const project: Project = { id: "github.com#1", host: "github.com", path: "fixture-org/tools", url: "https://github.com/fixture-org/tools", issues: { open: 3 } };
 const key: SnapshotKey = { tracker: "github.com", project: project.id, login: "fixture-viewer" };
@@ -91,6 +95,22 @@ async function arrange(options: Options = {}) {
   };
   return { ...live, store, takeNext };
 }
+
+/** What GitHub's adapter answers an assign in the contract tests' World whose CLI never answers: the write reaches github.com, and its answer is lost. */
+async function hungAssign(): Promise<AssignAnswer> {
+  const world: World = { network: "hangs", projects: [{ path: project.path, number: 1, open: 3, issues: [{ number: 1 }, { number: 2 }, { number: 3 }] }] };
+  const cli = async (_command: string, args: string[], _unset?: string[], seconds = CALL_SECONDS) => {
+    if (args[0] === "auth") return authStatus(world, args);
+    ghApi(world, args);
+    return { kind: "exited" as const, code: 1, stdout: "", stderr: "", timedOut: seconds };
+  };
+  const hung = await github({ cli, http: async () => ({ kind: "unreachable", reason: "unused" }), env: {} }).recognise("github.com");
+  return hung!.assign(`${project.path}#3`, key.login);
+}
+
+/** A real store whose Snapshot update fails after the write, as when another process holds its lock. */
+const LOCKED = "Gave up after a minute waiting for the Snapshot lock /snapshots/github.com/1/fixture-viewer.lock, held by process 4242.";
+const locked = (store: SnapshotStore): SnapshotStore => ({ ...store, assigned: async () => { throw new Error(LOCKED); } });
 
 const CANT_TELL = { kind: "cant-tell", reason: "this login's token doesn't list what it may write, as a fine-grained token doesn't" } as const;
 
@@ -179,5 +199,23 @@ describe("assigning an Issue to yourself", () => {
     assert.deepEqual(writes, []);
     assert.equal(shown.text, "Not assigned: no Issue fixture-org/tools#99 on github.com that this login can read.");
     assert.equal(shown.opened, false);
+  });
+
+  test("a write whose answer is lost says it can't tell whether it landed, and to open the card again, not that it wasn't assigned", async () => {
+    const { tracker, writes, store } = await arrange({ refuse: await hungAssign() });
+    const shown = await assignToViewer({ store }, tracker, project, "#3");
+    assert.deepEqual(writes, ["fixture-org/tools#3"], "one write, not retried");
+    assert.equal(shown.text, "Can't tell whether #3 was assigned — github.com didn't answer in 60 s. Open its card again to see.");
+    assert.doesNotMatch(shown.text, /Not assigned/);
+  });
+
+  test("a write that landed is reported though the Snapshot can't take it in, which the next refresh does", async () => {
+    const { tracker, writes, store } = await arrange();
+    const shown = await assignToViewer({ store: locked(store) }, tracker, project, "#3");
+    assert.deepEqual(writes, ["fixture-org/tools#3"]);
+    const [said, note, , ...card] = shown.text.split("\n");
+    assert.equal(said, "Assigned #3 to you on GitHub.");
+    assert.equal(note, `The Map shows it after the next refresh: ${LOCKED}`);
+    assert.equal(card[2], "Not Blocked · assigned to you");
   });
 });
