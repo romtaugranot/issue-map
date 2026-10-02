@@ -86,22 +86,33 @@ export function takeNext(snapshot: Snapshot, { unlinked }: Layout): TakeNext {
   // A child under several Parents that give way takes the largest count; ties go to the oldest Parent.
   const counted = new Map<string, Waiting>();
   const counting = new Set<string>();
+  /** Whether the count `waitingFor` last gave skipped a Parent still being counted, around a cycle of Parent Links, so holds only part of it. */
+  let partial = false;
   const waitingFor = (issue: OpenIssue): Waiting => {
     const known = counted.get(issue.id);
+    partial = false;
     if (known) return known;
     counting.add(issue.id);
     let via: OpenIssue | null = null;
     let fromVia = -1;
+    let cut = false;
     for (const { role, to } of issue.links) {
       const parent = role === "parent" ? own.get(to.id) : undefined;
-      if (!parent || counting.has(parent.id) || !givesWay(parent)) continue;
+      if (!parent || !givesWay(parent)) continue;
+      if (counting.has(parent.id)) {
+        cut = true;
+        continue;
+      }
       const count = waitingFor(parent).count;
+      cut ||= partial;
       if (count > fromVia || (count === fromVia && via && oldestFirst(parent, via) < 0)) [via, fromVia] = [parent, count];
     }
     counting.delete(issue.id);
     const mine = waitingOn(issue.id);
     const waiting = { count: Math.max(mine, fromVia), via, carried: via !== null && fromVia >= mine };
-    counted.set(issue.id, waiting);
+    // A partial count is never kept: asked for again, it's counted whole.
+    if (!cut) counted.set(issue.id, waiting);
+    partial = cut;
     return waiting;
   };
 
