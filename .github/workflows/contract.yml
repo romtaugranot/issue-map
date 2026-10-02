@@ -28,3 +28,23 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  # The tree users install (scripts/ci/release.ts), checked as Claude Code checks a plugin, strictly: a manifest or
+  # hook warning fails the change. The checkout itself isn't checked, as it holds what never ships, such as CLAUDE.md.
+  plugin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLAUDE_CODE: 2.1.287
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.18"
+      - name: Build the release tree
+        run: node --input-type=module -e 'import { releaseTree } from "./scripts/ci/release.ts"; releaseTree(".", "0.0.0", process.argv[1]);' "$RUNNER_TEMP/issue-map"
+      # Claude Code's own binary for the runner, so no install script runs.
+      - name: Install Claude Code
+        run: npm install --prefix "$RUNNER_TEMP/claude" --no-save --ignore-scripts "@anthropic-ai/claude-code-linux-x64@$CLAUDE_CODE"
+      - name: Validate it strictly
+        run: '"$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" plugin validate --strict "$RUNNER_TEMP/issue-map"'
