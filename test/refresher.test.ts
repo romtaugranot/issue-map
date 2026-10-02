@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { keepWarm } from "../src/snapshot/refresher.ts";
@@ -183,6 +183,40 @@ test("a refresher that stopped renewing its claim, as after a reboot hands its p
   time.advance(6 * 60_000);
   assert.equal(await store.refresherRunning(key), false);
   assert.ok(await store.claimRefresher(key), "the next refresher takes over");
+});
+
+test("a claim left by a live process that isn't its refresher, from before a reboot, or naming this process's pid doesn't hold it (#53)", async () => {
+  const leftBehind = {
+    "a live process that isn't its refresher, unrenewed for ten minutes": { pid: process.ppid, at: Date.parse("2026-09-23T09:50:00Z") },
+    "before a reboot": { pid: process.ppid, boot: "a boot before this one" },
+    "this process's pid, which a process before it had": { pid: process.pid },
+  };
+  for (const [how, holder] of Object.entries(leftBehind)) {
+    const dir = mkdtempSync(join(tmpdir(), "issue-map-refresher-"));
+    const at = join(dir, "snapshots", "github.com", encodeURIComponent(project.id));
+    mkdirSync(at, { recursive: true });
+    writeFileSync(join(at, `${key.login}.refresher.lock`), JSON.stringify({ id: "left-behind", at: Date.parse("2026-09-23T10:00:00Z"), boot: null, ...holder }));
+    const store = snapshotStore(dir, clock());
+    assert.equal(await store.refresherRunning(key), false, how);
+    assert.ok(await store.claimRefresher(key), how);
+  }
+});
+
+test("a refresher whose claim was taken over says so at its next renewal and stops, leaving the claim to the one that took it (#53)", async () => {
+  const { store, time, deps } = await warmable();
+  let taken: Awaited<ReturnType<typeof store.claimRefresher>> = null;
+  const sleep = async (ms: number) => {
+    await time.sleep(ms);
+    if (taken) return;
+    // Held up past the time a claim lasts unrenewed, as a sleeping laptop holds it up.
+    time.advance(10 * 60_000);
+    taken = await store.claimRefresher(key);
+    assert.ok(taken, "the lapsed claim is taken over");
+  };
+  const why = await keepWarm({ ...deps, sleep }, fakeTracker(time, { viewer: rounds(5) }).tracker, project.path, key);
+  assert.equal(why, "another refresher took over keeping it warm");
+  assert.equal(await store.refresherRunning(key), true, "the claim it was taken over by is still there");
+  assert.equal(await taken!.renew(), true);
 });
 
 test("renews its claim every round, for as long as it runs", async () => {

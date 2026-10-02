@@ -28,8 +28,9 @@ const UNLOOKED_MS = 86_400_000;
  * Keeps `key`'s Snapshot of the Project at `path` warm, round after round,
  * and starts a full read whenever one is due. Stops once the Tracker refuses
  * the login, deleting the Snapshot, once the CLI holds another login or the
- * path leads to another Project, or once nobody has looked at the Map for a
- * day; resolves with why it stopped.
+ * path leads to another Project, once another refresher takes its claim
+ * over, or once nobody has looked at the Map for a day; resolves with why
+ * it stopped.
  */
 export async function keepWarm(deps: RefresherDeps, tracker: Tracker, path: string, key: SnapshotKey): Promise<string> {
   const claim = await deps.store.claimRefresher(key);
@@ -42,9 +43,10 @@ export async function keepWarm(deps: RefresherDeps, tracker: Tracker, path: stri
 }
 
 /** Refreshes the Snapshot and starts what full reads are due, a round at a time, until it has to stop; says why. */
-async function rounds(deps: RefresherDeps, tracker: Tracker, path: string, key: SnapshotKey, claim: { renew(): Promise<void> }): Promise<string> {
+async function rounds(deps: RefresherDeps, tracker: Tracker, path: string, key: SnapshotKey, claim: { renew(): Promise<boolean> }): Promise<string> {
   for (;;) {
-    await claim.renew();
+    // Late enough that its claim lapsed, it may have been taken over: the one that took it keeps it warm now.
+    if (!(await claim.renew())) return "another refresher took over keeping it warm";
     // Nobody is looking: stop polling the Tracker until the next draw starts it again.
     if ((await deps.store.unlookedMs(key)) >= UNLOOKED_MS) return "nobody has drawn the Map or looked at its status line for a day";
     // Offline or rate-limited, a round does nothing, and the next tries again.
