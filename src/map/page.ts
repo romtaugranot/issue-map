@@ -163,6 +163,47 @@ export function pageSaid(path: string, env: Record<string, string | undefined> =
   return `${lead}, is at ${path}. ${back}`;
 }
 
+/** Set, and not switched off: Claude Code reads `1` or `true` as on. */
+const on = (value: string | undefined) => !!value && !/^(0|false|no|off)$/i.test(value.trim());
+
+/**
+ * Why claude.ai Artifacts can't be had in this session, as far as its
+ * environment says: a cloud provider, or an API key or a gateway's token in
+ * place of a claude.ai account. `undefined` when nothing here rules them
+ * out; `claude -p`, and Artifacts turned off, Claude tells for itself.
+ */
+export function noArtifacts(env: Record<string, string | undefined> = process.env): string | undefined {
+  if (on(env.CLAUDE_CODE_USE_BEDROCK)) return "this session runs on Amazon Bedrock";
+  if (on(env.CLAUDE_CODE_USE_VERTEX)) return "this session runs on Google Vertex AI";
+  if (on(env.CLAUDE_CODE_USE_FOUNDRY)) return "this session runs on Microsoft Foundry";
+  if (env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN) return "this session signs in with an API key, not a claude.ai account";
+  return undefined;
+}
+
+/**
+ * What Claude asks before publishing the page at `path` as a private
+ * claude.ai Artifact (ADR 0010): the Project, and what leaves the machine
+ * under which account. For Claude to ask from, not to show; asked before
+ * every publish and republish, since each sends the titles of that moment.
+ */
+export function artifactSaid(
+  path: string,
+  { project, open, tracker, login }: { project: string; open: number; tracker: string; login: string },
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const ruledOut = noArtifacts(env);
+  if (ruledOut) return `Not offered: claude.ai Artifacts can't be had here, since ${ruledOut}.`;
+  return [
+    "Ask before every publish and republish, and never remember the answer: nothing is published without a yes to this publish.",
+    "",
+    `Question: Publish the HTML Picture of ${project} as a private claude.ai Artifact?`,
+    `Publish it: sends the titles of its ${open} open Issues, and of the Outside Issues its Links reach, to claude.ai, kept under your claude.ai account, which isn't your ${tracker} login ${login}.`,
+    "Keep it here: nothing leaves this machine.",
+    "",
+    `Page: ${path}`,
+  ].join("\n");
+}
+
 const STYLE = `
 :root { --bg: #fff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --tile: #eef1f4; --free: #1a7f37; --blocked: #cf222e; --pick: #bf8700; --panel: #f6f8fa; }
 @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --tile: #1c2128; --free: #3fb950; --blocked: #f85149; --pick: #d29922; --panel: #161b22; } }
