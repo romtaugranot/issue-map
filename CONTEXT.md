@@ -79,8 +79,8 @@ The drawing of one Project's open Issues joined by their Links, which the user m
 _Avoid_: graph, board, tree
 
 **Picture**:
-The Map of one Project drawn whole on a read-only page outside Claude Code, from the same Snapshot (ADR 0010). It never writes to a Tracker; the way back into the session is an Issue's URL, copied from it.
-_Avoid_: graph view, web Map, artifact
+A drawing of open Issues joined by their Links as lines, rather than the outline the Map moves through: a Group drawn whole, or what surrounds one Issue, as text in the conversation; or the whole Map on a read-only HTML page outside Claude Code, the HTML Picture (ADR 0010). A Picture is drawn from the Snapshot and never writes to a Tracker.
+_Avoid_: graph, tree, node, diagram, web Map
 
 **Snapshot**:
 One Project's open Issues and Links as one login last read them from the Tracker. The Map is drawn from it, and it says how old it is once it stops being fresh.

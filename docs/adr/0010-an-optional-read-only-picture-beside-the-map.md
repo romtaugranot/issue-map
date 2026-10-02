@@ -1,8 +1,8 @@
-# An optional, read-only Picture beside the in-session Map
+# An optional, read-only HTML Picture beside the in-session Map
 
-The Map stays inside Claude Code, as ADR 0001 has it, and stays the surface everything is done from. A large Project can't be seen whole there, so the user can also ask for a Picture: the same Map drawn whole on a page outside Claude Code, from the same Snapshot, by the same drawing code. It shows Take next, every Group fully open, the Unlinked Issues and the Outside Issues, says how old its Snapshot is, and links each Issue to its Tracker. It never writes to a Tracker, never asks Claude anything and never refreshes itself; making a new one refreshes the Snapshot first, as any draw does.
+The Map stays inside Claude Code, as ADR 0001 has it, and stays the surface everything is done from. A large Project can't be seen whole there, so the user can also ask for an HTML Picture: the whole Map on a page outside Claude Code, from the same Snapshot, by the same drawing rules. It shows Take next, every Group, the Unlinked Issues and the Outside Issues, and any Group can be opened on the page without drawing every Issue at once. It says how old its Snapshot is and links each Issue to its Tracker. It never writes to a Tracker, never asks Claude anything and never refreshes itself; making a new one refreshes the Snapshot first, as any draw does.
 
-The Picture is first a local page: one self-contained HTML file, with its CSS and script inline, no CDN and no request of its own, so it works for any Tracker and nothing leaves the machine. It is written to the state directory, never the working tree, readable only by its OS user, one per Tracker, Project and login, and replaced by the next. It opens with the OS's opener, or in Desktop's Browser pane from its path, and its path is printed where there is no opener.
+The HTML Picture is first a local page: one self-contained HTML file, with its CSS and script inline, no CDN and no request of its own, so it works for any Tracker and nothing leaves the machine. It is written to the state directory, never the working tree, readable only by its OS user, one per Tracker, Project and login, and replaced by the next. It opens with the OS's opener, or in Desktop's Browser pane from its path, and its path is printed where there is no opener.
 
 The way back into the session is a copy button on each Issue that copies its URL. Pasting a URL already moves the Map to that Issue's card, so starting work and assigning stay in the session, behind the card's live read.
 
@@ -12,8 +12,8 @@ Publishing the Picture as a claude.ai Artifact is allowed, but only on the user'
 
 ## Amends
 
-- **ADR 0001**, which rejected "a browser page (an artifact or a local page)": the Map is still shown only inside Claude Code, but a read-only Picture of it may be opened outside, beside it. Nothing is done from the Picture.
-- **ADR 0006**, which keeps a Snapshot's private titles to one OS user and one login: a local Picture is kept like a Snapshot, by the same rules, and is deleted with it. A published Artifact is the one place titles leave the machine, and only after the user says yes to that publish. An Artifact the user shares, or comments on through a share, is the user's own act and outside ADR 0006's guarantee.
+- **ADR 0001**, which rejected "a browser page (an artifact or a local page)": the Map is still shown only inside Claude Code, but a read-only HTML Picture of it may be opened outside, beside it. Nothing is done from the Picture.
+- **ADR 0006**, which keeps a Snapshot's private titles to one OS user and one login: a local HTML Picture is kept like a Snapshot, by the same rules, and is deleted with it. A published Artifact is the one place titles leave the machine, and only after the user says yes to that publish. An Artifact the user shares, or comments on through a share, is the user's own act and outside ADR 0006's guarantee.
 
 ## Considered Options
 
@@ -26,7 +26,7 @@ Publishing the Picture as a claude.ai Artifact is allowed, but only on the user'
 
 ## Consequences
 
-- **Two drawings of one Snapshot.** The Picture and the Map come from the same drawing code and the same Snapshot, so they never disagree on what's Blocked or on Take next's order.
+- **Two drawings of one Snapshot.** The HTML Picture and the Map come from the same drawing rules and the same Snapshot, so they never disagree on what's Blocked or on Take next's order.
 - **The Picture can be old.** It is a file, frozen at the Snapshot's age when it was made, and says so.
 - **Size.** The largest Snapshots put tens of thousands of Issues on one page; the page has to stay usable at that size, and an Artifact under its 16 MB limit.
-- **The README's privacy section gains the Picture**: under *On your machine*, the Picture file and how long it is kept; under *Over the network*, that a local Picture sends nothing; and a line that an Artifact sends the Project's open Issue titles to claude.ai, only after the user says yes, each time.
+- **The README's privacy section gains the HTML Picture**: under *On your machine*, the Picture file and how long it is kept; under *Over the network*, that a local Picture sends nothing; and a line that an Artifact sends the Project's open Issue titles to claude.ai, only after the user says yes, each time.
