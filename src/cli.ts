@@ -90,9 +90,9 @@ async function main(argv: string[]): Promise<number> {
     case "statusline":
       if (values.setup && values.remove) return usage();
       if (values.remove) {
-        console.log(await withLine(stateDir(), await removeStatusLine(userSettings())));
+        console.log(await withLine(stateDir(), await removeStatusLine(userSettings()), process.env.CLAUDE_CODE_SESSION_ID));
       } else if (values.setup) {
-        console.log(await withLine(stateDir(), await installStatusLine(userSettings(), STATUS_LINE)));
+        console.log(await withLine(stateDir(), await installStatusLine(userSettings(), STATUS_LINE), process.env.CLAUDE_CODE_SESSION_ID));
       } else {
         const row = await homeRowHere(process.cwd());
         console.log(row || "No status line row: this isn't inside a git checkout, or no remote of it leads to a Tracker.");
@@ -192,7 +192,7 @@ async function main(argv: string[]): Promise<number> {
 
 /** The answer, its text kept to be shown exactly as printed (ADR 0009). */
 async function shown(answer: Answer): Promise<Answer> {
-  return { ...answer, text: await withLine(stateDir(), answer.text) };
+  return { ...answer, text: await withLine(stateDir(), answer.text, process.env.CLAUDE_CODE_SESSION_ID) };
 }
 
 /** `group`'s argument: a bare number is a Group's place on the overview, from 1; anything else names an Issue. */

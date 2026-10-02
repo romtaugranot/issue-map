@@ -9,7 +9,7 @@ The Map opens on the checkout's **Home Project**, and every command acts on the 
 
 **Show every output by its line.** An output the user should see ends with a line such as `⟦issue-map 3f9a0c1b2d4e⟧`. Write that line in your reply, exactly and on a line of its own, where the output belongs: Claude Code shows the whole output in its place, exactly as printed. The user doesn't see tool output, so an output whose line you don't write they never see. Don't also reprint, summarise or describe it: the line is all of it. When the user asks for several things at once, write each output's line in turn; before asking with `AskUserQuestion`, write the card's line above the question. That is what **show** means below.
 
-Where the line can't show it — under `claude -p`, where `AskUserQuestion` isn't available either — show an output by reprinting it exactly as printed, without the line.
+Where the line can't show it — under `claude -p`, where `AskUserQuestion` isn't available either, or once an output says the display hook isn't showing outputs in this session — show an output by reprinting it exactly as printed, without the line. When an output first says so, also tell the user once why, as it says.
 
 What `start` and `suggest` print has no line: it's for you, as said where they're described.
 

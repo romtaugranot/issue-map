@@ -55,6 +55,41 @@ test("an output ends by telling Claude the line that shows it, and that line sho
   assert.equal(await displayed(d, lines[4]!), card);
 });
 
+describe("when the display hook isn't running, as with hooks disabled", () => {
+  /** When a command run a while after the last, as on the user's next ask, started. */
+  const nextAsk = () => Date.now() + 31_000;
+
+  test("the next output in the session, its previous one never shown, has Claude reprint it and tell the user why, once", async () => {
+    const d = await dir();
+    assert.match(await withLine(d, "the overview", "session-1"), /⟦issue-map [0-9a-f]{12}⟧$/);
+    const second = await withLine(d, "**owner/map** · 3 open", "session-1", nextAsk());
+    assert.ok(second.startsWith("**owner/map** · 3 open\n\n"));
+    assert.doesNotMatch(second, /⟦issue-map/);
+    assert.match(second, /reprinting it exactly as printed, and every output of the Map's from now on/);
+    assert.match(second, /Tell the user once.*display hook isn't running.*hooks are disabled.*only managed hooks are allowed.*Node isn't on the hook's PATH/s);
+    const third = await withLine(d, "a card", "session-1", nextAsk());
+    assert.match(third, /^a card\n\n.*reprinting it exactly as printed/s);
+    assert.doesNotMatch(third, /⟦issue-map|Tell the user/);
+  });
+
+  test("another session still shows its outputs by their lines", async () => {
+    const d = await dir();
+    await withLine(d, "the overview", "session-1");
+    assert.doesNotMatch(await withLine(d, "the overview", "session-1", nextAsk()), /⟦issue-map/);
+    assert.match(await withLine(d, "the overview", "session-2"), /⟦issue-map [0-9a-f]{12}⟧$/);
+  });
+
+  test("an output kept just before, as by a command run earlier in the same turn, is not judged, so nothing is added", async () => {
+    const d = await dir();
+    await withLine(d, "the overview", "session-1");
+    for (const text of ["Take next", "a card"]) {
+      const lines = (await withLine(d, text, "session-1", Date.now() + 5_000)).split("\n");
+      assert.deepEqual(lines.slice(0, 3), [text, "", "To show the user all of the above, exactly as printed, write this line on its own in your reply:"]);
+      assert.equal(lines.length, 4);
+    }
+  });
+});
+
 describe("the MessageDisplay hook", () => {
   const plugin = fileURLToPath(new URL("..", import.meta.url));
   const hook = async (stateDir: string, delta: string) => {
@@ -75,6 +110,18 @@ describe("the MessageDisplay hook", () => {
     assert.deepEqual(JSON.parse(await hook(d, `Here it is:\n${line}\n`)), {
       hookSpecificOutput: { hookEventName: "MessageDisplay", displayContent: "Here it is:\n**owner/map** · 3 open\n" },
     });
+  });
+
+  test("marks what it shows, so the session's next outputs are shown by their lines, nothing else added, even several run before their lines are written", async () => {
+    const d = await dir();
+    const first = (await withLine(d, "the overview", "session-1")).split("\n").at(-1)!;
+    await hook(d, `${first}\n`);
+    for (const text of ["a card", "an outline", "another card"]) {
+      const lines = (await withLine(d, text, "session-1")).split("\n");
+      assert.deepEqual(lines.slice(0, 3), [text, "", "To show the user all of the above, exactly as printed, write this line on its own in your reply:"]);
+      assert.match(lines[3]!, /^⟦issue-map [0-9a-f]{12}⟧$/);
+      assert.equal(lines.length, 4);
+    }
   });
 
   test("answers nothing for a batch with none, so it shows as written", async () => {
