@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import type { ChangesAnswer, IssueAnswer, IssuePage, OpenIssue, ProjectResolution, ThreadAnswer } from "../src/tracker/tracker.ts";
 import { trackerContract, type ProjectSpec, type World } from "./contract/tracker-contract.ts";
 import { arrange, LATEST } from "./fakes/fake-glab.ts";
+import { bandName, bandOf, wontWrite } from "../src/map/band.ts";
 
 trackerContract({
   product: "GitLab",
@@ -224,6 +225,33 @@ describe("GitLab before 16.0: Best effort, read from REST", () => {
     assert.equal(said.kind, "capabilities");
     const { links } = said as Extract<typeof said, { kind: "capabilities" }>;
     assert.deepEqual(Object.values(links), Array(3).fill({ kind: "cant-read", reason: "GitLab 13.3.0 is older than 13.4, the oldest the Map reads" }));
+  });
+
+  test("a known self-hosted GitLab whose version can't be read is Best effort, writes nothing, and is asked only what 13.4 has", async () => {
+    const { kind, queries } = arrange(world("13.4.0", { servers: { [host]: { runs: "this-kind", version: "13.4.0", hidesVersion: true } } }));
+    const probed = await kind.probe(host);
+    assert.equal(probed.kind, "identified");
+    const tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+    assert.equal(tracker.version, null);
+    assert.match(tracker.untested ?? "", /version/);
+    const resolved = await tracker.resolveProject(tools);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    const { project } = resolved as Extract<ProjectResolution, { kind: "project" }>;
+    const page = await tracker.openIssues(project, null);
+    assert.equal(page.kind, "page", JSON.stringify(page));
+    const { issues, unread } = page as Extract<IssuePage, { kind: "page" }>;
+    assert.deepEqual(issues.find((i) => i.ref === "#1")!.links.map((l) => l.role).sort(), ["blocked", "parent", "related"]);
+    assert.match(unread.closingRequests ?? "", /version unknown/);
+    const card = await tracker.issue(`${tools}#2`);
+    assert.equal(card.kind, "issue", JSON.stringify(card));
+    const said = await tracker.capabilities(project);
+    assert.equal(said.kind, "capabilities", JSON.stringify(said));
+    const { links, write } = said as Extract<typeof said, { kind: "capabilities" }>;
+    const band = bandOf({ untested: tracker.untested, links });
+    assert.equal(bandName(band), "Best effort");
+    assert.ok(wontWrite(band, write));
+    // Only what GitLab 13.4's GraphQL has: no work items, nor any field added since.
+    assert.deepEqual(queries().filter((q) => /workItems|availableFeatures|maxAccessLevel|forkedFrom|\bcount\b/.test(q)), []);
   });
 });
 

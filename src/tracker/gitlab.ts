@@ -104,6 +104,8 @@ interface Ctx {
   host: string;
   /** `null` where GitLab runs its latest code, as gitlab.com and Dedicated do. */
   version: string | null;
+  /** This GitLab as a note names it, by its version. */
+  named: string;
   has: Has;
 }
 
@@ -203,14 +205,21 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
   const glabAt = (host: string, seconds?: number): Cli => (command, args) => cli(command, args, host === tokenHost ? [] : FOR_ONE_HOST, seconds);
   const envTokenFor = (host: string) => host === tokenHost && [...TOKEN_VARIABLES, "CI_JOB_TOKEN"].some((name) => env[name]);
 
-  /** A host found only by probing is never read: it could be any server that answers like GitLab. */
-  const trackerAt = (host: string, version: string | null, loginIsFor: boolean): Tracker => {
-    const ctx: Ctx = { cli: glabAt(host), host, version, has: schemaOf(version) };
+  /**
+   * A host found only by probing is never read: it could be any server that
+   * answers like GitLab. `selfHosted` is `null` for gitlab.com and Dedicated,
+   * which run GitLab's latest; a self-hosted one whose version can't be read
+   * is asked only what the oldest GitLab the Map reads has, and is untested.
+   */
+  const trackerAt = (host: string, selfHosted: { version: string | null } | null, loginIsFor: boolean): Tracker => {
+    const version = selfHosted ? (selfHosted.version ?? READS_FROM) : null;
+    const named = selfHosted?.version === null ? `GitLab (version unknown, read as ${READS_FROM})` : `GitLab ${version ?? ""}`.trim();
+    const ctx: Ctx = { cli: glabAt(host), host, version, named, has: schemaOf(version) };
     return {
       product: PRODUCT,
       host,
-      version,
-      untested: untested(version),
+      version: selfHosted?.version ?? null,
+      untested: selfHosted && selfHosted.version === null ? "couldn't learn which GitLab version this is" : untested(version),
       resolveProject: async (path) => (loginIsFor ? resolveProject(ctx, path) : noLogin(host)),
       viewer: async () => (loginIsFor ? viewer(ctx) : noLogin(host)),
       openIssues: async (project, after) => (loginIsFor ? openIssues({ ...ctx, cli: glabAt(host, PAGE_SECONDS) }, project, after) : noLogin(host)),
@@ -236,14 +245,14 @@ export function gitlab(deps: AdapterDeps): TrackerKind {
       const answer = await http(`https://${host}/api/v4/version`);
       if (answer.kind === "unreachable") {
         return known
-          ? { kind: "identified", tracker: trackerAt(host, null, true) }
+          ? { kind: "identified", tracker: trackerAt(host, { version: null }, true) }
           : { kind: "cant-tell", reason: `couldn't reach ${host} (${answer.reason})` };
       }
       const anonymousVersion = versionIn(answer.body);
       const isGitLab = anonymousVersion !== null || (answer.status === 401 && isGitLabUnauthorized(answer.body));
       if (!isGitLab && !known) return { kind: "not-this-kind" };
       const version = anonymousVersion ?? (known ? await versionWithLogin(glabAt(host), host) : null);
-      return { kind: "identified", tracker: trackerAt(host, version, known) };
+      return { kind: "identified", tracker: trackerAt(host, { version }, known) };
     },
   };
 }
@@ -816,9 +825,9 @@ async function link(ctx: Ctx, from: string, kind: LinkKind, to: string): Promise
     return failure(ctx, answer, body, a.path);
   }
 
-  if (!ctx.has.workItems) return { kind: "cant-record", reason: `GitLab ${ctx.version} writes a Parent only from ${SINCE.workItems}` };
+  if (!ctx.has.workItems) return { kind: "cant-record", reason: `${ctx.named} writes a Parent only from ${SINCE.workItems}` };
   const epic = a.inGroup ? fromRef : b.inGroup ? toRef : null;
-  if (epic && !ctx.has.epicWorkItems) return { kind: "cant-record", reason: `GitLab ${ctx.version} keeps ${epic}, a group's epic, apart from work items until ${SINCE.epicWorkItems}, and the Map doesn't write it` };
+  if (epic && !ctx.has.epicWorkItems) return { kind: "cant-record", reason: `${ctx.named} keeps ${epic}, a group's epic, apart from work items until ${SINCE.epicWorkItems}, and the Map doesn't write it` };
   const ends: LinkEnd[] = [];
   for (const [at, ref] of [[a, fromRef], [b, toRef]] as const) {
     const within = (container: string) => `query($path: ID!) {
@@ -910,7 +919,7 @@ async function blocksAnswer(ctx: Ctx, path: string, data: Record<string, unknown
   const answer = await rest(ctx, `projects/${encodeURIComponent(path)}/issues?per_page=1&issue_type=issue`, path);
   if ("kind" in answer) return answer;
   const [first] = Array.isArray(answer.json) ? (answer.json as Record<string, unknown>[]) : [];
-  if (!first) return { kind: "cant-read", reason: `GitLab ${ctx.version} doesn't say whether ${path} can record Blocks Links, and it has no Issue to tell by` };
+  if (!first) return { kind: "cant-read", reason: `${ctx.named} doesn't say whether ${path} can record Blocks Links, and it has no Issue to tell by` };
   return "weight" in first ? { kind: "readable" } : { kind: "cant-record", reason: CANT_RECORD_BLOCKS };
 }
 
@@ -939,7 +948,7 @@ async function capabilities(ctx: Ctx, found: Project): Promise<CapabilitiesAnswe
   }
   const parent: KindAnswer = ctx.has.workItems
     ? { kind: "readable" }
-    : { kind: "cant-read", reason: `GitLab ${version} doesn't say which Issue a task is in, so the Map reads only the epic an Issue is in` };
+    : { kind: "cant-read", reason: `${ctx.named} doesn't say which Issue a task is in, so the Map reads only the epic an Issue is in` };
   return { kind: "capabilities", links: { blocks, parent, related: { kind: "readable" } } satisfies Record<LinkKind, KindAnswer>, write };
 }
 
@@ -970,7 +979,7 @@ async function roleIn(ctx: Ctx, path: string, level: number | undefined): Promis
     const { permissions } = answer.json as { permissions?: Record<"project_access" | "group_access", { access_level: number } | null> };
     const levels = [permissions?.project_access, permissions?.group_access].flatMap((access) => (access ? [access.access_level] : []));
     // REST names a role held in the Project or its own group, but not one through a group the Project is shared with.
-    if (levels.length === 0) return cantTell(`GitLab ${ctx.version} names no role this login has in ${path}, and wouldn't name one it has through a shared group`);
+    if (levels.length === 0) return cantTell(`${ctx.named} names no role this login has in ${path}, and wouldn't name one it has through a shared group`);
     held = Math.max(...levels);
   }
   if (held >= (guest ? GUEST : REPORTER)) return { kind: "can" };
@@ -979,7 +988,7 @@ async function roleIn(ctx: Ctx, path: string, level: number | undefined): Promis
 
 /** Whether this login's token may write; GitLab says only of a personal access token, from 15.5. */
 async function tokenWrites(ctx: Ctx): Promise<WriteAnswer> {
-  if (ctx.version !== null && !atLeast(ctx.version, TOKEN_SCOPES)) return cantTell(`GitLab ${ctx.version} doesn't say what this login's token may write`);
+  if (ctx.version !== null && !atLeast(ctx.version, TOKEN_SCOPES)) return cantTell(`${ctx.named} doesn't say what this login's token may write`);
   const answer = await rest(ctx, "personal_access_tokens/self", "this login's token");
   // It answers only for a personal access token, not for glab's OAuth login or a CI job's token.
   if ("kind" in answer) return cantTell("GitLab says what a token may write only of a personal access token, and this login's token isn't one");
@@ -993,7 +1002,7 @@ function cantTell(reason: string): WriteAnswer {
 }
 
 function closingRequestsUnread(ctx: Ctx, permissions: { readMergeRequest: boolean }, path: string): Unread {
-  if (!ctx.has.closingMergeRequests) return { closingRequests: `GitLab ${ctx.version} doesn't list merge requests with the Issues they close` };
+  if (!ctx.has.closingMergeRequests) return { closingRequests: `${ctx.named} doesn't list merge requests with the Issues they close` };
   return permissions.readMergeRequest ? {} : { closingRequests: `this login can't read merge requests in ${path}` };
 }
 
@@ -1113,7 +1122,7 @@ async function legacyEpicCard(ctx: Ctx, group: string, iid: string, locator: str
   if ("kind" in epic) return epic;
   const children = await rest(ctx, `groups/${encodeURIComponent(group)}/epics/${iid}/issues?per_page=${REST_PAGE}`, locator);
   if ("kind" in children) return notFound(children, ctx, locator);
-  const unread: Unread = { blocks: `GitLab ${ctx.version} keeps epics apart from Issues, and the Map doesn't read the Links between epics` };
+  const unread: Unread = { blocks: `${ctx.named} keeps epics apart from Issues, and the Map doesn't read the Links between epics` };
   if ((children.json as RestIssue[]).length === REST_PAGE) unread.children = `the Map reads the first ${REST_PAGE} Issues in a legacy epic, and ${epic.reference} may have more`;
   return {
     kind: "issue",

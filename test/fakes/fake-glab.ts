@@ -445,7 +445,11 @@ function restPost(gl: Gitlab, endpoint: string, field: (name: string) => string 
  */
 function restApi(gl: Gitlab, endpoint: string): CliResult {
   const { world, host } = gl;
-  if (endpoint === "version") return exited(0, JSON.stringify({ version: gl.version, revision: "0000000" }));
+  if (endpoint === "version") {
+    const server = world.servers?.[host];
+    if (server?.runs === "this-kind" && server.hidesVersion) return exited(1, JSON.stringify({ message: "403 Forbidden" }), "glab: 403 Forbidden (HTTP 403)\n");
+    return exited(0, JSON.stringify({ version: gl.version, revision: "0000000" }));
+  }
   if (endpoint === "personal_access_tokens/self") {
     // From 15.5, for a personal access token; any other kind of token is a bad request.
     if (!gl.at("15.5")) return exited(1, JSON.stringify({ error: "404 Not Found" }), "glab: 404 Not Found (HTTP 404)\n");

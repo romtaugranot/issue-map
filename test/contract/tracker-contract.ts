@@ -65,8 +65,12 @@ export interface IssueSpec {
 export type IssueAddress = string;
 
 export interface World {
-  /** What answers at each host other than the well-known one. A host not listed can't be reached. */
-  servers?: Record<string, { runs: "this-kind"; version: string } | { runs: "something-else" }>;
+  /**
+   * What answers at each host other than the well-known one. A host not
+   * listed can't be reached. `hidesVersion`: it won't say its version, even
+   * to a login.
+   */
+  servers?: Record<string, { runs: "this-kind"; version: string; hidesVersion?: boolean } | { runs: "something-else" }>;
   projects?: ProjectSpec[];
   login?: "ok" | "none" | "refused";
   cli?: "installed" | "missing";
