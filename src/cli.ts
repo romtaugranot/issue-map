@@ -34,7 +34,7 @@ import { trackers, type Project, type Tracker, type Trackers } from "./tracker/t
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
 import { readdir, stat, unlink } from "node:fs/promises";
 import { resolveHome, type HomeAnswer } from "./home/home.ts";
-import { lastHomeOf, readJson, stateDir, writeJson } from "./state.ts";
+import { declinesOf, lastHomeOf, readJson, stateDir, writeJson } from "./state.ts";
 import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { statusRow } from "./map/status.ts";
@@ -44,7 +44,7 @@ import { showCard, showMap } from "./map/show.ts";
 import { withLine } from "./show/shown.ts";
 import { assignToViewer } from "./map/assign.ts";
 import { startWork } from "./map/start.ts";
-import { confirm, offer, suggest, type Declines, type Pending, type PendingSuggestions, type Proposal } from "./map/suggest.ts";
+import { confirm, offer, suggest, type Pending, type PendingSuggestions, type Proposal } from "./map/suggest.ts";
 import type { Command } from "./map/draw.ts";
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
@@ -152,7 +152,7 @@ async function main(argv: string[]): Promise<number> {
                   ? { kind: "confirm", picked }
             : { kind: "view", view: verb === "issue" ? { kind: "card", ref: cardRef!, page } : verb === "map" ? { kind: "overview" } : verb === "unlinked" ? { kind: "unlinked", page } : opening! };
   const store = openStore();
-  const suggesting = { store, pending: pendingOf(process.env.CLAUDE_CODE_SESSION_ID), declines: declines() };
+  const suggesting = { store, pending: pendingOf(process.env.CLAUDE_CODE_SESSION_ID), declines: declinesOf() };
   const answer = await move(
     {
       trackers: known,
@@ -277,16 +277,6 @@ function pendingOf(session: string | undefined): Pending {
   return {
     get: () => readJson<PendingSuggestions | null>(path, null),
     set: async (pending) => (pending ? writeJson(dir, path, pending) : unlink(path).catch(() => {})),
-  };
-}
-
-/** The Link Suggestions each login declined, per Tracker and Project, beside the Snapshots. */
-function declines(): Declines {
-  const dir = join(stateDir(), "declined");
-  const path = (key: SnapshotKey) => join(dir, `${createHash("sha256").update(JSON.stringify([key.tracker, key.project, key.login])).digest("hex")}.json`);
-  return {
-    get: (key) => readJson<string[]>(path(key), []),
-    add: async (key, more) => writeJson(dir, path(key), [...new Set([...(await readJson<string[]>(path(key), [])), ...more])]),
   };
 }
 
