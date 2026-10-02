@@ -5,7 +5,7 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { showCard, showMap } from "../src/map/show.ts";
@@ -98,6 +98,19 @@ test("says whether it drew a Map, a first read's progress, or nothing, so a move
   assert.equal((await showMap(deps, tracker, project, { kind: "overview" })).drew, "map");
   const refused: Tracker = { ...tracker, viewer: async () => ({ kind: "refused", reason: "not logged in to github.com" }) };
   assert.equal((await showMap(deps, refused, project, { kind: "overview" })).drew, "nothing");
+});
+
+test("the HTML Picture is drawn from the Snapshot the Map is, written beside it, and said where (ADR 0010)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "issue-map-show-"));
+  const store = snapshotStore(dir, { now: () => Date.parse("2026-09-23T10:00:00Z") });
+  const { tracker, release } = heldTracker();
+  release();
+  await store.read({ tracker: "github.com", project: project.id, login: "fixture-viewer" }, tracker, project);
+  const deps = { store, startRead: () => assert.fail("no read: the Snapshot is there"), sleep: async () => {}, startRefresher: async () => {} };
+  const shown = await showMap(deps, tracker, project, { kind: "html" });
+  const path = /\/\S+\.picture\.html/.exec(shown.text)?.[0];
+  assert.ok(path?.startsWith(dir), shown.text);
+  assert.match(readFileSync(path!, "utf8"), /"project":"fixture-org\/tools"/);
 });
 
 test("a login the Tracker refuses draws no Map, and says which Tracker refused and why", async () => {

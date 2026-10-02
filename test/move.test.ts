@@ -434,6 +434,16 @@ describe("back, map and home", () => {
   });
 });
 
+describe("the HTML Picture", () => {
+  test("is of the Project on screen, and moves nothing: it's a page beside the Map, not a place on it", async () => {
+    const w = await world();
+    await w.go({ kind: "go", target: `https://github.com/${PLANS}` });
+    const answer = await w.go({ kind: "html" });
+    assert.equal(answer.text, `MAP ${PLANS} html · ⌂ ${HOME}`);
+    assert.deepEqual(where(w), [`${HOME} overview`, `${PLANS} overview`]);
+  });
+});
+
 describe("a move that can't open", () => {
   const cases: [string, string][] = [
     ["fixture-org/nowhere", "Can't move to fixture-org/nowhere: no Project fixture-org/nowhere on github.com; no Project fixture-org/nowhere on gitlab.com. You're still on fixture-org/tools."],
