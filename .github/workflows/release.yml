@@ -1,16 +1,25 @@
 # A release (ADR 0004): tagged only from a commit where every tier passed.
-# Run by hand with the version to release. It runs all three tiers on the
-# commit it was started on, in this run, and tags and releases that commit
-# only once every one of them is green, so no earlier run on another commit
-# or with other results can stand in for them.
+# Run by hand with the version to release; docs/releasing.md has the steps.
+# It runs all three tiers on the commit it was started on, in this run, and
+# builds from that commit the tree users install: only the plugin's runtime
+# parts, its manifest saying the version (scripts/ci/release.ts). Once every
+# tier is green it commits that tree to the `release` branch the marketplace
+# entry names, tags it, and releases it with the version's notes from
+# CHANGELOG.md, so no earlier run on another commit or with other results can
+# stand in for them, and nothing on main reaches users until it's released.
+# A dry run builds and smoke-tests the tree, runs no tier and publishes nothing.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "The version to release, as in .claude-plugin/plugin.json, such as 0.1.0"
+        description: "The version to release, such as 0.1.0, with its section in CHANGELOG.md"
         required: true
+      dry-run:
+        description: "Only build the release tree and draw the Map from it: run no tier, push and tag nothing"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -23,24 +32,74 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Released from main, as a version the plugin declares and hasn't released yet
+      - name: Released from main, as a version not released yet
         env:
           VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry-run }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$GITHUB_REF" != refs/heads/main ]; then echo "::error::a release is made from main, not $GITHUB_REF"; exit 1; fi
+          if [ "$DRY_RUN" != true ] && [ "$GITHUB_REF" != refs/heads/main ]; then echo "::error::a release is made from main, not $GITHUB_REF"; exit 1; fi
           if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::$VERSION isn't a version such as 0.1.0"; exit 1; fi
-          declared=$(node -p 'require("./.claude-plugin/plugin.json").version')
-          if [ "$declared" != "$VERSION" ]; then echo "::error::.claude-plugin/plugin.json says $declared, not $VERSION"; exit 1; fi
           if gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" >/dev/null 2>&1; then echo "::error::v$VERSION is already tagged"; exit 1; fi
+
+  # The tree users install, drawn from as they would draw from it: on the oldest Node the plugin supports, with nothing installed.
+  tree:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.18.0
+      - name: Build the release tree, and its notes
+        run: |
+          node scripts/ci/release.ts "$VERSION" "$RUNNER_TEMP/issue-map" > "$RUNNER_TEMP/notes.md"
+          find "$RUNNER_TEMP/issue-map" -type f | sort
+      - name: Name the fixture namespaces
+        id: names
+        run: node test/live/fixtures.ts names >> "$GITHUB_OUTPUT"
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: app
+        with:
+          client-id: ${{ vars.FIXTURES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FIXTURES_APP_PRIVATE_KEY }}
+          owner: ${{ steps.names.outputs.GH_MAIN }}
+      - name: Draw the Map of the GitHub Fixture from it
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PROJECT: ${{ steps.names.outputs.GH_MAIN }}/map
+        run: |
+          export ISSUE_MAP_STATE_DIR="$RUNNER_TEMP/state"
+          mkdir "$RUNNER_TEMP/checkout" && cd "$RUNNER_TEMP/checkout"
+          git init -q && git remote add origin "https://github.com/$PROJECT.git"
+          # The first draw waits a few seconds for the first read, and shows its progress if that isn't done.
+          for _ in $(seq 1 12); do
+            drawn=$("$RUNNER_TEMP/issue-map/bin/issue-map" map)
+            if [[ $drawn == *"Take next"* ]]; then echo "$drawn"; exit 0; fi
+            sleep 5
+          done
+          echo "$drawn"
+          cat "$ISSUE_MAP_STATE_DIR/background.log" || true
+          exit 1
+      # Tarred, as an artifact doesn't keep the launchers executable.
+      - name: Pack it
+        run: tar -czf "$RUNNER_TEMP/issue-map-v$VERSION.tar.gz" -C "$RUNNER_TEMP" issue-map notes.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: issue-map-v${{ inputs.version }}
+          path: ${{ runner.temp }}/issue-map-v${{ inputs.version }}.tar.gz
 
   contract:
     needs: check
+    if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/contract.yml
 
   live:
     needs: check
+    if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/live.yml
     secrets: inherit
     # What the called workflow's jobs may ask for; only a nightly run files an Issue.
@@ -50,8 +109,12 @@ jobs:
 
   gitlab:
     needs: check
+    if: ${{ !inputs.dry-run }}
     uses: ./.github/workflows/gitlab-matrix.yml
     secrets: inherit
+    # Its schemas job is bookkeeping, not one of ADR 0004's tiers: failing alone, it doesn't stop the release.
+    with:
+      schemas-may-fail: true
     # What the called workflow's jobs may ask for, checked before any of them starts: its schemas job opens a pull
     # request with the EE schemas the full matrix recorded, and only a scheduled run files an Issue.
     permissions:
@@ -60,14 +123,41 @@ jobs:
       issues: write
 
   release:
-    needs: [contract, live, gitlab]
+    needs: [tree, contract, live, gitlab]
+    if: ${{ !inputs.dry-run }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Tag and release the commit every tier passed on
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: issue-map-v${{ inputs.version }}
+          path: ${{ runner.temp }}
+      # One commit on the release branch per release, after the last, holding the tree drawn from above; the tag names it.
+      # Pushed together or not at all, and never forced, so the branch only moves forward.
+      - name: Commit the tree to the release branch, and tag it
+        env:
+          VERSION: ${{ inputs.version }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          tar -xzf "$RUNNER_TEMP/issue-map-v$VERSION.tar.gz" -C "$RUNNER_TEMP"
+          export GIT_DIR="$GITHUB_WORKSPACE/.git" GIT_WORK_TREE="$RUNNER_TEMP/issue-map" GIT_INDEX_FILE="$RUNNER_TEMP/index"
+          cd "$GIT_WORK_TREE"
+          parent=
+          if git ls-remote --exit-code --heads origin release >/dev/null; then
+            git fetch --depth=1 origin release
+            parent=$(git rev-parse FETCH_HEAD)
+          fi
+          git add --all
+          commit=$(git commit-tree "$(git write-tree)" ${parent:+-p "$parent"} -m "v$VERSION" -m "Built from $GITHUB_SHA, where every tier passed.")
+          git push --atomic origin "$commit:refs/heads/release" "$commit:refs/tags/v$VERSION"
+      - name: Release it
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
-        run: gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+        run: gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
