@@ -254,6 +254,7 @@ function cardAnswer(card: Card): Answer {
   const choices: MoveChoice[] = [];
   if (card.assign) choices.push({ label: card.assign.label, description: card.assign.description, run: `issue-map assign ${quote(card.assign.ref)}` });
   if (card.start) choices.push({ label: card.start.label, description: card.start.description, run: `issue-map start ${quote(card.start.ref)}` });
+  if (card.picture) choices.push({ label: card.picture.label, description: card.picture.description, run: `issue-map picture ${quote(card.picture.ref)}` });
   if (card.under) choices.push({ label: card.under.label, description: card.under.description, run: `issue-map group ${quote(card.under.ref)}` });
   if (card.move) choices.push({ label: card.move.label, description: card.move.description, run: `issue-map go ${quote(card.move.target)}` });
   return { text: card.text, links: card.choices, choices };

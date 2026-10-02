@@ -106,6 +106,7 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | `who has the ones taken by others?` | The Unblocked Issues left out of Take next because someone else has them, each with its assignees or its Closing Request's author, 15 a page |
 | `open group 1` | The outline of the first Group on the overview |
 | `draw group 1` | The first Group drawn whole, each Issue on a row under its Parent or the Issue that Blocks it, when it holds about 25 Issues or fewer; a larger one opens as its outline |
+| `picture around #5` | That Issue marked in the middle, with what it waits on and its Parents above it and what waits on it and its children beneath, about three steps each way, the rest counted. It draws in a Group too large to draw whole |
 | `list the Groups` | Every Group, 15 a page, largest first, numbered as `open group <n>` takes them |
 | `what's under #5?` | The level beneath an Issue in its Group |
 | `open #2` | That Issue's card, read live, then a picker of its Links |

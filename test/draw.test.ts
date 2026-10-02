@@ -933,12 +933,74 @@ describe("a Group's Picture", () => {
     const issues = Array.from({ length: 26 }, (_, i) => ({ n: i + 1 }));
     const s = snapshot(issues, issues.slice(1).map(({ n }): LinkSpec => [1, "parent", n]));
     const lines = picture(s).split("\n");
-    assert.equal(lines[0], "Group 1 is too large to draw whole: a Picture holds about 25 Issues in 30 rows. Here is its outline.");
+    assert.equal(lines[0], "Group 1 is too large to draw whole: a Picture holds about 25 Issues in 30 rows. Here is its outline; `picture '#1'` draws the Picture around #1 instead, as it does around any Issue in it.");
     assert.equal(lines.slice(2).join("\n"), draw(s, { kind: "group", group: 1, page: 1 }).text);
   });
 
   test("a Group past the last says how many there are", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "blocks", 2]]);
     assert.equal(picture(s, 2), "There is only 1 Group on the Map of fixture-org/tools. `map` for the Map.");
+  });
+});
+
+describe("a Picture around one Issue", () => {
+  const around = (s: ReturnType<typeof snapshot>, ref: string) => draw(s, { kind: "around", ref }).text;
+  const rows = (text: string) => text.split("\n").slice(3, text.split("\n").lastIndexOf("```"));
+  const chain = (length: number) => {
+    const issues = Array.from({ length }, (_, i) => ({ n: i + 1 }));
+    return snapshot(issues, issues.slice(1).map(({ n }): LinkSpec => [n - 1, "blocks", n]));
+  };
+
+  test("draws the Issue marked in the middle, what it waits on above it and what waits on it beneath, with its Group's line and what the marks mean", () => {
+    const s = snapshot([{ n: 1, title: "Lay the foundation" }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }], [[1, "parent", 2], [1, "parent", 3], [2, "blocks", 4], [5, "blocks", 2]]);
+    assert.equal(
+      around(s, "#2"),
+      [
+        "**Picture around #2** · in Group 1 of 1 · #1 Lay the foundation — 5 Issues, 2 Unblocked",
+        "",
+        "```",
+        "#1 Lay the foundation",
+        "└─ ● #2 Issue 2",
+        "   └▶ #4 Issue 4",
+        "#5 Issue 5",
+        "└▶ #2 also under #1, drawn above",
+        "```",
+        "_`─` its Parent above it · `▶` Blocked by the Issue above it · `↗` an Outside Issue, not followed · `●` the Issue it's drawn around_",
+        "_`issue '#2'` for its card · `group 1` for its Group's outline · `map` for the Map_",
+      ].join("\n"),
+    );
+    assert.deepEqual(draw(s, { kind: "around", ref: "#2" }).issues?.sort(), ["#1", "#2", "#4", "#5"], "only the Issues drawn are on screen, not #3 beside it");
+  });
+
+  test("goes about three steps each way, counting what's left above and saying how many sit under where a branch is cut", () => {
+    assert.deepEqual(rows(around(chain(9), "#5")), [
+      "… 1 more above",
+      "#2 Issue 2",
+      "└▶ #3 Issue 3",
+      "   └▶ #4 Issue 4",
+      "      └▶ ● #5 Issue 5",
+      "         └▶ #6 Issue 6",
+      "            └▶ #7 Issue 7",
+      "               └▶ #8 (1 under it) Issue 8",
+    ]);
+  });
+
+  test("caps each step, counting the rest", () => {
+    const issues = Array.from({ length: 9 }, (_, i) => ({ n: i + 1 }));
+    const s = snapshot(issues, issues.slice(1).map(({ n }): LinkSpec => [1, "parent", n]));
+    assert.deepEqual(rows(around(s, "#1")), ["● #1 Issue 1", "├─ #2 Issue 2", "├─ #3 Issue 3", "├─ #4 Issue 4", "├─ #5 Issue 5", "├─ #6 Issue 6", "└ … 3 more"]);
+    const parents = snapshot(issues, issues.slice(1).map(({ n }): LinkSpec => [n, "blocks", 1]));
+    assert.deepEqual(rows(around(parents, "#1")).slice(0, 3), ["… 3 more above", "#2 Issue 2", "└▶ ● #1 Issue 1"]);
+  });
+
+  test("an Issue not in a Group says so, as opening the level beneath it does", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "blocks", 2]]);
+    assert.equal(around(s, "#3"), "#3 is Unlinked: it has no Link to another open Issue, so it's in no Group.");
+    assert.equal(around(s, "#9"), "No Issue on the Map of fixture-org/tools is #9. `map` for the Map.");
+  });
+
+  test("an Outside Issue can be drawn around, named as the Map prints it", () => {
+    const s = snapshot([{ n: 1 }], [[{ outside: "fixture-org/plans#7", title: "Roadmap" }, "parent", 1]]);
+    assert.deepEqual(rows(around(s, "↗fixture-org/plans#7")), ["● ↗fixture-org/plans#7 Roadmap", "└─ #1 Issue 1"]);
   });
 });

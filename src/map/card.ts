@@ -2,7 +2,8 @@
  * The Issue card: what the Map shows about one Issue, read live. Pure. Its
  * Links are offered as the choices to move along, any open Issue is offered
  * to start work on, and an unassigned one in the Project is offered to the
- * viewer, where the Map writes (ADR 0003).
+ * viewer, where the Map writes (ADR 0003); one with a Parent or Blocks Link
+ * is offered the Picture around it.
  */
 import type { IssueRead, NamedLink, WriteAnswer } from "../tracker/tracker.ts";
 import { wontWrite, type Band } from "./band.ts";
@@ -27,6 +28,8 @@ export interface Card extends Drawing {
   assign?: Assign;
   /** An offer to start work on the Issue; `ref` is what `start` takes to make it. */
   start?: Start;
+  /** An offer to draw the Picture around the Issue; `ref` is what `picture` takes to make it. */
+  picture?: PictureAround;
 }
 
 export interface Move extends Choice {
@@ -42,6 +45,10 @@ export interface Start extends Choice {
 }
 
 export interface Under extends Choice {
+  ref: string;
+}
+
+export interface PictureAround extends Choice {
   ref: string;
 }
 
@@ -115,7 +122,8 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
     const left = links.length - from - shown.length;
     if (left > 0) lines.push(`- … ${count(left)} more — \`more\` for the next ${PER_KIND}`);
   }
-  const offered = { ...(assign ? { assign } : {}), start };
+  const picture = pictureOffer(issue, short(issue.ref, project));
+  const offered = { ...(assign ? { assign } : {}), start, ...(picture ? { picture } : {}) };
   if (at > 1) return { text: lines.join("\n"), choices, ...offered };
   if (issue.unread.children !== undefined) lines.push("", `**Child items: more unread** — ${issue.unread.children}`);
   lines.push(...closingRequests(issue));
@@ -159,6 +167,12 @@ function offer(issue: IssueRead, project: string, { viewer, writes }: CardContex
  */
 function startOffer(shown: string, ref = shown): Start {
   return { label: `Start work on ${shown}`, description: "reads its body and comments to brief you; makes no branch and opens no editor", ref };
+}
+
+/** The offer to draw the Picture around an open Issue of the Project, where an open Parent or Blocks Link puts something around it. */
+function pictureOffer({ links }: IssueRead, ref: string): PictureAround | undefined {
+  if (!links.some((link) => link.role !== "related" && isOpen(link.to))) return undefined;
+  return { label: `Picture around ${ref}`, description: "draws what it waits on and what waits on it, a few steps each way, from the Map", ref };
 }
 
 function closingRequests({ closingRequests, unread }: IssueRead): string[] {

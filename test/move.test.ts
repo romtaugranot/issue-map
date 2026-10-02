@@ -299,7 +299,7 @@ describe("assigning an Issue to yourself from its card", () => {
     const assigned = await w.go({ kind: "assign", ref: "#12" });
     assert.match(assigned.text, /^Assigned #12 to you on GitHub\.\n\n\*\*#12 Issue 12\*\*\\$/m);
     assert.match(assigned.text, /^Not Blocked · assigned to you$/m);
-    assert.deepEqual(assigned.choices.map((c) => c.label), ["Start work on #12"]);
+    assert.deepEqual(assigned.choices.map((c) => c.label), ["Start work on #12", "Picture around #12"]);
     assert.deepEqual(assigned.links.map((l) => l.label), [`${PLANS}#7`]);
     assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} #12`]);
   });
@@ -307,7 +307,7 @@ describe("assigning an Issue to yourself from its card", () => {
   test("an Issue moved to by its URL offers it too", async () => {
     const w = await world({ hosts: withViewer });
     const card = await w.go({ kind: "go", target: `https://github.com/${HOME}/issues/12` });
-    assert.deepEqual(card.choices.map((c) => c.run), ["issue-map assign '#12'", "issue-map start '#12'"]);
+    assert.deepEqual(card.choices.map((c) => c.run), ["issue-map assign '#12'", "issue-map start '#12'", "issue-map picture '#12'"]);
   });
 
   test("an Issue that can't be assigned leaves the user where they are, and says why", async () => {
@@ -330,7 +330,10 @@ describe("starting work on an Issue from its card", () => {
   test("the card offers it as a choice whose command hands over the Issue's body and comments", async () => {
     const w = await world({ hosts: withThread });
     const card = await w.go({ kind: "view", view: { kind: "card", ref: "#12", page: 1 } });
-    assert.deepEqual(card.choices, [{ label: "Start work on #12", description: "reads its body and comments to brief you; makes no branch and opens no editor", run: "issue-map start '#12'" }]);
+    assert.deepEqual(card.choices, [
+      { label: "Start work on #12", description: "reads its body and comments to brief you; makes no branch and opens no editor", run: "issue-map start '#12'" },
+      { label: "Picture around #12", description: "draws what it waits on and what waits on it, a few steps each way, from the Map", run: "issue-map picture '#12'" },
+    ]);
     const started = await w.go({ kind: "start", ref: "#12" });
     assert.match(started.text, /^\*\*#12 Issue 12\*\*$/m);
     assert.match(started.text, /^State lives in S3\.$/m);
