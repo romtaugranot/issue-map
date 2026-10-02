@@ -256,6 +256,37 @@ describe("an Outside Issue's card", () => {
     assert.match(moved.text, /^\*\*Sub-issues: 2\*\*$/m);
     assert.deepEqual(where(w), [`${HOME} overview`, `${HOME} ↗${PLANS}#7`, `${PLANS} #7`]);
   });
+
+  test("one this login can't read still offers its Project's Map", async () => {
+    const card = await (await world()).go({ kind: "view", view: { kind: "card", ref: `${PLANS}#99`, page: 1 } });
+    assert.deepEqual(card.choices, [{ label: `Open ${PLANS}'s Map`, description: "its overview, since this Issue couldn't be read", run: `issue-map go 'github.com/${PLANS}'` }]);
+  });
+});
+
+describe("a GitLab group's epic's card", () => {
+  const APP = "fixture-group/sub/app";
+  const epic: IssueRead = { ...read("fixture-group", 12), title: "Q3 importer epic", url: "https://gitlab.com/groups/fixture-group/-/work_items/12" };
+  const withEpic: Record<string, FakeHost> = { ...hosts, "gitlab.com": { ...hosts["gitlab.com"]!, issues: [epic] } };
+  const onApp: Position = { project: { id: `gitlab.com#${APP}`, host: "gitlab.com", path: APP, url: `https://gitlab.com/${APP}`, issues: { open: 9 } }, view: { kind: "overview" } };
+
+  test("offers what the epic holds on this Map, not a Map of its group (ADR 0005), and that opens the level beneath it here", async () => {
+    const w = await world({ hosts: withEpic, trail: [onApp] });
+    const card = await w.go({ kind: "view", view: { kind: "card", ref: "↗fixture-group#12", page: 1 } });
+    assert.deepEqual(card.choices, [
+      { label: "Start work on ↗fixture-group#12", description: "reads its body and comments to brief you; makes no branch and opens no editor", run: "issue-map start 'fixture-group#12'" },
+      { label: "Show what it holds here", description: "the level beneath it on this Map", run: "issue-map group 'fixture-group#12'" },
+    ]);
+    await w.go({ kind: "view", view: { kind: "under", ref: "fixture-group#12", page: 1 } });
+    assert.deepEqual(w.drawn, [`${APP} under · ⌂ ${HOME}`]);
+  });
+
+  test("one this login can't read offers no Map of its group", async () => {
+    for (const ref of ["fixture-group#99", "fixture-group/sub#99"]) {
+      const card = await (await world({ hosts: withEpic, trail: [onApp] })).go({ kind: "view", view: { kind: "card", ref, page: 1 } });
+      assert.match(card.text, /^No card for /);
+      assert.deepEqual(card.choices, [], ref);
+    }
+  });
 });
 
 describe("assigning an Issue to yourself from its card", () => {

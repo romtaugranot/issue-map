@@ -95,7 +95,8 @@ export async function showCard(tracker: Tracker, project: Project, typed: string
   const card: ShownCard = { text: `No card for ${ref}: ${why(tracker, answer)}.`, choices: [], opened: false };
   // The Issue may be hidden from this login while its Project isn't, as a confidential Issue is.
   const elsewhere = /^(.+)#\d+$/.exec(ref)?.[1];
-  if (elsewhere && elsewhere !== project.path) {
+  // Unless it names no Project, such as a GitLab group, which has no Map (ADR 0005).
+  if (elsewhere && elsewhere !== project.path && (await tracker.resolveProject(elsewhere)).kind !== "not-found") {
     card.move = { label: `Open ${elsewhere}'s Map`, description: "its overview, since this Issue couldn't be read", target: `${tracker.host}/${elsewhere}` };
   }
   return card;

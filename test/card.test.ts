@@ -294,6 +294,19 @@ describe("a reduced card", () => {
     });
   });
 
+  test("a GitLab group's epic offers what it holds on this Map, not a Map of its group, since there's none (ADR 0005)", () => {
+    const epic = { ...read(12, busy), project: "fixture-org", ref: "fixture-org#12", title: "Q3 importer epic", url: "https://gitlab.com/groups/fixture-org/-/work_items/12" };
+    const drawn = card(epic);
+    assert.equal(drawn.text.split("\n")[2], "Open · an Outside Issue, in the group fixture-org. There's no Map of a group, so this card shows none of its Links.");
+    assert.equal(drawn.move, undefined);
+    assert.deepEqual(drawn.under, { label: "Show what it holds here", description: "the level beneath it on this Map", ref: "fixture-org#12" });
+    assert.equal(drawn.start?.ref, "fixture-org#12");
+    const legacy = card({ ...epic, ref: "fixture-org&12", url: "https://gitlab.com/groups/fixture-org/sub/-/epics/12" });
+    assert.deepEqual([legacy.move, legacy.under?.ref], [undefined, "fixture-org&12"], "a legacy epic, in a subgroup, too");
+    const closed = card({ ...epic, open: false, closedAs: "completed" });
+    assert.deepEqual([closed.move, closed.under, closed.start], [undefined, undefined, undefined], "a closed epic isn't on the Map, so it holds nothing there");
+  });
+
   test("a closed Outside Issue's card says both", () => {
     const outside = { ...read(7), project: "fixture-org/plans", ref: "fixture-org/plans#7", open: false, closedAs: "completed" };
     assert.equal(card(outside).text.split("\n")[2], "Closed as completed · an Outside Issue, in fixture-org/plans. The Map hasn't read that Project, so this card shows none of its Links.");
