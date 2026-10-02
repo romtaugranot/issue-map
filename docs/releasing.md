@@ -12,7 +12,7 @@ An owner of the repository does these once:
 
 1. Under **Settings → Actions → General → Workflow permissions**, ticks **Allow GitHub Actions to create and approve pull requests**, so the GitLab matrix's and the GHES schemas workflow's schema jobs can open their pull requests.
 2. Dispatches **GitLab matrix** with `only` left empty, and **GHES schemas**, from the Actions tab, and merges the schema pull requests they open once the contract tier passes on them. A pull request opened with the workflow's own token doesn't start the contract tier by itself: close and reopen it.
-3. Under **Settings → Rules → Rulesets**, adds a branch ruleset for `release` that restricts updates and deletions and blocks force pushes, and a tag ruleset for `v*` that restricts updates and deletions, so only the Release workflow writes them. If a ruleset refuses the workflow's own push, give bypass on it to the actor GitHub lists for Actions or the repository admin role, never everyone.
+3. Under **Settings → Rules → Rulesets**, adds a branch ruleset for `release` that restricts updates and deletions and blocks force pushes, and a tag ruleset for `v*` that restricts updates and deletions, so only the Release workflow writes them. The workflow pushes with its own token, which acts as the GitHub Actions app, not as you, so a role bypass, even the admin role, doesn't let it through: give bypass on the `release` ruleset to the GitHub Actions app, never everyone. If the app can't be picked, leave updates unrestricted on `release` and keep deletions restricted and force pushes blocked, since the workflow only ever moves it forward. The first release creates the branch, which restricting updates doesn't stop, so a refused push shows up at the second.
 
 ## Releasing a version
 

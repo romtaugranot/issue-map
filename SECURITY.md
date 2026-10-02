@@ -4,7 +4,7 @@
 
 Report it privately through **Report a vulnerability** on this repository's [Security tab](https://github.com/romtaugranot/issue-map/security), not in a public Issue. You'll get an answer there.
 
-Fixes go into the latest release.
+Fixes go into the next release, and only the latest release is supported. The first is 0.1.0.
 
 ## What's in scope
 

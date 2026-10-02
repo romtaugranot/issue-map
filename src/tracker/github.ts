@@ -404,7 +404,7 @@ async function writes(ctx: Ctx, path: string, role: string | null, isPrivate: bo
   if (role === null) return { kind: "cant-tell", reason: `GitHub doesn't say this login's role in ${path}, as it doesn't for an app's token` };
   if (!ROLES_THAT_WRITE.has(role)) return { kind: "cant", reason: `this login can only read ${path}; writing a Link or assigning takes the triage role` };
   const held = await heldEntry(ctx.cli, ctx.host);
-  if (held === null) return { kind: "cant-tell", reason: `\`gh auth status\` didn't say what this login's token may write; \`gh\` 2.64 and later do` };
+  if (held === null) return { kind: "cant-tell", reason: `\`gh auth status\` didn't say what this login's token may write; \`gh\` 2.81 and later do` };
   const scopes = held.scopes?.split(",").map((scope) => scope.trim()).filter(Boolean) ?? [];
   // A classic token with only `public_repo` may write public repositories.
   if (scopes.includes("repo") || (scopes.includes("public_repo") && !isPrivate)) return { kind: "can" };

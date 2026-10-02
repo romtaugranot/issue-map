@@ -7,7 +7,7 @@ import type { IssueSpec, ProjectSpec, World } from "../contract/tracker-contract
 
 /** `gh auth status`: the login `gh` holds for each host, read from its own config. */
 export function authStatus(world: World, args: string[]): CliResult {
-  // `gh` before 2.64 has no `--json` for it.
+  // `gh` before 2.81 has no `--json` for it.
   if (world.token === "cant-ask" && args.includes("--json")) return exited(1, "", "unknown flag: --json\n");
   const hosts = [...(world.login === "none" ? [] : ["github.com"]), ...(world.loggedInTo ?? [])];
   // A classic or OAuth token lists its scopes; a fine-grained one lists none.
