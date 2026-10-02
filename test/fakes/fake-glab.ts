@@ -305,7 +305,10 @@ function graphql(gl: Gitlab, query: string, field: (name: string) => string | un
       const found = gl.find(ref.startsWith("#") ? `${context}${ref}` : ref);
       return found && !found.issue.hidden ? [{ id: gid(found.spec, found.issue), reference: gl.addr(found.spec, found.issue) }] : [];
     });
-    data.workItemsByReference = { nodes };
+    // GitLab resolves at most ten references a request, and refuses more below the top of its answer.
+    const refused = refs.length > 10 ? "Number of references exceeds the limit of 10." : gl.world.mentionsFail ? "Internal server error" : null;
+    data.workItemsByReference = refused ? null : { nodes };
+    if (refused) errors.push({ message: refused, path: ["workItemsByReference"] });
   }
   const path = field("path");
   if (path !== undefined && /\bproject\(fullPath/.test(query)) data.project = projectAnswer(gl, query, path, field);

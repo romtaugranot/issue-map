@@ -740,10 +740,12 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
     unread.closingRequests = CANT_READ_PULLS;
   }
   const hiddenParent = errors.some((e) => e.path?.[2] === "parent");
-  const mentionedBy = node.timelineItems.nodes.flatMap((item): Mention[] => {
+  // An Issue that names this one again is noted again: it's one Mention.
+  const mentions = node.timelineItems.nodes.flatMap((item): [string, Mention][] => {
     const source = item?.source;
-    return source?.__typename === "Issue" && source.id && source.repository ? [{ id: source.id, ref: `${source.repository.nameWithOwner}#${source.number}` }] : [];
+    return source?.__typename === "Issue" && source.id && source.repository ? [[source.id, { id: source.id, ref: `${source.repository.nameWithOwner}#${source.number}` }]] : [];
   });
+  const mentionedBy = [...new Map(mentions).values()];
   return {
     kind: "issue",
     issue: {

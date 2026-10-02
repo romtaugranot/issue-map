@@ -107,6 +107,7 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
   if (at > 1) return { text: lines.join("\n"), choices, ...offered };
   lines.push(...closingRequests(issue));
   const mentions = mentionedOnly(issue);
+  if (issue.unread.mentions !== undefined) lines.push("", `**Mentions: unread** — ${issue.unread.mentions}`);
   if (mentions > 0) {
     lines.push("", `Mentioned by ${plural(mentions, "other Issue")} — Mentions aren't Links. Ask for Link Suggestions to see whether any should be.`);
   }

@@ -137,6 +137,12 @@ describe("GitLab by version: a self-hosted GitLab from 16.0 is asked only for wh
     assert.match(free.card.unread.blocks ?? "", /can't record Blocks/);
   });
 
+  test("Mentions GitLab gives no answer for are unread, and say why, rather than none", async () => {
+    const { card } = await read(world(LATEST, { mentionsFail: true }));
+    assert.deepEqual(card.mentionedBy, []);
+    assert.match(card.unread.mentions ?? "", /no answer .* mention/);
+  });
+
   test("before 17.1 Closing Requests are unread, and say why", async () => {
     const { page, card } = await read(world("17.0.0"));
     assert.match(page.unread.closingRequests ?? "", /17\.0\.0/);

@@ -115,6 +115,11 @@ describe("an Issue card", () => {
     assert.match(text, /^\*\*Closing Requests: unread\*\* — this login can't read pull requests$/m);
   });
 
+  test("says when Mentions couldn't be read, rather than counting none", () => {
+    const { text } = card(read(12, { unread: { mentions: "GitLab gave no answer for them" } }));
+    assert.match(text, /^\*\*Mentions: unread\*\* — GitLab gave no answer for them$/m);
+  });
+
   test("counts Mentions and points at Link Suggestions, never listing them as Links", () => {
     const issue = read(12, { links: [link("parent", "Parent issue", 3)], mentionedBy: [`${PROJECT}#3`, `${PROJECT}#8`, `fixture-org/plans#2`, `${PROJECT}#8`].map((id) => ({ id, ref: id })) });
     const { text, choices } = card(issue);

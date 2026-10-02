@@ -246,6 +246,8 @@ export interface Unread {
   blocks?: string;
   /** Closing Requests or their authors (need 7); without them no Issue is left out of Take next as taken. */
   closingRequests?: string;
+  /** The Issues that mention one (need 8), on its card; without them Link Suggestions miss what those Issues say. */
+  mentions?: string;
 }
 
 /** Needs 3, 4 and 7: one open Issue of a Project, with its Links and open Closing Requests. */

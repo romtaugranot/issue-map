@@ -45,6 +45,9 @@ const OUTSIDE_BATCH = 50;
 /** Work items read by iid in one request. */
 const IID_BATCH = 20;
 
+/** References `workItemsByReference` resolves in one request. */
+const REFS_BATCH = 10;
+
 /** Comments a thread reads, the latest. */
 const THREAD_COMMENTS = 100;
 
@@ -578,7 +581,7 @@ ${itemFragment(ctx, notes)}`;
     const failed = await readBlocksUnread(ctx, path, answer.data, unread);
     if (failed) return failed;
   }
-  const mentionedBy = await mentions(ctx, node);
+  const mentionedBy = await mentions(ctx, node, unread);
   if (!Array.isArray(mentionedBy)) return mentionedBy;
   return card(node, mentionedBy, unread);
 }
@@ -847,24 +850,34 @@ function notFound(answer: Failure, ctx: Ctx, locator: string): Failure {
 }
 
 /**
- * The identities of the Issues whose text names this one. GitLab notes a
- * Mention on the Issue named, as "mentioned in issue #12"; only the first
- * 100 notes of its activity are read, and merge requests and commits that
- * name it aren't Issues.
+ * The identities of the Issues whose text names this one, each once. GitLab
+ * notes a Mention on the Issue named, as "mentioned in issue #12"; only the
+ * first 100 notes of its activity are read, and merge requests and commits
+ * that name it aren't Issues. GitLab resolves ten references a request;
+ * where it gives no answer for some, `unread` says so.
  */
-async function mentions(ctx: Ctx, node: ItemNode): Promise<Mention[] | Failure> {
+async function mentions(ctx: Ctx, node: ItemNode, unread: Unread): Promise<Mention[] | Failure> {
   const notes = (widgetsOf(node).discussions?.nodes ?? []).flatMap((discussion) => discussion.notes.nodes);
-  const refs = notes.flatMap((note) => {
-    if (note.systemNoteMetadata?.action !== "cross_reference") return [];
-    const ref = /^mentioned in (?!merge request|commit)[\w ]*? (\S+)$/.exec(note.body.trim())?.[1];
-    return ref ? [ref] : [];
-  });
-  if (refs.length === 0 || !ctx.has.workItemsByReference) return [];
+  const refs = new Set(
+    notes.flatMap((note) => {
+      if (note.systemNoteMetadata?.action !== "cross_reference") return [];
+      const ref = /^mentioned in (?!merge request|commit)[\w ]*? (\S+)$/.exec(note.body.trim())?.[1];
+      return ref ? [ref] : [];
+    }),
+  );
+  if (refs.size === 0 || !ctx.has.workItemsByReference) return [];
   const context = node.namespace.fullPath;
-  const query = `query {\n  workItemsByReference(contextNamespacePath: ${JSON.stringify(context)}, refs: ${JSON.stringify(refs)}) { nodes { id reference(full: true) } }\n}`;
-  const answer = await graphql(ctx, query, {}, context, false);
-  if ("kind" in answer) return answer;
-  return ((answer.data.workItemsByReference as { nodes: ({ id: string; reference: string } | null)[] } | null)?.nodes ?? []).flatMap((n) => (n ? [{ id: n.id, ref: n.reference }] : []));
+  const found = new Map<string, Mention>();
+  for (let at = 0; at < refs.size; at += REFS_BATCH) {
+    const batch = [...refs].slice(at, at + REFS_BATCH);
+    const query = `query {\n  workItemsByReference(contextNamespacePath: ${JSON.stringify(context)}, refs: ${JSON.stringify(batch)}) { nodes { id reference(full: true) } }\n}`;
+    const answer = await graphql(ctx, query, {}, context, false);
+    if ("kind" in answer) return answer;
+    const read = answer.data.workItemsByReference as { nodes: ({ id: string; reference: string } | null)[] } | null;
+    if (!read) unread.mentions = `GitLab gave no answer for some of the Issues that mention ${node.reference}`;
+    for (const n of read?.nodes ?? []) if (n) found.set(n.id, { id: n.id, ref: n.reference });
+  }
+  return [...found.values()];
 }
 
 /** Need 5 for Blocks, into `unread`: nothing where the Project can record them, else why not. */

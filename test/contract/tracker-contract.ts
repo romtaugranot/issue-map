@@ -96,6 +96,8 @@ export interface World {
   readsClosingRequests?: boolean;
   /** `[a, b]` reads "a names b in its text". */
   mentions?: [IssueAddress, IssueAddress][];
+  /** The Tracker answers which Issues mention one with an error below the top of its answer, leaving them `null`. */
+  mentionsFail?: boolean;
   /** `false` where the Project's tier can't record Blocks Links, such as GitLab Free. */
   recordsBlocks?: boolean;
   /** The host a token in the environment was issued for, set the way the CLI documents. */
@@ -833,6 +835,16 @@ export function cardContract(stage: Stage): void {
         assert.deepEqual(two.closingRequests.map((r) => [r.ref, r.draft, r.author]), [[stage.requestRef(tools, 40), true, "fixture-bot"]]);
         const mentions = two.mentionedBy.map((m) => [m.id, m.ref]).sort();
         assert.deepEqual(mentions, [[ids.get(`${tools}#3`), `${tools}#3`], [ids.get(`${tools}#4`), `${tools}#4`]].sort(), "Issues naming it, not the ones it names");
+        assert.deepEqual(two.unread, {});
+      });
+
+      test("reads every Issue that mentions it, past ten, and each once though the Tracker notes it twice", async () => {
+        const many: World = {
+          projects: [{ path: tools, number: 1, open: 17, issues: Array.from({ length: 17 }, (_, i) => ({ number: i + 1 })) }],
+          mentions: [...Array.from({ length: 15 }, (_, i): [string, string] => [`${tools}#${i + 3}`, `${tools}#2`]), [`${tools}#3`, `${tools}#2`]],
+        };
+        const two = await issue(many, `${tools}#2`);
+        assert.deepEqual(two.mentionedBy.map((m) => m.ref).sort(), Array.from({ length: 15 }, (_, i) => `${tools}#${i + 3}`).sort());
         assert.deepEqual(two.unread, {});
       });
 
