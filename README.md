@@ -100,6 +100,7 @@ Run Claude Code in a git checkout. The Map opens on the checkout's Home Project,
 | `back` | One step back along this session's trail |
 | `home` | Back to the Home Project's overview; on it, offers to pick the Home Project again |
 | `put the Map in my status line` | Adds a row with the Home Project's first Issue in Take next to your status line, after the rows of any status line you already have |
+| `take the Map out of my status line` | Removes that row: a status line you already had is put back as it was |
 
 The status line's row looks like this, and never reads the Tracker itself:
 
@@ -131,6 +132,28 @@ pkill -f 'src/cli.ts refresher'
 Drawing the Map again starts it again.
 
 **Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
+
+## Uninstall
+
+1. Take the Map out of your status line first, while the plugin is still there to do it: say `take the Map out of my status line`, or run `issue-map statusline --remove`. A status line you had before is put back as it was; otherwise the `statusLine` setting is removed. Uninstalling the plugin first would leave your status line running a command that's gone.
+2. Uninstall the plugin: `/plugin uninstall issue-map@issue-map`.
+3. Stop the background processes:
+
+   ```sh
+   pkill -f 'src/cli.ts (refresher|read) '
+   ```
+
+4. Delete the state directory, `$ISSUE_MAP_STATE_DIR`, or `$XDG_STATE_HOME/issue-map`, or `~/.local/state/issue-map`:
+
+   ```sh
+   rm -rf "${ISSUE_MAP_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/issue-map}"
+   ```
+
+5. In each checkout where you picked a Home Project among several, unset the key that holds the pick:
+
+   ```sh
+   git config --local --unset issue-map.home
+   ```
 
 ## Support
 
