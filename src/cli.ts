@@ -344,4 +344,9 @@ async function sshHostname(alias: string): Promise<string> {
   return /^hostname (\S+)$/m.exec(answer.stdout)?.[1] ?? alias;
 }
 
-process.exitCode = await main(process.argv.slice(2));
+// An unexpected failure, most often the state directory, in one line rather than a stack trace.
+process.exitCode = await main(process.argv.slice(2)).catch((error: unknown) => {
+  const reason = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+  console.error(`Issue Map failed: ${reason}. Its state directory is ${stateDir()}; set ISSUE_MAP_STATE_DIR to use another.`);
+  return 1;
+});

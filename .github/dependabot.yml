@@ -9,3 +9,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # The typings follow the Node floor, 22.18, so typecheck catches newer APIs.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]

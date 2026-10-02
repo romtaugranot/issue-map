@@ -63,6 +63,14 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 
 The Map reads and writes only through `gh` and `glab`, as whichever login they hold. It never asks for a token of its own.
 
+Under Claude Code's [Bash sandbox](https://code.claude.com/docs/en/sandboxing), the Map's commands can't write their [state directory](#what-it-writes-and-what-it-keeps), so each stops with a line naming it, nor reach a Tracker the sandbox hasn't allowed. Run them outside it, with the usual permission prompts, by adding this to `~/.claude/settings.json`:
+
+```json
+{ "sandbox": { "excludedCommands": ["issue-map *"] } }
+```
+
+The display hook and the status line aren't commands Claude runs in the shell, so the sandbox doesn't reach them.
+
 ## Install
 
 In Claude Code, add this repository as a plugin marketplace and install the plugin from it:
