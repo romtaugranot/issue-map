@@ -25,6 +25,11 @@ on:
         required: false
         default: ""
   workflow_call:
+    inputs:
+      schemas-may-fail:
+        description: "Let the schemas job fail without failing the run, as for a release: recording schemas is bookkeeping, not a tier"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -152,9 +157,11 @@ jobs:
         run: docker logs --tail 300 gitlab
 
   # The EE schemas a run recorded arrive through a pull request, as GHES's do, for the contract tier to check the GitLab adapter's queries against.
+  # Opening it needs Actions allowed to create pull requests in the repository's settings (docs/releasing.md).
   schemas:
     needs: gitlab
     if: ${{ !cancelled() }}
+    continue-on-error: ${{ inputs.schemas-may-fail == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
