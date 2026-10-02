@@ -13,6 +13,7 @@
  * `issue-map group <n | ref> [--page <n>]`: opens Group `n` of the overview, or the level beneath the Issue `ref` names.
  * `issue-map picture <n | ref>`: draws Group `n` of the overview whole, or its outline when it's too large for a Picture; or the Picture around the Issue `ref` names, what it waits on and what waits on it.
  * `issue-map html`: writes the HTML Picture of the whole Map of the Project on screen beside its Snapshot, and says where it is and how to open it; where the user is doesn't change.
+ * `issue-map html --artifact`: writes the same page, and prints for Claude the question to ask before publishing it as a private claude.ai Artifact, or why it can't be here; it publishes nothing itself.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
  * `issue-map start <ref>`: the body and comments of the Issue `ref` names, cut to a fixed budget, for Claude to brief the user from; where the user is doesn't change.
@@ -54,7 +55,7 @@ import { confirm, offer, suggest, type Pending, type PendingSuggestions, type Pr
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> | html | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--setup | --remove] — each takes [--pick <URL>]";
 
 /** The status line's process, where this plugin is now. */
 const STATUS_LINE = fileURLToPath(new URL("../bin/issue-map-status-line", import.meta.url));
@@ -73,6 +74,7 @@ async function main(argv: string[]): Promise<number> {
       "pick-there": { type: "string" },
       setup: { type: "boolean" },
       remove: { type: "boolean" },
+      artifact: { type: "boolean" },
     },
   });
   const [verb, ...rest] = positionals;
@@ -157,7 +159,7 @@ async function main(argv: string[]): Promise<number> {
         : verb === "home"
           ? { kind: "home", picked: values.pick !== undefined }
           : verb === "html"
-            ? { kind: "html" }
+            ? { kind: "html", ...(values.artifact ? { artifact: true as const } : {}) }
           : verb === "assign" || verb === "start"
             ? { kind: verb, ref: cardRef! }
             : verb === "suggest"
@@ -198,8 +200,8 @@ async function main(argv: string[]): Promise<number> {
     },
     request,
   );
-  // What `start` and `suggest` print is for Claude to work from, not to show.
-  console.log(render(verb === "start" || verb === "suggest" ? answer : await shown(answer)));
+  // What `start`, `suggest` and `html --artifact` print is for Claude to work from, not to show.
+  console.log(render(verb === "start" || verb === "suggest" || (verb === "html" && values.artifact) ? answer : await shown(answer)));
   return 0;
 }
 

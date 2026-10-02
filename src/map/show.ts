@@ -16,7 +16,7 @@ import { bandOf, refusal } from "./band.ts";
 import { drawCard, type Card, type CardContext } from "./card.ts";
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import { draw, drawProgress, type Command, type Context, type Drawing } from "./draw.ts";
-import { htmlPicture, pageSaid } from "./page.ts";
+import { artifactSaid, htmlPicture, noArtifacts, pageSaid } from "./page.ts";
 import { OUTSIDE } from "./text.ts";
 
 export interface ShowDeps {
@@ -38,8 +38,11 @@ export interface Shown extends Drawing {
   drew: "map" | "progress" | "nothing";
 }
 
-/** A drawing of the Map: one in the conversation, or the HTML Picture of it all. */
-export type MapCommand = Command | { kind: "html" };
+/** A drawing of the Map: one in the conversation, or the HTML Picture of it all; `artifact` asks to publish it (#86). */
+export type MapCommand = Command | { kind: "html"; artifact?: true };
+
+/** What publishing the HTML Picture sends, and under whose Tracker login it was read. */
+const about = (snapshot: Snapshot) => ({ project: `${snapshot.tracker}/${snapshot.project.path}`, open: snapshot.issues.length, tracker: snapshot.tracker, login: snapshot.login });
 
 /** `home` names the Home Project while the Project drawn isn't it; `refresh` refreshes its Snapshot first however fresh it is. */
 export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: MapCommand, { home, refresh }: { home?: string; refresh?: boolean } = {}): Promise<Shown> {
@@ -59,7 +62,10 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
   const drawn = async (snapshot: Snapshot, context: Context): Promise<string> => {
     if (command.kind !== "html") return draw(snapshot, command, context).text;
     if (bandOf(snapshot.support).kind === "refused") return draw(snapshot, { kind: "overview" }).text;
-    return pageSaid(await deps.store.page(key, htmlPicture(snapshot, context)));
+    // Where Artifacts can't be had, there's nothing to publish, so nothing is written.
+    if (command.artifact && noArtifacts()) return artifactSaid("", about(snapshot));
+    const path = await deps.store.page(key, htmlPicture(snapshot, context));
+    return command.artifact ? artifactSaid(path, about(snapshot)) : pageSaid(path);
   };
   const drawable = await deps.store.forDraw(key, tracker, project, refresh);
   if (drawable.kind === "refused") return nothing(`No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`);

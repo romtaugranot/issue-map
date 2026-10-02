@@ -12,7 +12,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { move, localCheckouts, type Answer, type MoveDeps, type Position, type Recent, type Request } from "../src/move/move.ts";
-import { showCard } from "../src/map/show.ts";
+import { showCard, type MapCommand } from "../src/map/show.ts";
 import { assignToViewer } from "../src/map/assign.ts";
 import { startWork } from "../src/map/start.ts";
 import { snapshotStore } from "../src/snapshot/store.ts";
@@ -84,8 +84,8 @@ async function world(options: { others?: HomeAnswer["others"]; trail?: Position[
     recents: { get: async () => recents, set: async (next) => void (recents = next) },
     checkouts: localCheckouts({ trackers, env: {}, sshHostname: async (alias) => alias }, tmpdir()),
     now: () => NOW,
-    async showMap(_tracker, project, command: Command, at) {
-      const line = `${project.path} ${command.kind}${at.home ? " (kept warm)" : ""}${at.away ? ` · ⌂ ${at.away}` : ""}`;
+    async showMap(_tracker, project, command: MapCommand, at) {
+      const line = `${project.path} ${command.kind}${"artifact" in command ? " artifact" : ""}${at.home ? " (kept warm)" : ""}${at.away ? ` · ⌂ ${at.away}` : ""}`;
       drawn.push(line);
       if (project.path === "fixture-org/refused") return { text: `No Map of github.com/${project.path}: GitHub can read no Link kind here`, drew: "nothing" };
       return { text: `MAP ${line}`, drew: "map" };
@@ -441,6 +441,13 @@ describe("the HTML Picture", () => {
     const answer = await w.go({ kind: "html" });
     assert.equal(answer.text, `MAP ${PLANS} html · ⌂ ${HOME}`);
     assert.deepEqual(where(w), [`${HOME} overview`, `${PLANS} overview`]);
+  });
+
+  test("to publish as an Artifact is the same page, and moves nothing either", async () => {
+    const w = await world();
+    const answer = await w.go({ kind: "html", artifact: true });
+    assert.equal(answer.text, `MAP ${HOME} html artifact (kept warm)`);
+    assert.deepEqual(where(w), []);
   });
 });
 

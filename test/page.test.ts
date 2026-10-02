@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { layout } from "../src/map/links.ts";
-import { htmlPicture, pageData, pageSaid } from "../src/map/page.ts";
+import { artifactSaid, htmlPicture, noArtifacts, pageData, pageSaid } from "../src/map/page.ts";
 import { takeNext } from "../src/map/take-next.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
 import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
@@ -112,13 +112,57 @@ describe("what it says of where the page is", () => {
   });
 });
 
+describe("publishing it as a private claude.ai Artifact (ADR 0010, #86)", () => {
+  const path = "/home/me/.local/state/issue-map/snapshots/github.com/1/me.picture.html";
+  const about = { project: "github.com/fixture-org/tools", open: 9, tracker: "github.com", login: "fixture-viewer" };
+
+  test("the question names the Project and what leaves the machine, and under which account", () => {
+    const said = artifactSaid(path, about, {});
+    assert.ok(said.includes("Publish the HTML Picture of github.com/fixture-org/tools as a private claude.ai Artifact?"), said);
+    assert.match(said, /titles of its 9 open Issues/);
+    assert.match(said, /to claude\.ai, kept under your claude\.ai account, which isn't your github\.com login fixture-viewer/);
+    assert.ok(said.includes(path));
+  });
+
+  test("it's asked every time, and nothing is published without a yes to that publish", () => {
+    assert.match(artifactSaid(path, about, {}), /every publish and republish/);
+    assert.match(artifactSaid(path, about, {}), /^Publish it: /m);
+    assert.match(artifactSaid(path, about, {}), /^Keep it here: /m);
+  });
+
+  test("it never suggests sharing", () => {
+    assert.doesNotMatch(artifactSaid(path, about, {}), /\bshare/i);
+  });
+
+  const cases: [string, Record<string, string>, RegExp][] = [
+    ["Bedrock", { CLAUDE_CODE_USE_BEDROCK: "1" }, /Amazon Bedrock/],
+    ["Vertex", { CLAUDE_CODE_USE_VERTEX: "true" }, /Vertex AI/],
+    ["Foundry", { CLAUDE_CODE_USE_FOUNDRY: "1" }, /Foundry/],
+    ["an API key", { ANTHROPIC_API_KEY: "sk-ant-x" }, /API key/],
+    ["a gateway's token", { ANTHROPIC_AUTH_TOKEN: "t" }, /API key/],
+  ];
+  for (const [where, env, why] of cases) {
+    test(`isn't offered on ${where}, and says why`, () => {
+      assert.match(noArtifacts(env) ?? "", why);
+      const said = artifactSaid(path, about, env);
+      assert.match(said, /^Not offered/);
+      assert.doesNotMatch(said, /Publish the HTML Picture/);
+    });
+  }
+
+  test("a provider switch set off is no provider", () => {
+    assert.equal(noArtifacts({ CLAUDE_CODE_USE_BEDROCK: "0", CLAUDE_CODE_USE_VERTEX: "false", CLAUDE_CODE_USE_FOUNDRY: "" }), undefined);
+  });
+});
+
 describe("gitlab-org/gitlab, the largest recorded Snapshot", () => {
   const file = new URL("./fixtures/snapshots/gitlab-org__gitlab.json.gz", import.meta.url);
   const recorded = JSON.parse(gunzipSync(readFileSync(file)).toString("utf8")) as Snapshot;
 
   test("fits one page well under an Artifact's 16 MB, every Group listed", () => {
     const html = htmlPicture(recorded);
-    assert.ok(html.length < 16_000_000, `${html.length} characters`);
+    // ≈11.7 MB in 2026-10; the limit is on bytes, so a title's UTF-8 counts in full.
+    assert.ok(Buffer.byteLength(html) < 16_000_000, `${Buffer.byteLength(html)} bytes`);
     const data = JSON.parse(html.match(/<script type="application\/json" id="data">([\s\S]*?)<\/script>/)![1]!);
     assert.equal(data.groups.length, 5_812);
     assert.equal(data.unlinked.length, 25_446);

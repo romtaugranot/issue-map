@@ -9,6 +9,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { showCard, showMap } from "../src/map/show.ts";
+import { noArtifacts } from "../src/map/page.ts";
 import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
 import type { ChangesAnswer, IssueAnswer, IssueRead, OpenIssue, Project, Tracker } from "../src/tracker/tracker.ts";
 import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
@@ -111,6 +112,32 @@ test("the HTML Picture is drawn from the Snapshot the Map is, written beside it,
   const path = /\/\S+\.picture\.html/.exec(shown.text)?.[0];
   assert.ok(path?.startsWith(dir), shown.text);
   assert.match(readFileSync(path!, "utf8"), /"project":"fixture-org\/tools"/);
+});
+
+test("to publish as an Artifact, the same page is written and the question asked of it; where Artifacts can't be had, nothing is written (#86)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "issue-map-show-"));
+  const store = snapshotStore(dir, { now: () => Date.parse("2026-09-23T10:00:00Z") });
+  const { tracker, release } = heldTracker();
+  release();
+  await store.read({ tracker: "github.com", project: project.id, login: "fixture-viewer" }, tracker, project);
+  const deps = { store, startRead: () => assert.fail("no read: the Snapshot is there"), sleep: async () => {}, startRefresher: async () => {} };
+  const was = process.env.CLAUDE_CODE_USE_BEDROCK;
+  try {
+    process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+    const refused = await showMap(deps, tracker, project, { kind: "html", artifact: true });
+    assert.match(refused.text, /^Not offered/);
+    assert.doesNotMatch(refused.text, /\.picture\.html/);
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    if (noArtifacts(process.env)) return; // this machine's own environment rules them out
+    const shown = await showMap(deps, tracker, project, { kind: "html", artifact: true });
+    assert.match(shown.text, /Publish the HTML Picture of github\.com\/fixture-org\/tools as a private claude\.ai Artifact\?/);
+    assert.match(shown.text, /your github\.com login fixture-viewer/);
+    const path = /\/\S+\.picture\.html/.exec(shown.text)?.[0];
+    assert.ok(path?.startsWith(dir), shown.text);
+  } finally {
+    if (was === undefined) delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    else process.env.CLAUDE_CODE_USE_BEDROCK = was;
+  }
 });
 
 test("a login the Tracker refuses draws no Map, and says which Tracker refused and why", async () => {
