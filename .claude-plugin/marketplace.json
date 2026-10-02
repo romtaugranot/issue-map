@@ -8,7 +8,11 @@
   "plugins": [
     {
       "name": "issue-map",
-      "source": "./",
+      "source": {
+        "source": "github",
+        "repo": "romtaugranot/issue-map",
+        "ref": "release"
+      },
       "description": "Draws a Project's open Issues as a Map joined by the Links its Tracker records, inside Claude Code."
     }
   ]

@@ -56,7 +56,7 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 ## Requirements
 
 - Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.)
-- Node.js 22.18 or later on your `PATH`. The plugin is TypeScript that Node runs directly, and has no runtime dependencies, so there is nothing to install or build.
+- Node.js 22.18 or later on your `PATH`. The plugin is TypeScript that Node runs directly, with no runtime dependencies, and a release holds only what it runs, so there is nothing to install or build.
 - `bash`, which the plugin's entry points are written in, and `git`, which it reads the checkout's remotes with.
 - For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing needs the `repo` scope on a classic token. `gh` 2.64 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
 - For GitLab, the [GitLab CLI](https://gitlab.com/gitlab-org/cli) logged in to the host: `glab auth login --hostname <host>`. Writing needs a token with the `api` scope.
@@ -65,7 +65,7 @@ The Map reads and writes only through `gh` and `glab`, as whichever login they h
 
 ## Install
 
-In Claude Code, add this repository as a plugin marketplace and install the plugin from it:
+In Claude Code, add this repository as a plugin marketplace and install the plugin from it. It installs the latest release, from the `release` branch, never what is on main:
 
 ```text
 /plugin marketplace add romtaugranot/issue-map
@@ -75,7 +75,7 @@ In Claude Code, add this repository as a plugin marketplace and install the plug
 To try it from a clone instead, for one session:
 
 ```sh
-git clone https://github.com/romtaugranot/issue-map.git ~/issue-map
+git clone --branch release https://github.com/romtaugranot/issue-map.git ~/issue-map
 cd path/to/your/checkout
 claude --plugin-dir ~/issue-map
 ```
@@ -149,7 +149,7 @@ The Map puts every Project in a band from what its Tracker shows there ([ADR 000
 | Self-managed GitLab 13.4 to 15.11 | Best effort | Read-only and marked untested |
 | GitLab before 13.4 | Refused | The Map can read no Link kind there |
 
-The floors come from the adapters, which the matrix and the schema checks read them from; a test fails when this table's GHES and GitLab floors disagree with them. A release is tagged only from a commit where every tier passed: run the Release workflow with the version to release.
+The floors come from the adapters, which the matrix and the schema checks read them from; a test fails when this table's GHES and GitLab floors disagree with them. A release is tagged only from a commit where every tier passed; [docs/releasing.md](docs/releasing.md) has the steps.
 
 ## How it's tested
 
