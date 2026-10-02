@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { displayed, keepShown, withLine } from "../src/show/shown.ts";
+import { releaseTree } from "../scripts/ci/release.ts";
 
 const dir = () => mkdtemp(join(tmpdir(), "issue-map-shown-"));
 
@@ -99,9 +100,18 @@ describe("the MessageDisplay hook", () => {
     return (await child).stdout;
   };
 
-  test("is the plugin's, run on every reply as it streams", async () => {
-    const { hooks } = JSON.parse(await readFile(join(plugin, "hooks", "hooks.json"), "utf8"));
-    assert.equal(hooks.MessageDisplay[0].hooks[0].command, "${CLAUDE_PLUGIN_ROOT}/bin/issue-map-display");
+  test("is the plugin's, run on every reply as it streams, from a plugin path that contains a space", async () => {
+    const root = join(await dir(), "plugins cache", "issue-map");
+    releaseTree(plugin, "0.0.0", root);
+    const { hooks } = JSON.parse(await readFile(join(root, "hooks", "hooks.json"), "utf8"));
+    const command: string = hooks.MessageDisplay[0].hooks[0].command;
+    const d = await dir();
+    const line = await keepShown(d, "**owner/map** · 3 open");
+    const run = promisify(execFile);
+    // As Claude Code runs it: the placeholder put in, then the command run by the shell.
+    const child = run("sh", ["-c", command.replaceAll("${CLAUDE_PLUGIN_ROOT}", root)], { env: { ...process.env, ISSUE_MAP_STATE_DIR: d } });
+    child.child.stdin!.end(JSON.stringify({ hook_event_name: "MessageDisplay", index: 0, final: true, delta: line }));
+    assert.equal(JSON.parse((await child).stdout).hookSpecificOutput.displayContent, "**owner/map** · 3 open");
   });
 
   test("answers a batch holding a line of the Map's with the output shown in its place", async () => {
