@@ -106,6 +106,7 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | `who has the ones taken by others?` | The Unblocked Issues left out of Take next because someone else has them, each with its assignees or its Closing Request's author, 15 a page |
 | `open group 1` | The outline of the first Group on the overview |
 | `draw group 1` | The first Group drawn whole, each Issue on a row under its Parent or the Issue that Blocks it, when it holds about 25 Issues or fewer; a larger one opens as its outline |
+| `picture around #5` | That Issue marked in the middle, with what it waits on and its Parents above it and what waits on it and its children beneath, about three steps each way, the rest counted. It draws in a Group too large to draw whole |
 | `show the whole Map in a browser` | One read-only HTML page of the whole Map: Take next, every Group as a tile to open, and the Unlinked Issues. Each Issue has a copy button for its URL, which you paste back here to open its card. It opens in your browser; over SSH it prints the path and an `scp` command to fetch it, and in a cloud or Remote Control session it says the page can't reach your device |
 | `list the Groups` | Every Group, 15 a page, largest first, numbered as `open group <n>` takes them |
 | `what's under #5?` | The level beneath an Issue in its Group |
@@ -195,6 +196,8 @@ pkill -f 'src/cli.ts read'
 - **The first Map of a large Project takes minutes.** The first read pages through every open Issue and its Links, and the Map draws only once it's done; meanwhile, asking for the Map shows how far it's got and about how long is left. That read, and the full read each Snapshot gets again weekly or sooner, spend your login's API rate limit; when it runs out, the Map says so, and asking again later resumes the read where it stopped.
 - **Something in the background seems stuck or silent.** What the full reads and the refresher print goes to `background.log` in the [state directory](#what-it-writes-and-what-it-keeps).
 - **Claude doesn't pick the Map up from what you say.** Invoke its skill by name: `/issue-map:map`, followed by what you want.
+
+Anything else that looks wrong: [report a bug](https://github.com/romtaugranot/issue-map/issues/new?template=bug_report.yml). Its form asks for what it takes to diagnose one.
 
 ## Support
 

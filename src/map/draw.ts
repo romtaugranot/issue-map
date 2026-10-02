@@ -7,7 +7,7 @@ import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { bandName, bandOf, notes, refusal } from "./band.ts";
 import { layout, ownBeneath, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
-import { picture, PICTURE_ISSUES, PICTURE_ROWS } from "./picture.ts";
+import { around, picture, PICTURE_ISSUES, PICTURE_ROWS } from "./picture.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
 import { age, ago, count, fence, howClosed, OUTSIDE, plural, short, title } from "./text.ts";
 
@@ -26,7 +26,9 @@ export type Command =
   /** The level beneath the Issue a reference or URL names, in its Group. */
   | { kind: "under"; ref: string; page: number }
   /** A Group drawn whole, by its place on the overview counting from 1; its outline when it doesn't fit. */
-  | { kind: "picture"; group: number };
+  | { kind: "picture"; group: number }
+  /** The Picture around the Issue a reference or URL names: what it waits on and what waits on it (#82). */
+  | { kind: "around"; ref: string };
 
 export interface Drawing {
   text: string;
@@ -93,6 +95,10 @@ function drawn(snapshot: Snapshot, command: Command, home: string | undefined, s
     case "picture": {
       const laidOut = layout(snapshot);
       return pictured(snapshot, openGroup(laidOut, command.group), unblockedIn(takeNext(snapshot, laidOut)), shows);
+    }
+    case "around": {
+      const laidOut = layout(snapshot);
+      return picturedAround(snapshot, openUnder(snapshot, laidOut, command.ref), unblockedIn(takeNext(snapshot, laidOut)), shows);
     }
   }
 }
@@ -348,7 +354,8 @@ function pictured(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, show
   const { place, groups, group } = opened;
   const rows = picture(group);
   if (!rows) {
-    const why = `Group ${count(place)} is too large to draw whole: a Picture holds about ${PICTURE_ISSUES} Issues in ${PICTURE_ROWS} rows. Here is its outline.`;
+    const head = group.head.kind === "issue" ? group.head : { kind: "issue" as const, id: group.issues[0]!.id, issue: group.issues[0]! };
+    const why = `Group ${count(place)} is too large to draw whole: a Picture holds about ${PICTURE_ISSUES} Issues in ${PICTURE_ROWS} rows. Here is its outline; \`picture '${label(head)}'\` draws the Picture around ${label(head)} instead, as it does around any Issue in it.`;
     return `${why}\n\n${outline(snapshot, opened, unblocked, 1, shows)}`;
   }
   for (const member of group.members.values()) if (member.kind === "issue") shows(member.issue);
@@ -359,8 +366,34 @@ function pictured(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, show
     marks,
     ...rows,
     marks,
-    `_\`─\` its Parent above it · \`▶\` Blocked by the Issue above it · \`${OUTSIDE}\` an Outside Issue, not followed_`,
+    MARKS,
     `_\`group ${place}\` for its outline · \`map\` for the Map_`,
+  ].join("\n");
+}
+
+/** What a Picture's marks mean. */
+const MARKS = `_\`─\` its Parent above it · \`▶\` Blocked by the Issue above it · \`${OUTSIDE}\` an Outside Issue, not followed_`;
+
+/**
+ * The Picture around one Issue, fenced as a Group's is: its Group's line,
+ * the rows, what the marks mean. An Issue in no Group says so as opening
+ * the level beneath it does.
+ */
+function picturedAround(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, shows: Shows): string {
+  if (opened.kind !== "level" || !opened.above) return outline(snapshot, opened, unblocked, 1, shows);
+  const { place, groups, group, above: center } = opened;
+  const drawn = around(group, center);
+  if (!drawn) return `The Picture around ${label(center)} doesn't fit one screen. Here is the level beneath it.\n\n${outline(snapshot, opened, unblocked, 1, shows)}`;
+  for (const member of drawn.drawn) if (member.kind === "issue") shows(member.issue);
+  const marks = fence(drawn.rows);
+  return [
+    `**Picture around ${label(center)}** · in Group ${count(place)} of ${count(groups)} · ${headOf(group)} — ${groupSize(group, unblocked)}`,
+    "",
+    marks,
+    ...drawn.rows,
+    marks,
+    `${MARKS.slice(0, -1)} · \`●\` the Issue it's drawn around_`,
+    `_\`issue '${label(center)}'\` for its card · \`group ${place}\` for its Group's outline · \`map\` for the Map_`,
   ].join("\n");
 }
 

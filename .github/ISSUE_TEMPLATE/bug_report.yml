@@ -1,0 +1,47 @@
+name: Bug report
+description: Something the Map drew, said or did that looks wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. What's below is what it takes to diagnose a bug without asking you again.
+
+        **Before you paste anything:** the Map's lines and `background.log` can hold private Issue titles and Project names. Replace any you can't share with placeholders such as `#12 [title]`.
+
+        A security problem goes to the [Security tab](https://github.com/romtaugranot/issue-map/security) instead, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: What you asked Claude, what the Map showed or did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Paste the output of each command. The issue-map version is the one `/plugin` lists.
+      render: text
+      value: |
+        claude --version:
+        node --version:
+        gh --version:
+        glab --version:
+        issue-map:
+    validations:
+      required: true
+  - type: textarea
+    id: map
+    attributes:
+      label: The Map's header and ⚠ lines
+      description: The first line of the Map (the Project, its counts and its band, such as `owner/project · 14 open · 8 on the Map · 6 Unlinked · Promised`), and every line that starts with ⚠.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: background.log excerpt
+      description: The lines from around when it went wrong, from `background.log` in the [state directory](https://github.com/romtaugranot/issue-map#what-it-writes-and-what-it-keeps) (`~/.local/state/issue-map` unless you've moved it). Leave empty if nothing there looks related.
+      render: text

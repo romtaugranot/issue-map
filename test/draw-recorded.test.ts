@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { draw } from "../src/map/draw.ts";
 import { layout } from "../src/map/links.ts";
-import { picture, PICTURE_COLUMNS, PICTURE_ROWS } from "../src/map/picture.ts";
+import { around, picture, PICTURE_COLUMNS, PICTURE_ROWS } from "../src/map/picture.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
 
 function recorded(name: string): Snapshot {
@@ -144,6 +144,38 @@ describe("Pictures of the recorded Snapshots", () => {
       }
     });
   }
+});
+
+describe("Pictures around one Issue on the recorded Snapshots", () => {
+  // How many of the Issues in Groups, Outside Issues among them, have a Picture around them; the rest name an Outside Issue whose path alone runs past the columns, and open the level beneath them.
+  for (const [name, members, drawn] of [["opentofu__opentofu", 50, 50], ["microsoft__playwright", 0, 0], ["rust-lang__rust", 301, 301], ["gitlab-org__gitlab", 27_484, 27_462]] as const) {
+    test(`${name}: ${drawn} of ${members} Issues in Groups have a Picture around them, each within ${PICTURE_ROWS} rows of ${PICTURE_COLUMNS} characters`, () => {
+      const pictures = layout(recorded(name)).groups.flatMap((group) => [...group.members.values()].map((member) => around(group, member)));
+      const fit = pictures.filter((drawn) => drawn !== null);
+      assert.deepEqual([pictures.length, fit.length], [members, drawn]);
+      for (const { rows } of fit) {
+        assert.ok(rows.length <= PICTURE_ROWS, rows.join("\n"));
+        for (const row of rows) assert.ok(row.length <= PICTURE_COLUMNS, row);
+      }
+    });
+  }
+
+  // gitlab-org/gitlab's longest Blocks chain runs 7 steps: #616653 ▶ #628209 ▶ #628211 ▶ #616651 ▶ #616647 ▶ #616770 ▶ #616768 ▶ #613929.
+  test("gitlab-org/gitlab: around Issues in a 7-step Blocks chain, what's past the steps drawn is counted", () => {
+    const { groups } = layout(recorded("gitlab-org__gitlab"));
+    const rows = (ref: string) => {
+      for (const group of groups) {
+        for (const member of group.members.values()) if (member.kind === "issue" && member.issue.ref === ref) return around(group, member)!.rows;
+      }
+      throw new Error(`${ref} is in no Group`);
+    };
+    const low = rows("#616768");
+    assert.equal(low[0], "… 3 more above");
+    assert.ok(low.some((row) => row.startsWith("      └▶ ● #616768 ")), low.join("\n"));
+    const high = rows("#628211");
+    assert.ok(high.some((row) => row.startsWith("   │  │  ├▶ #616770 (2 under it) ")), high.join("\n"));
+    for (const drawn of [low, high]) assert.ok(drawn.length <= PICTURE_ROWS && drawn.every((row) => row.length <= PICTURE_COLUMNS));
+  });
 });
 
 /** One section of an overview: the line starting with `heading`, and the lines up to the next blank one. */

@@ -258,6 +258,22 @@ describe("starting work on an Issue from its card", () => {
   });
 });
 
+describe("a Picture around an Issue from its card", () => {
+  const offer = (issue: IssueRead) => drawCard(issue, PROJECT).picture;
+
+  test("an open Issue with an open Parent or Blocks Link offers the Picture around it", () => {
+    assert.deepEqual(offer(read(12, { links: [link("blocker", "Blocked by", 5)] })), { label: "Picture around #12", description: "draws what it waits on and what waits on it, a few steps each way, from the Map", ref: "#12" });
+    assert.equal(offer(read(12, { links: [link("child", "Sub-issues", 14)] }))?.ref, "#12");
+  });
+
+  test("isn't offered where there'd be nothing around it: no open Parent or Blocks Link, a closed Issue, or an Outside Issue", () => {
+    assert.equal(offer(read(12)), undefined);
+    assert.equal(offer(read(12, { links: [link("related", "Relates to", 20), link("blocker", "Blocked by", 5, { open: false })] })), undefined);
+    assert.equal(offer(read(12, { open: false, closedAs: "completed", links: [link("blocker", "Blocked by", 5)] })), undefined);
+    assert.equal(offer({ ...read(7, { links: [link("blocker", "Blocked by", 5)] }), project: "fixture-org/plans", ref: "fixture-org/plans#7" }), undefined);
+  });
+});
+
 describe("a reduced card", () => {
   const busy = {
     links: [link("parent", "Parent issue", 3), link("blocker", "Blocked by", 5)],
