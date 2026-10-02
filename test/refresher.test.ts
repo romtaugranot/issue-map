@@ -92,6 +92,21 @@ test("keeps the Snapshot fresh round after round, so a draw never has to refresh
   assert.equal(drawn.kind === "ready" && drawn.ageMs < 120_000, true);
 });
 
+test("a round reads the Snapshot whole at most once, whether or not its refresh changed it (#75)", async (t) => {
+  const renamed: ChangesAnswer = { kind: "changes", open: [{ ...issue(2), title: "Renamed" }], ends: [], requests: [], caughtUp: true, unread: {} };
+  for (const changes of [undefined, renamed]) {
+    const { time, deps } = await warmable();
+    time.advance(60_000);
+    const { tracker, calls } = fakeTracker(time, { viewer: rounds(3), ...(changes ? { changes } : {}) });
+    const parse = t.mock.method(JSON, "parse");
+    await keepWarm(deps, tracker, project.path, key);
+    const snapshotsRead = parse.mock.calls.filter(({ arguments: [text] }) => typeof text === "string" && text.includes('"issues":[')).length;
+    parse.mock.restore();
+    assert.equal(calls.refreshes, 3);
+    assert.ok(snapshotsRead <= time.round, `${snapshotsRead} reads in ${time.round} rounds`);
+  }
+});
+
 test("a refresh that can't prove it caught up starts a full read in the background, once", async () => {
   const { time, deps, reads } = await warmable();
   const behind: ChangesAnswer = { kind: "changes", open: [], ends: [], requests: [], caughtUp: false, unread: {} };

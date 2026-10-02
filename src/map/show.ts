@@ -2,7 +2,8 @@
  * Draws the Map of a Project from its Snapshot, starting the first read when
  * there is none. A read gets a few seconds to finish; after that the draw
  * shows progress and the read carries on outside the conversation. A
- * Snapshot more than two minutes old is refreshed first, and drawn with its
+ * Snapshot more than two minutes old, or any when the user asks to refresh
+ * the Map, is refreshed first, and drawn with its
  * age and why when it can't be; one due a full read again is drawn while
  * that read runs in the background. A Project where the Map can read no Link
  * kind is refused before a first read starts. An Issue card reads its Issue live instead,
@@ -34,8 +35,8 @@ export interface Shown extends Drawing {
   drew: "map" | "progress" | "nothing";
 }
 
-/** `home` names the Home Project while the Project drawn isn't it. */
-export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: Command, { home }: { home?: string } = {}): Promise<Shown> {
+/** `home` names the Home Project while the Project drawn isn't it; `refresh` refreshes its Snapshot first however fresh it is. */
+export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project, command: Command, { home, refresh }: { home?: string; refresh?: boolean } = {}): Promise<Shown> {
   const nothing = (text: string): Shown => ({ text, drew: "nothing" });
   const map = (text: string): Shown => ({ text, drew: "map" });
   // With no Tracker to say who the viewer is, the login the CLI holds reads its own Snapshot, and no other.
@@ -48,7 +49,7 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     return nothing(`No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`);
   }
   if (viewer.kind === "viewer") await deps.startRefresher(key);
-  const drawable = await deps.store.forDraw(key, tracker, project);
+  const drawable = await deps.store.forDraw(key, tracker, project, refresh);
   if (drawable.kind === "refused") return nothing(`No Map of ${project.host}/${project.path}: ${drawable.reason}. What was kept of it is deleted.`);
   if (drawable.kind === "ready") {
     const { snapshot, ageMs, stale, readAgain } = drawable;

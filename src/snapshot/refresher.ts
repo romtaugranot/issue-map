@@ -70,9 +70,10 @@ async function rounds(deps: RefresherDeps, tracker: Tracker, path: string, key: 
       if (resolved.project.id !== key.project) return `${tracker.host}/${path} is now another Project`;
       let state = await deps.store.state(key);
       if (state.kind === "ready" && state.ageMs >= ROUND_MS / 2) {
-        const refreshed = await deps.store.refresh(key, tracker, resolved.project);
+        // The Snapshot is handed on rather than read again: a large one takes a while to read (#75).
+        const refreshed = await deps.store.refresh(key, tracker, resolved.project, state.snapshot);
         if (refreshed.kind === "refused") return refreshed.reason;
-        state = await deps.store.state(key);
+        state = await deps.store.state(key, refreshed.kind === "done" ? refreshed.snapshot : state.snapshot);
       }
       // A full read takes minutes on a large Project, so it runs beside the rounds, which keep refreshing the Snapshot it replaces.
       if (state.kind === "ready" ? state.readAgain : !(state.kind === "reading" && state.running)) deps.startRead();

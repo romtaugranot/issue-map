@@ -3,18 +3,21 @@
  * Tracker, Project and login. A first read saves itself a page at a time, so
  * an interrupted read resumes, but only a finished read is ever handed over
  * as a Snapshot: until then the store hands over progress. A draw is
- * handed a Snapshot refreshed first when it's more than two minutes old.
+ * handed a Snapshot refreshed first when it's more than two minutes old,
+ * or whatever its age when the user asks to refresh the Map.
  * A Snapshot is read in full again when a refresh couldn't prove it caught
  * up, and otherwise weekly; that read runs beside refreshes of the Snapshot
  * it replaces, which is drawn meanwhile. One refresher at a time may claim a
  * Snapshot to keep it warm; a claim of another version is taken over. Beside
  * each Snapshot it keeps a line summing it up, for the status line, which
- * has no time to read a large Snapshot. What's kept of a Project nothing has
- * touched for a month expires, unless a refresher keeps it warm.
+ * has no time to read a large Snapshot, and when it was refreshed, so a
+ * refresh that finds nothing changed doesn't rewrite a large Snapshot (#75).
+ * What's kept of a Project nothing has touched for a month expires, unless a
+ * refresher keeps it warm.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { link, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -63,7 +66,8 @@ export type Refused = { kind: "refused"; reason: string };
 export type ReadOutcome = { kind: "done" } | { kind: "busy" } | { kind: "failed"; reason: string } | Refused;
 
 export type RefreshOutcome =
-  | { kind: "done"; caughtUp: boolean }
+  /** `snapshot` is the Snapshot refreshed, to hand back to `state` so it isn't read again. */
+  | { kind: "done"; caughtUp: boolean; snapshot: Snapshot }
   /** Another read or refresh of it is running. */
   | { kind: "busy" }
   /** There's no finished Snapshot to refresh. */
@@ -99,14 +103,19 @@ export interface StoreOptions {
   summarise?(snapshot: Snapshot): string;
 }
 
+/**
+ * `held` in `state` and `refresh` is a Snapshot the store handed over
+ * earlier: unless it's been saved again since, it isn't read again, since
+ * reading a large one takes a while (#75).
+ */
 export interface SnapshotStore {
-  state(key: SnapshotKey): Promise<SnapshotState>;
+  state(key: SnapshotKey, held?: Snapshot): Promise<SnapshotState>;
   /** Reads the Project in full, resuming an interrupted read; leaves it to another read already running. */
   read(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ReadOutcome>;
   /** Brings a finished Snapshot up to date with only what changed since it was read. */
-  refresh(key: SnapshotKey, tracker: Tracker, project: Project): Promise<RefreshOutcome>;
-  /** The Snapshot to draw: refreshed first when it's more than two minutes old, or, when it can't be, as it is and why. */
-  forDraw(key: SnapshotKey, tracker: Tracker, project: Project): Promise<ForDraw>;
+  refresh(key: SnapshotKey, tracker: Tracker, project: Project, held?: Snapshot): Promise<RefreshOutcome>;
+  /** The Snapshot to draw: refreshed first when it's more than two minutes old, or with `now` whatever its age; when it can't be, as it is and why. */
+  forDraw(key: SnapshotKey, tracker: Tracker, project: Project, now?: boolean): Promise<ForDraw>;
   /**
    * Takes in a write the Map made, so the next draw shows it without waiting
    * for a refresh: the Issue `issue` names is assigned to `assignees` now.
@@ -151,6 +160,9 @@ interface Summary {
   readAt: string;
   line: string;
 }
+
+/** When a Snapshot was last refreshed and where the next refresh reads from, kept beside it and saved alone when a refresh changed nothing else (#75). */
+type Refreshed = Pick<Snapshot, "format" | "fullReadAt" | "readAt" | "changesSince" | "caughtUp">;
 
 /** The plugin's version, as its manifest says, stamped on a refresher's claim with the Snapshot format. */
 export const PLUGIN_VERSION: string = JSON.parse(readFileSync(new URL("../../.claude-plugin/plugin.json", import.meta.url), "utf8")).version;
@@ -210,6 +222,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       dir: projectDir(key.tracker, key.project),
       snapshot: `${base}.json`,
       summary: `${base}.summary.json`,
+      refreshed: `${base}.refreshed.json`,
       reading,
       progress: join(reading, "progress.json"),
       page: (n: number) => join(reading, `page-${n}.json`),
@@ -222,9 +235,48 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     };
   };
 
-  /** Saves the Snapshot, and the line summing it up beside it, then deletes what's expired. */
-  const keep = async (at: { snapshot: string; summary: string }, snapshot: Snapshot) => {
+  /** Which save of its file each Snapshot handed over was read from. */
+  const saves = new WeakMap<Snapshot, string>();
+  /** The save of the Snapshot's file there now, told by its identity, size and time, without reading it; `null` with none. */
+  const saveAt = async (path: string) => {
+    const found = await stat(path).catch(() => null);
+    return found && `${found.ino}:${found.size}:${found.mtimeMs}`;
+  };
+
+  /**
+   * The Snapshot at `at`, as last refreshed: `last` when it was read from
+   * the save there now, otherwise read again. Told apart before it's read,
+   * so a save made while it's read only reads it again next time.
+   */
+  const load = async (at: Paths, last?: Snapshot | null): Promise<Snapshot | null> => {
+    const now = await saveAt(at.snapshot);
+    if (now === null) return null;
+    let snapshot = last && saves.get(last) === now ? last : null;
+    if (!snapshot) {
+      snapshot = current(await readJson<Snapshot>(at.snapshot));
+      if (!snapshot) return null;
+      saves.set(snapshot, now);
+    }
+    const refreshed = current(await readJson<Refreshed>(at.refreshed));
+    // Kept for the Snapshot a full read replaced, or by a save that stopped before it was put beside the Snapshot.
+    if (refreshed?.fullReadAt !== snapshot.fullReadAt || Date.parse(refreshed.readAt) <= Date.parse(snapshot.readAt)) return snapshot;
+    const latest = { ...snapshot, ...refreshed };
+    saves.set(latest, now);
+    return latest;
+  };
+
+  /** Saves the Snapshot, then what's kept beside it. */
+  const keep = async (at: Paths, snapshot: Snapshot) => {
     await save(at.snapshot, snapshot);
+    const now = await saveAt(at.snapshot);
+    if (now) saves.set(snapshot, now);
+    await keepBeside(at, snapshot);
+  };
+
+  /** Saves what's kept beside the Snapshot, which is saved already: when it was refreshed, and the line summing it up; then deletes what's expired. */
+  const keepBeside = async (at: Paths, snapshot: Snapshot) => {
+    const { format, fullReadAt, readAt, changesSince, caughtUp } = snapshot;
+    await save(at.refreshed, { format, fullReadAt, readAt, changesSince, caughtUp } satisfies Refreshed);
     if (!summarise) await rm(at.summary, { force: true });
     else await save(at.summary, { format: SNAPSHOT_FORMAT, readAt: snapshot.readAt, line: summarise(snapshot) } satisfies Summary);
     await expire();
@@ -260,9 +312,9 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
   };
 
   return {
-    async state(key) {
+    async state(key, last) {
       const at = paths(key);
-      const snapshot = current(await readJson<Snapshot>(at.snapshot));
+      const snapshot = await load(at, last);
       const running = await held(at.readLock, clock);
       if (snapshot) {
         const due = !snapshot.caughtUp || clock.now() - Date.parse(snapshot.fullReadAt) >= FULL_READ_EVERY_MS;
@@ -387,12 +439,12 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
       }
     },
 
-    async refresh(key, tracker, project) {
+    async refresh(key, tracker, project, last) {
       const at = paths(key);
       const refresher = await lock(at.lock, clock);
       if (!refresher) return { kind: "busy" };
       try {
-        const snapshot = current(await readJson<Snapshot>(at.snapshot));
+        const snapshot = await load(at, last);
         if (!snapshot) return { kind: "none" };
         const started = clock.now();
         const changes = await tracker.changes(project, snapshot.changesSince, outsideOf(snapshot));
@@ -400,37 +452,46 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
         if (changes.kind !== "changes") return { kind: "failed", reason: changes.reason };
         const switched = await otherLogin(tracker, key);
         if (switched) return { kind: "failed", reason: switched };
+        const issues = applied(snapshot, changes);
+        const unread = { ...changes.unread, ...snapshot.unread };
         const refreshed: Snapshot = {
           ...snapshot,
-          issues: applied(snapshot, changes),
-          unread: { ...changes.unread, ...snapshot.unread },
+          issues: issues ?? snapshot.issues,
+          unread,
           readAt: new Date(clock.now()).toISOString(),
           changesSince: new Date(started - MARGIN_MS).toISOString(),
           caughtUp: snapshot.caughtUp && changes.caughtUp,
         };
-        await keep(at, refreshed);
-        return { kind: "done", caughtUp: refreshed.caughtUp };
+        if (issues || Object.keys(unread).length > Object.keys(snapshot.unread).length) await keep(at, refreshed);
+        else {
+          // Nothing the Snapshot holds changed: only when it was refreshed is saved.
+          const unchanged = saves.get(snapshot);
+          if (unchanged) saves.set(refreshed, unchanged);
+          await keepBeside(at, refreshed);
+        }
+        return { kind: "done", caughtUp: refreshed.caughtUp, snapshot: refreshed };
       } finally {
         await unlock(at.lock, refresher);
       }
     },
 
-    async forDraw(key, tracker, project) {
+    async forDraw(key, tracker, project, now = false) {
       await look(key.tracker, key.project);
       const state = await this.state(key);
-      if (state.kind !== "ready" || state.ageMs <= FRESH_MS) return state;
-      const outcome = await this.refresh(key, tracker, project);
+      if (state.kind !== "ready" || (!now && state.ageMs <= FRESH_MS)) return state;
+      const outcome = await this.refresh(key, tracker, project, state.snapshot);
       if (outcome.kind === "refused") return outcome;
-      const after = await this.state(key);
+      const after = await this.state(key, outcome.kind === "done" ? outcome.snapshot : state.snapshot);
       if (outcome.kind === "done" || after.kind !== "ready") return after;
       return { ...after, stale: outcome.kind === "failed" ? outcome.reason : "another refresh of it is running" };
     },
 
     async assigned(key, issue, assignees) {
       const at = paths(key);
-      if (!current(await readJson<Snapshot>(at.snapshot))) return;
+      const last = await load(at);
+      if (!last) return;
       await locked(at.lock, clock, async () => {
-        const snapshot = current(await readJson<Snapshot>(at.snapshot));
+        const snapshot = await load(at, last);
         if (!snapshot?.issues.some((held) => held.id === issue)) return;
         await keep(at, { ...snapshot, issues: snapshot.issues.map((held) => (held.id === issue ? { ...held, assignees } : held)) });
       });
@@ -438,9 +499,10 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
 
     async linked(key, ends) {
       const at = paths(key);
-      if (!current(await readJson<Snapshot>(at.snapshot))) return;
+      const last = await load(at);
+      if (!last) return;
       await locked(at.lock, clock, async () => {
-        const snapshot = current(await readJson<Snapshot>(at.snapshot));
+        const snapshot = await load(at, last);
         if (!snapshot) return;
         const issues = snapshot.issues.map((held) => {
           const more = ends.filter((end) => end.issue === held.id && !held.links.some((l) => l.role === end.link.role && l.to.id === end.link.to.id));
@@ -474,8 +536,7 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
 
     async savedByNewer(key) {
       const at = paths(key);
-      const formats = [await readJson<Snapshot>(at.snapshot), await readJson<Progress>(at.progress)].map((saved) => saved?.format ?? 0);
-      return formats.some((format) => format > SNAPSHOT_FORMAT);
+      return (await formatOf(at.snapshot)) > SNAPSHOT_FORMAT || ((await readJson<Progress>(at.progress))?.format ?? 0) > SNAPSHOT_FORMAT;
     },
 
     async unlookedMs(key) {
@@ -518,7 +579,8 @@ function outsideOf({ issues, project }: Snapshot): string[] {
 const MIRROR: Record<Link["role"], Link["role"]> = { blocker: "blocked", blocked: "blocker", parent: "child", child: "parent", related: "related" };
 
 /**
- * The Snapshot's open Issues with what changed applied, oldest first. A Link
+ * The Snapshot's open Issues with what changed applied, oldest first, or
+ * `null` when that changes none of them. A Link
  * is recorded at both its ends, but a Tracker may note a change at only one,
  * so an Issue that didn't change takes its Links to one that did from the
  * changed one's side. A Link to an Issue that closed or left is kept, with
@@ -526,10 +588,17 @@ const MIRROR: Record<Link["role"], Link["role"]> = { blocker: "blocked", blocked
  * Closing Request that changed, since one that still closes it would have
  * marked it changed.
  */
-function applied(snapshot: Snapshot, { open, ends, requests }: Extract<ChangesAnswer, { kind: "changes" }>): OpenIssue[] {
+function applied(snapshot: Snapshot, { open, ends, requests }: Extract<ChangesAnswer, { kind: "changes" }>): OpenIssue[] | null {
   const changedOpen = new Set(open.map((issue) => issue.id));
   const endsNow = new Map(ends.map((end) => [end.id, end]));
   const changedRequests = new Set(requests);
+  const unchanged =
+    open.length === 0 &&
+    snapshot.issues.every(
+      ({ id, links, closingRequests }) =>
+        !endsNow.has(id) && !closingRequests.some((request) => changedRequests.has(request.ref)) && links.every(({ to }) => !endsNow.has(to.id) || JSON.stringify(endsNow.get(to.id)) === JSON.stringify(to)),
+    );
+  if (unchanged) return null;
   const kept = new Map(
     snapshot.issues
       .filter((issue) => !changedOpen.has(issue.id) && !endsNow.has(issue.id))
@@ -549,7 +618,7 @@ function applied(snapshot: Snapshot, { open, ends, requests }: Extract<ChangesAn
   return [...kept.values(), ...open].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
-type Paths = { snapshot: string; summary: string; reading: string; progress: string };
+type Paths = { snapshot: string; summary: string; refreshed: string; reading: string; progress: string };
 
 /**
  * Deletes the Snapshot and every page read towards one, keeping only why,
@@ -558,6 +627,7 @@ type Paths = { snapshot: string; summary: string; reading: string; progress: str
 async function forget(at: Paths, total: number, reason: string): Promise<Refused> {
   await rm(at.snapshot, { force: true });
   await rm(at.summary, { force: true });
+  await rm(at.refreshed, { force: true });
   await rm(at.reading, { recursive: true, force: true });
   await mkdir(at.reading, { recursive: true, mode: 0o700 });
   const empty: Progress = { format: SNAPSHOT_FORMAT, pages: 0, read: 0, after: null, total, startedAt: 0, spentMs: 0, unread: {} };
@@ -580,6 +650,23 @@ async function forgotten(at: Paths, attempt: string): Promise<Refused | null> {
   const progress = await readJson<Progress>(at.progress);
   if (progress?.attempt === attempt) return null;
   return { kind: "refused", reason: progress?.stopped ?? "what was read of it was deleted" };
+}
+
+/**
+ * The format the file at `path` was saved in, `0` with none: from its first
+ * bytes, where every save puts it, so a large Snapshot isn't read whole for it.
+ */
+async function formatOf(path: string): Promise<number> {
+  const file = await open(path).catch(() => null);
+  if (!file) return 0;
+  try {
+    const { buffer, bytesRead } = await file.read(Buffer.alloc(32), 0, 32, 0);
+    const said = /^\{"format":(\d+)[,}]/.exec(buffer.toString("utf8", 0, bytesRead));
+    if (said) return Number(said[1]);
+  } finally {
+    await file.close();
+  }
+  return (await readJson<{ format?: number }>(path))?.format ?? 0;
 }
 
 /** A Snapshot or read saved in another format counts as none, so it is read again. */
