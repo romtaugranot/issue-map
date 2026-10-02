@@ -14,6 +14,8 @@ export type Command =
   | { kind: "overview" }
   /** Pages count from 1. */
   | { kind: "unlinked"; page: number }
+  /** Every Group, largest first, each numbered by its place on the overview. */
+  | { kind: "groups"; page: number }
   /** A Group's outline, by its place on the overview counting from 1. */
   | { kind: "group"; group: number; page: number }
   /** The level beneath the Issue a reference or URL names, in its Group. */
@@ -31,7 +33,7 @@ const TAKE_NEXT_LINES = 5;
 const STAND_INS = 3;
 /** Group lines on the overview; the rest are held in a count. */
 const GROUP_LINES = 8;
-/** Unlinked Issues a page. */
+/** Unlinked Issues, or Groups, a page. */
 const PAGE = 15;
 /** Issues a page of one level of an outline. */
 const OUTLINE_PAGE = 10;
@@ -68,6 +70,8 @@ function drawn(snapshot: Snapshot, command: Command, home: string | undefined, s
       return overview(snapshot, home, shows);
     case "unlinked":
       return unlinkedPage(snapshot, layout(snapshot).unlinked, command.page, shows).join("\n");
+    case "groups":
+      return groupsPage(layout(snapshot).groups, command.page, shows);
     case "group":
       return outline(snapshot, openGroup(layout(snapshot), command.group), command.page, shows);
     case "under":
@@ -127,7 +131,7 @@ function overview(snapshot: Snapshot, home: string | undefined, shows: Shows): s
   const lines = [header, "", ...takeNextSection(snapshot, next, shows), "", `**Groups: ${count(groups.length)}** — largest first`, ...shownGroups.map(groupLine)];
   const rest = groups.slice(GROUP_LINES);
   if (rest.length > 0) {
-    lines.push(`- … ${count(rest.length)} more Groups, ${plural(rest.reduce((sum, g) => sum + g.issues.length, 0), "Issue")}`);
+    lines.push(`- … ${count(rest.length)} more Groups, ${plural(rest.reduce((sum, g) => sum + g.issues.length, 0), "Issue")}. Ask to list them.`);
   }
   lines.push("", unlinkedLine);
   return lines.join("\n");
@@ -230,6 +234,22 @@ function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number, s
     "",
     at < pages ? `_\`more\` for the next ${PAGE}_` : "_That's all of them. `map` for the Map._",
   ];
+}
+
+/** Group lines, numbered by their place, which `group <n>` opens them by. */
+function groupsPage(groups: Group[], page: number, shows: Shows): string {
+  if (groups.length === 0) return "No Issue here has a Link, so there's no Group to list. `map` for the Map.";
+  const pages = Math.ceil(groups.length / PAGE);
+  const at = Math.min(Math.max(1, page), pages);
+  const from = (at - 1) * PAGE;
+  const shown = groups.slice(from, from + PAGE);
+  for (const { head } of shown) if (head.kind === "issue") shows(head.issue);
+  return [
+    `**Groups: ${count(groups.length)}** — largest first, page ${count(at)} of ${count(pages)}`,
+    ...shown.map((group, i) => `${from + i + 1}. ${groupLine(group).slice(2)}`),
+    "",
+    at < pages ? `_\`more\` for the next ${PAGE} · a Group's number opens it · \`map\` for the Map_` : "_A Group's number opens it · `map` for the Map_",
+  ].join("\n");
 }
 
 function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows): string {

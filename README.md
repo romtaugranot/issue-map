@@ -98,9 +98,10 @@ Run Claude Code in a git checkout. The Map opens on the checkout's Home Project,
 | `refresh the Map` | The overview, its Snapshot refreshed now even if it's under two minutes old, so a Link you just recorded in the browser shows |
 | `what should I take next?` | The overview, pointing at Take next. Ask what Claude would pick and it says so separately, without reordering the list |
 | `open group 1` | The outline of the first Group on the overview |
+| `list the Groups` | Every Group, 15 a page, largest first, numbered as `open group <n>` takes them |
 | `what's under #5?` | The level beneath an Issue in its Group |
 | `open #2` | That Issue's card, read live, then a picker of its Links |
-| `more` | The next page of an outline, a card's Links or the Unlinked list |
+| `more` | The next page of an outline, a card's Links, the Group list or the Unlinked list |
 | `list the Unlinked Issues` | The Issues with no Link to another open Issue, 15 a page, newest first |
 | `assign #2 to me` | Asks once, then assigns the Issue to you |
 | `start work on #2` | Claude reads the Issue's body and comments and briefs you in about a dozen lines. No branch, no checkout, no code |

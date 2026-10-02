@@ -91,6 +91,15 @@ describe("recorded Snapshots", () => {
       }
     });
 
+    test("the Group list pages all 5,812 Groups 15 at a time, the first 8 as the overview lists them", () => {
+      const first = draw(snapshot, { kind: "groups", page: 1 }).text.split("\n");
+      assert.equal(first[0], "**Groups: 5,812** — largest first, page 1 of 388");
+      assert.deepEqual(first.slice(1, 9).map((l) => l.replace(/^\d+\. /, "- ")), section(overview, "**Groups").slice(1, 9));
+      assert.match(section(overview, "**Groups")[9]!, /^- … 5,804 more Groups, [\d,]+ Issues\. Ask to list them\.$/);
+      const last = draw(snapshot, { kind: "groups", page: 388 }).text.split("\n");
+      assert.deepEqual(last.filter((l) => /^\d+\. /.test(l)).map((l) => l.split(".")[0]), ["5806", "5807", "5808", "5809", "5810", "5811", "5812"]);
+    });
+
     test("an Unlinked page stays 15 Issues", () => {
       const page = draw(snapshot, { kind: "unlinked", page: 2 }).text.split("\n");
       assert.equal(page[0], "**Unlinked: 25,446** — newest first, page 2 of 1,697");

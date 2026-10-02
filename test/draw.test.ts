@@ -52,7 +52,7 @@ describe("the overview", () => {
       "- #60 Issue 60 — 5 Issues",
       "- #70 Issue 70 — 4 Issues",
       "- #80 Issue 80 — 3 Issues",
-      "- … 2 more Groups, 3 Issues",
+      "- … 2 more Groups, 3 Issues. Ask to list them.",
     ]);
   });
 
@@ -552,6 +552,54 @@ describe("a Group's outline (ADR 0008)", () => {
     assert.equal(outline(s, "#9"), "No Issue on the Map of fixture-org/tools is #9. `map` for the Map.");
     assert.equal(outline(s, 2), "There is only 1 Group on the Map of fixture-org/tools. `map` for the Map.");
     assert.equal(outline(snapshot([{ n: 1 }]), 1), "No Issue here has a Link, so there's no Group to open. `map` for the Map.");
+  });
+});
+
+describe("the Group list", () => {
+  // Twenty Groups: #1 heads 21 Issues, #2 heads 20, … #20 heads 2, so largest first is #1 to #20.
+  const issues: IssueSpec[] = [];
+  const links: LinkSpec[] = [];
+  for (let g = 1; g <= 20; g++) {
+    issues.push({ n: g });
+    for (let i = 1; i <= 21 - g; i++) {
+      const n = g * 100 + i;
+      issues.push({ n });
+      links.push([g, "parent", n]);
+    }
+  }
+  const s = snapshot(issues, links);
+  const list = (page: number) => draw(s, { kind: "groups", page }).text.split("\n");
+
+  test("pages every Group 15 at a time, largest first, numbered by the place that opens it", () => {
+    const lines = list(1);
+    assert.equal(lines[0], "**Groups: 20** — largest first, page 1 of 2");
+    assert.deepEqual(lines.slice(1, 3), ["1. #1 Issue 1 — 21 Issues", "2. #2 Issue 2 — 20 Issues"]);
+    assert.equal(lines[15], "15. #15 Issue 15 — 7 Issues");
+    assert.deepEqual(lines.slice(16), ["", "_`more` for the next 15 · a Group's number opens it · `map` for the Map_"]);
+    for (const place of [1, 9, 15]) {
+      const head = lines[place]!.replace(/^\d+\. /, "").split(" — ")[0];
+      assert.match(draw(s, { kind: "group", group: place, page: 1 }).text.split("\n")[0]!, new RegExp(`^\\*\\*Group ${place} of 20\\*\\* · ${head} — `), `Group ${place}`);
+    }
+  });
+
+  test("the last page carries on the numbering and offers the Map back; a page past the end shows the last", () => {
+    assert.deepEqual(list(2), [
+      "**Groups: 20** — largest first, page 2 of 2",
+      ...[16, 17, 18, 19, 20].map((g) => `${g}. #${g} Issue ${g} — ${22 - g} Issues`),
+      "",
+      "_A Group's number opens it · `map` for the Map_",
+    ]);
+    assert.deepEqual(list(9), list(2));
+  });
+
+  test("its first lines match the overview's Group lines, which hint at it once there are more", () => {
+    const shown = groupLines(overview(s));
+    assert.deepEqual(list(1).slice(1, 9), shown.slice(1, 9).map((line, i) => line.replace(/^- /, `${i + 1}. `)));
+    assert.equal(shown[9], "- … 12 more Groups, 90 Issues. Ask to list them.");
+  });
+
+  test("says so when there's no Group to list", () => {
+    assert.equal(draw(snapshot([{ n: 1 }]), { kind: "groups", page: 1 }).text, "No Issue here has a Link, so there's no Group to list. `map` for the Map.");
   });
 });
 
