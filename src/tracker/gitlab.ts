@@ -61,6 +61,8 @@ const REST_AT_ONCE = 4;
 export const SINCE = {
   /** Issues as work items, and a task's Parent; before it, Issues are read from REST. */
   workItems: TESTED_FROM,
+  /** The start-and-due-date widget, with an Issue's own due date; before it, REST gives it. */
+  startAndDueDate: TESTED_FROM,
   workItemsByReference: "16.7",
   closingMergeRequests: "17.1",
   hasParent: "17.2",
@@ -133,6 +135,8 @@ interface ItemNode extends EndNode {
 interface Widgets {
   assignees?: { nodes: { username: string }[] };
   milestone?: { dueDate: string | null } | null;
+  /** The Issue's own due date, apart from its milestone's. */
+  dueDate?: string | null;
   hasParent?: boolean;
   parent?: EndNode | null;
   children?: { nodes: (EndNode | null)[] };
@@ -316,6 +320,7 @@ function itemFragment(ctx: Ctx, extra = ""): string {
   widgets {
     ... on WorkItemWidgetAssignees { assignees(first: 10) { nodes { username } } }
     ... on WorkItemWidgetMilestone { milestone { dueDate } }
+    ${ctx.has.startAndDueDate ? "... on WorkItemWidgetStartAndDueDate { dueDate }" : ""}
     ... on WorkItemWidgetHierarchy { ${ctx.has.hasParent ? "hasParent" : ""} parent { ...end } children(first: 100) { nodes { ...end } } }
     ${linked}
     ${closing}
@@ -1151,6 +1156,7 @@ interface RestItem extends RestIssue {
   updated_at: string;
   assignees: { username: string }[];
   milestone: { due_date: string | null } | null;
+  due_date: string | null;
 }
 
 /** Issues REST gives in one page. */
@@ -1240,7 +1246,7 @@ function restItem(issue: RestItem): ItemNode {
     ...restEnd(issue),
     createdAt: issue.created_at,
     updatedAt: issue.updated_at,
-    widgets: [{ assignees: { nodes: issue.assignees.map(({ username }) => ({ username })) } }, { milestone: issue.milestone && { dueDate: issue.milestone.due_date } }],
+    widgets: [{ assignees: { nodes: issue.assignees.map(({ username }) => ({ username })) } }, { milestone: issue.milestone && { dueDate: issue.milestone.due_date } }, { dueDate: issue.due_date }],
   };
 }
 
@@ -1316,7 +1322,8 @@ function closedAs(end: EndNode): string | undefined {
 
 function openIssue(node: ItemNode): OpenIssue {
   const widgets = widgetsOf(node);
-  const due = widgets.milestone?.dueDate;
+  // The Planned date: the Issue's own due date, or its milestone's where it has none.
+  const due = widgets.dueDate || widgets.milestone?.dueDate;
   return {
     id: node.id,
     ref: `#${node.iid}`,

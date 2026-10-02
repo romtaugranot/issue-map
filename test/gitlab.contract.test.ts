@@ -255,6 +255,27 @@ describe("GitLab before 16.0: Best effort, read from REST", () => {
   });
 });
 
+describe("GitLab by version: an Issue's Planned date is its own due date, or its milestone's where it has none", () => {
+  const host = "git.example.com";
+  const tools = "fixture-org/tools";
+  for (const version of ["15.11.3", "16.0.0", LATEST]) {
+    test(version, async () => {
+      const issues = [{ number: 1, due: "2026-11-01T00:00:00Z" }, { number: 2, due: "2026-10-15T00:00:00Z", planned: "2026-12-01T00:00:00Z" }, { number: 3, planned: "2026-10-20T00:00:00Z" }, { number: 4 }];
+      const probed = await arrange({ servers: { [host]: { runs: "this-kind", version } }, loggedInTo: [host], projects: [{ path: tools, number: 1, open: 4, issues }] }).kind.probe(host);
+      const tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+      const { project } = (await tracker.resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
+      const page = await tracker.openIssues(project, null);
+      assert.equal(page.kind, "page", JSON.stringify(page));
+      const planned = (read: OpenIssue[]) => read.map((i) => [i.ref, i.planned?.slice(0, 10) ?? null]);
+      const expected = [["#1", "2026-11-01"], ["#2", "2026-10-15"], ["#3", "2026-10-20"], ["#4", null]];
+      assert.deepEqual(planned((page as Extract<IssuePage, { kind: "page" }>).issues), expected);
+      const changes = await tracker.changes(project, "2020-01-01T00:00:00Z", []);
+      assert.equal(changes.kind, "changes", JSON.stringify(changes));
+      assert.deepEqual(planned((changes as Extract<ChangesAnswer, { kind: "changes" }>).open).sort(), expected);
+    });
+  }
+});
+
 describe("GitLab by version: an Issue's body and comments (need 8)", () => {
   const host = "git.example.com";
   const tools = "fixture-org/tools";

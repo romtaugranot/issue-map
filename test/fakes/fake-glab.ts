@@ -207,6 +207,7 @@ class Gitlab {
         ["WorkItemWidgetDescription", { description: issue.body ?? null }],
         ["WorkItemWidgetAssignees", { assignees: { nodes: (issue.assignees ?? []).map((username) => ({ username })) } }],
         ["WorkItemWidgetMilestone", { milestone: issue.planned ? { dueDate: issue.planned.slice(0, 10) } : null }],
+        ["WorkItemWidgetStartAndDueDate", { startDate: null, dueDate: issue.due?.slice(0, 10) ?? null }],
         [
           "WorkItemWidgetHierarchy",
           { ...(this.query.includes("hasParent") ? { hasParent: parent !== undefined } : {}), parent: parent ? this.readable(parent) : null, children: { nodes: children } },
@@ -572,6 +573,7 @@ function restIssue(gl: Gitlab, spec: ProjectSpec, issue: IssueSpec) {
     updated_at: gl.updatedAt(spec, issue),
     assignees: (issue.assignees ?? []).map((username) => ({ username })),
     milestone: issue.planned ? { title: "next", due_date: issue.planned.slice(0, 10) } : null,
+    due_date: issue.due?.slice(0, 10) ?? null,
     _links: { closed_as_duplicate_of: duplicate ? `https://${gl.host}/api/v4/projects/${projectId(duplicate.spec)}/issues/${duplicate.issue.number}` : null },
   };
 }
