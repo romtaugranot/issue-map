@@ -1,0 +1,35 @@
+/**
+ * The Snapshot (ADR 0006): one Project's open Issues and their Links, as one
+ * login last read them from one Tracker. It holds only what the Map draws.
+ */
+import type { OpenIssue, Support, Unread } from "../tracker/tracker.ts";
+
+/** The shape Snapshots are saved in; one saved in any other is read again. */
+export const SNAPSHOT_FORMAT = 6;
+
+export interface Snapshot {
+  format: typeof SNAPSHOT_FORMAT;
+  /** The Tracker's host. */
+  tracker: string;
+  project: { id: string; path: string; url: string };
+  /** The login that read it; no other login is ever shown it. */
+  login: string;
+  /**
+   * How old it is, as an ISO date: when the last refresh finished, or when
+   * the last full read started, since a full read's first page is as old as
+   * the read.
+   */
+  readAt: string;
+  /** When the last full read started, as an ISO date; it's read in full again a week on (ADR 0006). */
+  fullReadAt: string;
+  /** Where the next refresh reads changes from, as an ISO date: when the last one started, less a margin. */
+  changesSince: string;
+  /** `false` once a refresh couldn't reach back to where it read from, until the next full read. */
+  caughtUp: boolean;
+  /** Every open Issue of the Project, oldest first. */
+  issues: OpenIssue[];
+  /** What the read couldn't give for this Project, Blocks Links the Map can't read among it. */
+  unread: Unread;
+  /** What the Project's band is decided from, as the last full read found it. */
+  support: Support;
+}

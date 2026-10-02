@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# The MessageDisplay hook (ADR 0009). It runs as every reply streams, so a
+# reply with no line of the Map's leaves here, without starting Node.
+input=$(cat)
+[[ $input == *"⟦issue-map "* ]] || exit 0
+# Below Node 22.18 it leaves the reply as written: the line stays, and nothing fails.
+found=$(node --version 2>/dev/null)
+IFS=. read -r major minor _ <<<"${found#v}"
+if (( major < 22 || major == 22 && minor < 18 )); then
+  echo "Issue Map needs Node.js 22.18 or later; found ${found:-none}" >&2
+  exit 0
+fi
+printf '%s' "$input" | exec node "$(dirname "$(realpath "$0")")/../src/display.ts"
