@@ -2,10 +2,12 @@
 
 What each release changes for someone using the Map. The Release workflow publishes the section headed with the version it releases as that release's notes, and refuses a version with none ([docs/releasing.md](docs/releasing.md)).
 
-## Unreleased
+## 0.2.0
 
-- The status line is the plugin's own: a line pinned under the prompt, beside yours, with nothing to set up and nothing written to your settings. It needs a Claude Code build that loads plugins' hooks modules; without one there's no status line. A status line 0.1.0 set up says how to take it out, and `take the Map out of my status line` still puts yours back as it was.
-- `/issue-map` shows the Map at once, with no reply to wait for, and `/issue-map group 1`, `/issue-map issue 2`, `/issue-map back` and the other views likewise. Claude reads what it showed, so you can carry on by asking. It needs the same Claude Code builds as the status line.
+It needs the same Claude Code and Node.js as 0.1.0. The status line and `/issue-map` also need a Claude Code build that loads plugins' hooks modules; without one, everything else works, through Claude.
+
+- The status line is the plugin's own: a line pinned under the prompt, beside yours, with nothing to set up and nothing written to your settings. A status line 0.1.0 set up says how to take it out, and `take the Map out of my status line` still puts yours back as it was.
+- `/issue-map` shows the Map at once, with no reply to wait for, and `/issue-map group 1`, `/issue-map issue 2`, `/issue-map back` and the other views likewise. Claude reads what it showed, so you can carry on by asking.
 
 ## 0.1.0
 
