@@ -79,7 +79,7 @@ The drawing of one Project's open Issues joined by their Links, which the user m
 _Avoid_: graph, board, tree
 
 **Snapshot**:
-The saved copy of one Project's open Issues and Links, as one login last read them from the Tracker. The Map is drawn from it, and it says how old it is once it stops being fresh.
+One Project's open Issues and Links as one login last read them from the Tracker. The Map is drawn from it, and it says how old it is once it stops being fresh.
 _Avoid_: cache, saved copy
 
 **Outside Issue**:
@@ -95,7 +95,7 @@ A set of open Issues joined by Parent and Blocks Links, directly, through one an
 _Avoid_: cluster, component, subgraph
 
 **Take next**:
-The Unblocked Issues the viewer could take, in the order the Map suggests taking them: unassigned or their own, and without someone else's open Closing Request. A Parent with open children, other than task-level children, is not in it; its Unblocked children stand in for it. Where the Tracker doesn't record Closing Requests or their authors, none is assumed and the Map says so.
+The Unblocked Issues the viewer could take, in the order the Map suggests taking them: unassigned or their own, and without someone else's open Closing Request. A Parent with open children in its own Project, other than task-level children, is not in it; its Unblocked children stand in for it. Children in another Project are Outside Issues and never stand in for it, so a Parent whose only open children are there stays in Take next itself. Where the Tracker doesn't record Closing Requests or their authors, none is assumed and the Map says so.
 _Avoid_: ready queue, up next, recommendations
 
 **Planned date**:
@@ -103,5 +103,5 @@ The date an Issue is planned for, as the Tracker records it — on GitHub, its m
 _Avoid_: deadline, target date, milestone date
 
 **Issue card**:
-What the Map shows about one Issue: its name and URL, whether it is Blocked, whom it is assigned to, its Links by kind, and its open Closing Requests. Moving through the Map goes from one Issue card to the next. From an open Issue's card, work can be started on it — Claude reads its body and comments and briefs the viewer — and an unassigned one can be assigned to the viewer.
+What the Map shows about one Issue: its name and URL, whether it is Blocked, whom it is assigned to, its Links by kind, its open Closing Requests, and how many other Issues Mention it without a Link to it. Moving through the Map goes from one Issue card to the next. From an open Issue's card, work can be started on it — Claude reads its body and comments and briefs the viewer — and an unassigned one can be assigned to the viewer.
 _Avoid_: focus view, detail view, node

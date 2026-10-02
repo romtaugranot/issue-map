@@ -16,7 +16,7 @@ export const OLDEST_SUPPORTED_GHES = "3.18";
  * fields, which the note names; which fields a GHES has is asked of its own
  * schema. No GHES schema has task-list Links (`trackedIssues`).
  */
-const GHES_SINCE = { subIssues: "3.17", blocks: "3.19" };
+export const GHES_SINCE = { subIssues: "3.17", blocks: "3.19" };
 
 /** Why GitHub offers no Related Link to write or read. */
 const NO_RELATED = "GitHub records no Related Links";

@@ -55,11 +55,12 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 
 ## Requirements
 
+- Linux, or macOS 13 or later. On Windows, run Claude Code under WSL: the plugin is untested on Windows itself. The build runs its tests on Linux.
 - Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.)
 - Node.js 22.18 or later on your `PATH`. The plugin is TypeScript that Node runs directly, with no runtime dependencies, and a release holds only what it runs, so there is nothing to install or build.
 - `bash`, which the plugin's entry points are written in, and `git`, which it reads the checkout's remotes with.
-- For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing needs the `repo` scope on a classic token. `gh` 2.64 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
-- For GitLab, the [GitLab CLI](https://gitlab.com/gitlab-org/cli) logged in to the host: `glab auth login --hostname <host>`. Writing needs a token with the `api` scope.
+- For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing a Link or assigning needs the triage role or above in the Project, and the `repo` scope on a classic token. `gh` 2.64 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
+- For GitLab, the [GitLab CLI](https://gitlab.com/gitlab-org/cli) logged in to the host: `glab auth login --hostname <host>`. Writing a Link needs the Guest role or above in the Project (Reporter before GitLab 17.0), assigning needs Reporter, and both need a token with the `api` scope.
 
 The Map reads and writes only through `gh` and `glab`, as whichever login they hold. It never asks for a token of its own.
 
@@ -91,6 +92,8 @@ claude --plugin-dir ~/issue-map
 ## Using it
 
 Run Claude Code in a git checkout. The Map opens on the checkout's Home Project, the Project its remotes lead to; when they lead to several with open Issues, it asks you to pick one, and remembers the pick. Then say what you want in plain words. Claude runs the plugin's commands for you.
+
+On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so there is no Take next; Groups from Parent Links and Link Suggestions still work ([Support](#support)).
 
 | You say | What happens |
 |---|---|
@@ -152,7 +155,9 @@ Each `gh` or `glab` call is stopped after 60 seconds, or 5 minutes for a page of
 pkill -f 'src/cli.ts read'
 ```
 
-**Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
+**Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host, or to a host you name with `go`, to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
+
+**To the model provider**, Issue text goes wherever the conversation goes. Claude reads what each command prints, so the titles of the Issues it shows reach your model provider, as everything in a Claude Code conversation does; so do an Issue's body and comments when you start work on it or ask for Link Suggestions. A host you type into `go` gets the requests above, unless the Map knows it by name, whether or not it runs a Tracker.
 
 ## Uninstall
 
@@ -176,6 +181,13 @@ pkill -f 'src/cli.ts read'
    git config --local --unset issue-map.home
    ```
 
+## Troubleshooting
+
+- **Claude's reply shows a bare line such as `⟦issue-map 3f9a0c1b2d4e⟧` instead of the output.** The display hook isn't running. It needs Claude Code 2.1.152 or later, hooks not turned off (`disableAllHooks`) or limited to managed ones (`allowManagedHooksOnly`), and Node.js 22.18 or later on the `PATH` Claude Code runs hooks with, which isn't always your shell's. The next command notices, and Claude reprints each output from then on.
+- **The first Map of a large Project takes minutes.** The first read pages through every open Issue and its Links, and the Map draws only once it's done; meanwhile, asking for the Map shows how far it's got and about how long is left. That read, and the full read each Snapshot gets again weekly or sooner, spend your login's API rate limit; when it runs out, the Map says so, and asking again later resumes the read where it stopped.
+- **Something in the background seems stuck or silent.** What the full reads and the refresher print goes to `background.log` in the [state directory](#what-it-writes-and-what-it-keeps).
+- **Claude doesn't pick the Map up from what you say.** Invoke its skill by name: `/issue-map:map`, followed by what you want.
+
 ## Support
 
 The Map puts every Project in a band from what its Tracker shows there ([ADR 0003](docs/adr/0003-support-by-detected-capability.md)). A Promised Tracker is tested on a running Tracker where the build can run one, and stood in for where it can't ([ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md)):
@@ -184,16 +196,19 @@ The Map puts every Project in a band from what its Tracker shows there ([ADR 000
 |---|---|---|
 | github.com | Promised | The contract suite on every change; the fixture Projects read live every night |
 | GHEC, including `*.ghe.com` | Promised | Stood in for: github.com's nightly reads, and every query checked against GHEC's published schema on every change |
-| GHES 3.18 and later, the releases GitHub still supports | Promised | Stood in for: github.com's nightly reads, and every query checked against each release's published schema on every change |
-| GHES 3.17 | Best effort | Parent Links only; read-only and marked untested |
+| GHES 3.19 and later | Promised | Stood in for: github.com's nightly reads, and every query checked against each release's published schema on every change |
+| GHES from 3.18, before 3.19 | Promised: no Blocks, so no Take next | 3.18, the oldest release GitHub still supports, records no Blocks Links. Stood in for as 3.19 and later are |
+| GHES from 3.17, before 3.18 | Best effort | Parent Links only; read-only and marked untested |
 | GHES before 3.17 | Refused | The Map can read no Link kind there |
-| gitlab.com | Promised | The contract suite on every change; the fixture Projects on Free read live every night. Licensed tiers are stood in for by the contract suite's fake `glab`, which answers in the shapes gitlab.com gives, until GitLab for Open Source licenses the fixture group ([docs/fixtures.md](docs/fixtures.md)) |
+| gitlab.com | Promised; on Free, no Blocks, so no Take next | The contract suite on every change; the fixture Projects on Free read live every night. Licensed tiers are stood in for by the contract suite's fake `glab`, which answers in the shapes gitlab.com gives, until GitLab for Open Source licenses the fixture group ([docs/fixtures.md](docs/fixtures.md)) |
 | GitLab Dedicated | Promised | Stood in for: gitlab.com's nightly reads, the GitLab version matrix, and every query checked on every change against each EE schema the matrix has recorded, in `test/schemas/gitlab` |
-| Self-managed GitLab 16.0 and later, every tier | Promised | The GitLab version matrix, before every release: every minor as CE and as EE, one per job; weekly, the oldest and newest minors. EE runs unlicensed, and licensed tiers are stood in for by the contract suite's fake `glab` and by every query checked against each EE schema the matrix has recorded |
-| Self-managed GitLab 13.4 to 15.11 | Best effort | Read-only and marked untested |
+| Self-managed GitLab 16.0 and later, every tier | Promised; on Free and CE, no Blocks, so no Take next | The GitLab version matrix, before every release: every minor as CE and as EE, one per job; weekly, the oldest and newest minors. EE runs unlicensed, and licensed tiers are stood in for by the contract suite's fake `glab` and by every query checked against each EE schema the matrix has recorded |
+| Self-managed GitLab from 13.4, before 16.0 | Best effort | Read-only and marked untested |
 | GitLab before 13.4 | Refused | The Map can read no Link kind there |
 
-The floors come from the adapters, which the matrix and the schema checks read them from; a test fails when this table's GHES and GitLab floors disagree with them. A release is tagged only from a commit where every tier passed; [docs/releasing.md](docs/releasing.md) has the steps.
+Where a Project can't record Blocks Links — GitLab Free and CE, and GHES 3.18 — no Issue is Unblocked, so there is no Take next. You still get the Groups its Parent Links make, its Related Links where the Tracker records them (GitHub records none), and Link Suggestions of those kinds.
+
+The floors come from the adapters, which the matrix and the schema checks read them from; a test fails when any floor in this table disagrees with them. A release is tagged only from a commit where every tier passed; [docs/releasing.md](docs/releasing.md) has the steps.
 
 ## How it's tested
 
