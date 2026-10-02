@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { closeSync, readdirSync, readFileSync, writeSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { declinesOf, lastHomeOf, stateDir } from "../src/state.ts";
+import { declinesOf, lastHomeOf, openBackgroundLog, stateDir } from "../src/state.ts";
 import type { Project } from "../src/tracker/tracker.ts";
 
 const dir = () => mkdtemp(join(tmpdir(), "issue-map-state-"));
@@ -30,6 +31,23 @@ test("two sessions declining at the same moment both keep their declines", async
   await declinesOf(d).add(key, ["1 blocks 2"]);
   assert.deepEqual((await declinesOf(d).get(key)).sort(), ["1 blocks 2", "3 relates 4"], "each kept once");
   assert.deepEqual(await declinesOf(d).get({ ...key, login: "bo" }), [], "kept per login");
+});
+
+test("the background log stays under its cap: past a megabyte it's started afresh, the last one kept beside it", async () => {
+  const d = await dir();
+  const write = (text: string) => {
+    const log = openBackgroundLog(d);
+    writeSync(log, text);
+    closeSync(log);
+  };
+  write("first\n");
+  write("x".repeat(1_000_000));
+  write("after\n");
+  assert.equal(readFileSync(join(d, "background.log"), "utf8"), "after\n");
+  assert.equal(readFileSync(join(d, "background.log.1"), "utf8").startsWith("first\nxxx"), true);
+  write("x".repeat(1_000_000));
+  write("again\n");
+  assert.equal(readdirSync(d).filter((name) => name.startsWith("background.log")).length, 2);
 });
 
 test("the state directory is ISSUE_MAP_STATE_DIR, else under XDG_STATE_HOME, else under ~/.local/state", () => {

@@ -5,10 +5,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { keepWarm } from "../src/snapshot/refresher.ts";
+import { SNAPSHOT_FORMAT } from "../src/snapshot/snapshot.ts";
 import { snapshotStore, type SnapshotKey } from "../src/snapshot/store.ts";
 import type { ChangesAnswer, OpenIssue, Project, ProjectResolution, Tracker, ViewerAnswer } from "../src/tracker/tracker.ts";
 import { READS_EVERYTHING } from "./fakes/fake-trackers.ts";
@@ -72,11 +73,12 @@ const rounds = (n: number): ViewerAnswer[] => Array.from({ length: n }, () => me
 /** A store, a clock to move on, and deps whose sleep moves it; the store holds a finished read at 10:00:00 unless `read` is false. */
 async function warmable(read = true) {
   const time = clock();
-  const store = snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-refresher-")), time);
+  const dir = mkdtempSync(join(tmpdir(), "issue-map-refresher-"));
+  const store = snapshotStore(dir, time);
   if (read) await store.read(key, fakeTracker(time).tracker, project);
   const reads: number[] = [];
   const deps = { store, startRead: () => void reads.push(time.now()), sleep: time.sleep };
-  return { store, time, deps, reads };
+  return { store, time, deps, reads, dir };
 }
 
 test("keeps the Snapshot fresh round after round, so a draw never has to refresh it first", async () => {
@@ -259,4 +261,42 @@ test("a draw counts as a look, as the status line's does", async () => {
   await keepWarm({ ...deps, sleep }, fakeTracker(time).tracker, project.path, key);
   const hours = (time.now() - start) / 3_600_000;
   assert.ok(hours >= 29 && hours < 29.1, `${hours} hours`);
+});
+
+/** Where `key`'s Snapshot and claim are kept under `dir`. */
+const keptAt = (dir: string) => join(dir, "snapshots", "github.com", encodeURIComponent(project.id));
+
+test("an old-format refresher meeting a Snapshot a newer version saved stops at once, starting no read, and its store leaves the Snapshot be (#55)", async () => {
+  const { store, time, deps, reads, dir } = await warmable();
+  const snapshot = join(keptAt(dir), `${key.login}.json`);
+  const newer = JSON.stringify({ ...JSON.parse(readFileSync(snapshot, "utf8")), format: SNAPSHOT_FORMAT + 1 });
+  // A newer version's full read puts its Snapshot in place after the first round.
+  const sleep = async (ms: number) => {
+    await time.sleep(ms);
+    writeFileSync(snapshot, newer);
+  };
+  const { tracker, calls } = fakeTracker(time, { viewer: rounds(10) });
+  assert.equal(await keepWarm({ ...deps, sleep }, tracker, project.path, key), "a newer version of the plugin keeps its Snapshot");
+  assert.equal(time.round, 1);
+  // Started again by an old draw, it stops before claiming, so it never takes over from the newer one.
+  assert.equal(await keepWarm(deps, tracker, project.path, key), "a newer version of the plugin keeps its Snapshot");
+  assert.equal(await store.refresherRunning(key), false);
+  // A draw of the old version doesn't read it again either.
+  assert.equal((await store.read(key, tracker, project)).kind, "failed");
+  assert.deepEqual([reads, calls.pages], [[], 0]);
+  assert.equal(readFileSync(snapshot, "utf8"), newer);
+});
+
+test("after an update, the next draw of the Home Project ends up with a refresher of the new version (#55)", async () => {
+  const { store, time, deps, dir } = await warmable();
+  // Left by the version before, whose claims carried no version, by a process still running.
+  writeFileSync(join(keptAt(dir), `${key.login}.refresher.lock`), JSON.stringify({ pid: process.ppid, id: "before-the-update", at: time.now(), boot: null }));
+  assert.equal(await store.refresherRunning(key), false, "so the draw starts one");
+  let running = false;
+  const sleep = async (ms: number) => {
+    await time.sleep(ms);
+    running ||= await store.refresherRunning(key);
+  };
+  assert.notEqual(await keepWarm({ ...deps, sleep }, fakeTracker(time, { viewer: rounds(3) }).tracker, project.path, key), "another refresher keeps it warm");
+  assert.equal(running, true);
 });

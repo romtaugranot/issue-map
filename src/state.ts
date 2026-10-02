@@ -4,6 +4,7 @@
  * status line, so both find the same Home Project.
  */
 import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -11,6 +12,9 @@ import type { LastHome } from "./home/home.ts";
 import type { Declines } from "./map/suggest.ts";
 import type { SnapshotKey } from "./snapshot/store.ts";
 import type { Project } from "./tracker/tracker.ts";
+
+/** How long what nobody has touched is kept: shown outputs, trails, and Snapshots no refresher keeps warm. */
+export const KEPT_MS = 30 * 86_400_000;
 
 /**
  * Where Snapshots are kept: `ISSUE_MAP_STATE_DIR`, or the XDG state directory.
@@ -20,6 +24,21 @@ import type { Project } from "./tracker/tracker.ts";
 export function stateDir(env: Record<string, string | undefined> = process.env): string {
   const absolute = (dir: string | undefined) => (dir && isAbsolute(dir) ? dir : undefined);
   return absolute(env.ISSUE_MAP_STATE_DIR) ?? join(absolute(env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state"), "issue-map");
+}
+
+/** How large the background log grows before it's started afresh, the last one kept beside it as `background.log.1`. */
+const LOG_CAP = 1_000_000;
+
+/** Opens `dir`'s background log to append what a background process prints; past its cap, it's moved aside first. */
+export function openBackgroundLog(dir: string): number {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, "background.log");
+  try {
+    if (statSync(path).size >= LOG_CAP) renameSync(path, `${path}.1`);
+  } catch {
+    // None yet, or another process moved it aside first.
+  }
+  return openSync(path, "a", 0o600);
 }
 
 /** The Home Project last resolved for the checkout at `root`, kept in `dir`. */
