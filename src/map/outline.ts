@@ -58,12 +58,16 @@ export function openUnder(snapshot: Snapshot, { groups, unlinked }: Layout, ref:
 
 /**
  * Whether what the user typed names one of the Project's own Issues: its
- * reference, alone or after the Project's path, its URL, or any URL inside
- * the Project that ends in its number, since a Tracker may serve one Issue
- * at more than one.
+ * reference, alone or after the Project's path, its URL, or an Issue or
+ * work-item URL in the Project with its number, the shapes the adapters
+ * read, since a Tracker may serve one Issue at more than one. Host and path
+ * match in any case, and a query or fragment, as on a comment's link, is
+ * left aside.
  */
 function namedBy({ project }: Snapshot, typed: string): (issue: OpenIssue) => boolean {
-  const number = typed.startsWith(`${project.url}/`) ? /\/(\d+)\/?$/.exec(typed)?.[1] : undefined;
+  const lower = typed.toLowerCase();
+  const inProject = `${project.url.toLowerCase()}/`;
+  const number = lower.startsWith(inProject) ? /^(?:-\/)?(?:issues|work_items)\/(\d+)\/?(?:[?#].*)?$/.exec(lower.slice(inProject.length))?.[1] : undefined;
   return (issue) => issue.ref === typed || `${project.path}${issue.ref}` === typed || issue.url === typed || (number !== undefined && issue.ref === `#${number}`);
 }
 

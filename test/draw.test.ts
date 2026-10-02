@@ -453,11 +453,34 @@ describe("a Group's outline (ADR 0008)", () => {
     assert.equal(outline(tree, "https://github.com/fixture-org/tools/issues/2"), outline(tree, "#2"), "by URL too");
   });
 
-  test("an Issue is named by its reference, after the Project's path, or by any URL of it inside the Project", () => {
-    for (const ref of ["fixture-org/tools#2", "https://github.com/fixture-org/tools/-/work_items/2"]) assert.equal(outline(tree, ref), outline(tree, "#2"), ref);
+  test("an Issue is named by its reference, after the Project's path, or by an Issue or work-item URL of it in the Project", () => {
+    const refs = [
+      "fixture-org/tools#2",
+      "https://github.com/fixture-org/tools/-/work_items/2",
+      "https://github.com/fixture-org/tools/-/issues/2/",
+      "https://github.com/fixture-org/tools/issues/2#issuecomment-123",
+      "https://github.com/fixture-org/tools/issues/2?tab=timeline",
+      "https://GitHub.com/Fixture-Org/Tools/issues/2",
+    ];
+    for (const ref of refs) assert.equal(outline(tree, ref), outline(tree, "#2"), ref);
     const plans = { outside: "fixture-org/plans#7" };
     const s = snapshot([{ n: 1 }, { n: 2 }], [[plans, "parent", 1], [plans, "parent", 2]]);
     assert.equal(outline(s, "↗fixture-org/plans#7"), outline(s, "fixture-org/plans#7"), "with the ↗ the outline prints");
+  });
+
+  test("a merge request or milestone URL that shares an Issue's number isn't that Issue", () => {
+    for (const ref of ["https://github.com/fixture-org/tools/-/merge_requests/2", "https://github.com/fixture-org/tools/pull/2", "https://github.com/fixture-org/tools/-/milestones/2"]) {
+      assert.equal(outline(tree, ref), `No Issue on the Map of fixture-org/tools is ${ref}. \`map\` for the Map.`, ref);
+    }
+  });
+
+  test("opening a Group by place after a refresh reorders the Groups names a different head than the overview picked", () => {
+    // Before: #1 heads 3 Issues, #10 heads 2. A refresh adds two children to #10, so it comes first.
+    const before = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 10 }, { n: 11 }], [[1, "parent", 2], [1, "parent", 3], [10, "parent", 11]]);
+    const after = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 10 }, { n: 11 }, { n: 12 }, { n: 13 }], [[1, "parent", 2], [1, "parent", 3], [10, "parent", 11], [10, "parent", 12], [10, "parent", 13]]);
+    assert.equal(groupLines(overview(before))[1], "- #1 Issue 1 — 3 Issues", "the overview's first Group, picked by place");
+    assert.equal(outline(after, 1).split("\n")[0], "**Group 1 of 2** · #10 Issue 10 — 4 Issues", "its first line names the head the skill checks against");
+    assert.equal(groupLines(overview(after))[1], "- #10 Issue 10 — 4 Issues", "a redrawn overview agrees with it");
   });
 
   test("an Issue with Related Links shows how many on its line, and the Related Issue stays in its own Group", () => {
