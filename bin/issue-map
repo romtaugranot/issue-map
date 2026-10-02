@@ -1,3 +1,10 @@
 #!/usr/bin/env bash
 # Runs the plugin's TypeScript directly: Node strips the types itself (22.18 and later).
+# An older Node can't even read the source, so it's turned away here, in one line.
+found=$(node --version 2>/dev/null)
+IFS=. read -r major minor _ <<<"${found#v}"
+if (( major < 22 || major == 22 && minor < 18 )); then
+  echo "Issue Map needs Node.js 22.18 or later; found ${found:-none}" >&2
+  exit 1
+fi
 exec node "$(dirname "$(realpath "$0")")/../src/cli.ts" "$@"
