@@ -7,6 +7,8 @@ allowed-tools:
   - Bash(issue-map unlinked *)
   - Bash(issue-map group *)
   - Bash(issue-map groups *)
+  - Bash(issue-map next *)
+  - Bash(issue-map taken *)
   - Bash(issue-map issue *)
   - Bash(issue-map start *)
   - Bash(issue-map suggest *)

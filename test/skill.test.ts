@@ -32,7 +32,7 @@ const OFFER = "issue-map offer <<'EOF'\n[{\"from\": \"#12\", \"kind\": \"blocks\
 const isWrite = (command: string) => /^issue-map (assign|confirm)\b|^issue-map statusline .*--(setup|remove)\b/.test(command);
 
 test("every read-only command the skill runs is pre-allowed, so moving from card to card raises no prompt", () => {
-  const reads = [...commands.filter((command) => !isWrite(command)), OFFER, "issue-map groups", "issue-map groups --page 2", "issue-map issue '#12' --page 2", "issue-map map --pick 'https://github.com/o/r'"];
+  const reads = [...commands.filter((command) => !isWrite(command)), OFFER, "issue-map groups", "issue-map groups --page 2", "issue-map next", "issue-map next --page 2", "issue-map taken", "issue-map taken --page 2", "issue-map issue '#12' --page 2", "issue-map map --pick 'https://github.com/o/r'"];
   assert.ok(reads.includes("issue-map issue '#12'"));
   for (const command of reads) assert.ok(allowed(command), `${command} would prompt`);
 });
