@@ -1068,11 +1068,16 @@ describe("a Picture as Mermaid or DOT, to paste where GitHub or GitLab render it
   test("titles with quotes, brackets, backticks, tags and entities can't break the Mermaid or the DOT, and print as typed", () => {
     const s = snapshot([{ n: 1, title: 'Say "hi" [now] {x} <b>y</b> & ```z``` #7; \\ end' }, { n: 2 }], [[1, "blocks", 2]]);
     const mermaid = draw(s, { kind: "picture", group: 1, as: "mermaid" }).text.split("\n");
-    assert.ok(mermaid.includes('  n1["#1 Say #quot;hi#quot; [now] {x} #lt;b#gt;y#lt;/b#gt; #amp; #96;#96;#96;z#96;#96;#96; #35;7; \\ end"]'), mermaid.join("\n"));
+    assert.ok(mermaid.includes('  n1["#1 Say #quot;hi#quot; [now] {x} #lt;b#gt;y#lt;/b#gt; #amp; #96;#96;#96;z#96;#96;#96; #35;7; #92; end"]'), mermaid.join("\n"));
     assert.ok(mermaid.includes("```mermaid"));
     const dot = draw(s, { kind: "picture", group: 1, as: "dot" }).text.split("\n");
     assert.ok(dot.includes('  n1 [label="#1 Say \\"hi\\" [now] {x} <b>y</b> &amp; ```z``` #7; \\\\ end"];'), dot.join("\n"));
     assert.ok(dot.includes("````dot"), "the fence outruns the title's backticks");
+  });
+
+  test("a backslash or a non-breaking space in a title, which end a Mermaid diagram early, are written as a code and a plain space", () => {
+    const s = snapshot([{ n: 1, title: "Fix\u00a0it with `\\n`" }, { n: 2 }], [[1, "blocks", 2]]);
+    assert.ok(draw(s, { kind: "picture", group: 1, as: "mermaid" }).text.split("\n").includes('  n1["#1 Fix it with #96;#92;n#96;"]'));
   });
 
   test("around an Issue, it draws the Issues that Picture draws, the Issue marked", () => {

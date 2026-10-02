@@ -186,8 +186,8 @@ function section(text: string, heading: string): string[] {
 }
 
 describe("Pictures of the recorded Snapshots as Mermaid (#83)", () => {
-  // Only a box's quoted label holds a title, and nothing in it can end the quote, open a tag or a Markdown string, or start an entity Mermaid would decode.
-  const box = /^ {2}n\d+\["(?:[^"<>&`#]|#(?!\w+;)|#(?:quot|lt|gt|amp|96|35);)*"\]$/;
+  // Only a box's quoted label holds a title, and nothing in it can end the quote, open a tag or a Markdown string, start an entity Mermaid would decode, or end the diagram early: a backslash, or a space other than a plain one.
+  const box = /^ {2}n\d+\["(?:[^"<>&`#\\\s]| |#(?!\w+;)|#(?:quot|lt|gt|amp|\d+);)*"\]$/;
   const line = /^ {2}n\d+ (?:-->\|blocks\||---\|parent of\|) n\d+$/;
   for (const name of ["opentofu__opentofu", "rust-lang__rust", "gitlab-org__gitlab"]) {
     test(`${name}: every Group drawn whole is a flowchart of quoted boxes and Blocks arrows`, () => {

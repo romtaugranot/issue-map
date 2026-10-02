@@ -202,8 +202,18 @@ function named(member: Member): string {
   return `${ref(member)}${n > 0 ? ` (${n} Related)` : ""} ${plainTitle(title)}`;
 }
 
-/** Text inside a quoted Mermaid label: what would end it, start an entity, or be read as HTML or Markdown, written as Mermaid's entity codes. */
+/**
+ * Text inside a quoted Mermaid label: what would end it, start an entity,
+ * or be read as HTML or Markdown, written as Mermaid's entity codes. After
+ * a backslash, or a non-breaking space even written as an entity, Mermaid
+ * drops the rest of the diagram: the one is written as its code, every
+ * space as a plain one.
+ */
 function mermaidText(text: string): string {
   const codes: Record<string, string> = { '"': "#quot;", "<": "#lt;", ">": "#gt;", "&": "#amp;", "`": "#96;" };
-  return text.replace(/#(?=\w+;)/g, "#35;").replace(/["<>&`]/g, (c) => codes[c]!);
+  return text
+    .replace(/#(?=\w+;)/g, "#35;")
+    .replace(/["<>&`]/g, (c) => codes[c]!)
+    .replace(/\\/g, "#92;")
+    .replace(/\s/g, " ");
 }
