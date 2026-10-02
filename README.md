@@ -124,10 +124,12 @@ Under `claude -p` there are no pickers and no display hook: Claude reprints each
 
 **On your machine**, it keeps its state in `$ISSUE_MAP_STATE_DIR`, or `$XDG_STATE_HOME/issue-map`, or `~/.local/state/issue-map`, readable only by your OS user:
 
-- a Snapshot of each Project's open Issues and Links per login, which holds private Issue titles and is deleted once the Tracker says the login can no longer read the Project;
-- each output shown through the display hook, kept a month;
-- this session's trail for `back`, kept a month, the Projects you moved to lately, the last Home Project of each checkout, the Link Suggestions offered this session (references only, never an Issue's text) and those you declined;
-- `background.log`, what the background processes print.
+- a Snapshot of each Project's open Issues and Links per login, and the pages of a read not yet finished. They hold private Issue titles, and are deleted once the Tracker says the login can no longer read the Project, or once nothing has drawn or read the Project for a month. The Home Project's is kept warm by the refresher and never expires while it runs; one of a Project you visited with `go` lasts until it's drawn again or expires;
+- each output shown through the display hook, kept a month, even once its Project's Snapshot is deleted;
+- this session's trail for `back`, kept a month;
+- the 10 Projects you moved to last, and the last Home Project of each checkout, each kept until replaced;
+- the Link Suggestions offered in each session (references only, never an Issue's text), kept until that session's next offer replaces them, and those you declined, kept so they aren't offered again;
+- `background.log`, what the background processes print: past a megabyte it's moved to `background.log.1`, replacing the one there.
 
 Both variables must be absolute paths. One that is empty or relative is ignored, as if unset, so private Issue titles never land in your working tree.
 

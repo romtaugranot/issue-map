@@ -5,7 +5,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -753,3 +753,61 @@ function titlesIn(dir: string): string[] {
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true, recursive: true }).map((e) => join(e.parentPath, e.name));
 }
+
+describe("what nobody draws expires (#58)", () => {
+  const month = 30 * 86_400_000;
+  /** The Project numbered `n`, and this login's key to its Snapshot. */
+  const nth = (n: number) => ({ project: { ...project, id: `github.com#${n}` }, key: { ...key, project: `github.com#${n}` } });
+
+  /** Makes everything kept of `at`'s Project last touched `ms` before the store's clock says it is now. */
+  function untouched(dir: string, at: SnapshotKey, ms: number, now: number) {
+    const projectDir = join(dir, "snapshots", at.tracker, encodeURIComponent(at.project));
+    for (const name of readdirSync(projectDir)) utimesSync(join(projectDir, name), new Date(now - ms), new Date(now - ms));
+  }
+
+  test("a Snapshot, or a partial read, of a Project nobody has touched for a month is deleted the next time any Snapshot is saved", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time);
+    const [read, partial, lately, other] = [nth(2), nth(3), nth(4), nth(5)];
+    await store.read(read.key, fakeTracker(5).tracker, read.project);
+    await store.read(partial.key, fakeTracker(250, { fail: { at: "100", answer: { kind: "cant-tell", reason: "couldn't reach github.com" } } }).tracker, partial.project);
+    await store.read(lately.key, fakeTracker(5).tracker, lately.project);
+    untouched(dir, read.key, month + 60_000, time.now());
+    untouched(dir, partial.key, month + 60_000, time.now());
+    untouched(dir, lately.key, month - 60_000, time.now());
+    assert.equal((await store.state(partial.key)).kind, "reading");
+
+    await store.read(other.key, fakeTracker(5).tracker, other.project);
+    assert.deepEqual(await store.state(read.key), { kind: "none" });
+    assert.deepEqual(await store.state(partial.key), { kind: "none" });
+    assert.equal((await store.state(lately.key)).kind, "ready");
+    assert.deepEqual(readdirSync(join(dir, "snapshots", "github.com")).sort(), [lately.key, other.key].map((k) => encodeURIComponent(k.project)).sort());
+  });
+
+  test("the Home Project's Snapshot is never expired while its refresher keeps it", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time);
+    const [home, other] = [nth(2), nth(3)];
+    await store.read(home.key, fakeTracker(5).tracker, home.project);
+    assert.ok(await store.claimRefresher(home.key));
+    untouched(dir, home.key, month + 60_000, time.now());
+    await store.read(other.key, fakeTracker(5).tracker, other.project);
+    assert.equal((await store.state(home.key)).kind, "ready");
+  });
+
+  test("temporary files a crash left behind are swept the next time any Snapshot is saved", async () => {
+    const dir = scratch();
+    const time = clock();
+    const store = snapshotStore(dir, time);
+    await store.read(key, fakeTracker(5).tracker, project);
+    const projectDir = join(dir, "snapshots", "github.com", encodeURIComponent(project.id));
+    for (const name of [`${key.login}.json.4242.tmp`, `${key.login}.lock.left.stale`]) writeFileSync(join(projectDir, name), "{}");
+    untouched(dir, key, 11 * 60_000, time.now());
+    // Saved again, so the Project itself was touched lately.
+    await store.assigned(key, "I_1", ["fixture-viewer"]);
+    assert.deepEqual(readdirSync(projectDir).filter((name) => /\.(tmp|stale)$/.test(name)), []);
+    assert.equal((await store.state(key)).kind, "ready");
+  });
+});

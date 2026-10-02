@@ -9,13 +9,16 @@
  * it replaces, which is drawn meanwhile. One refresher at a time may claim a
  * Snapshot to keep it warm. Beside each Snapshot it keeps a line summing it
  * up, for the status line, which has no time to read a large Snapshot.
+ * What's kept of a Project nothing has touched for a month expires, unless
+ * a refresher keeps it warm.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { link, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { KEPT_MS } from "../state.ts";
 import type { ChangesAnswer, FarEnd, Link, OpenIssue, Project, Support, Tracker, Unread } from "../tracker/tracker.ts";
 import { SNAPSHOT_FORMAT, type Snapshot } from "./snapshot.ts";
 
@@ -213,11 +216,32 @@ export function snapshotStore(dir: string, clock: Clock, { summarise }: StoreOpt
     };
   };
 
-  /** Saves the Snapshot, and the line summing it up beside it. */
+  /** Saves the Snapshot, and the line summing it up beside it, then deletes what's expired. */
   const keep = async (at: { snapshot: string; summary: string }, snapshot: Snapshot) => {
     await save(at.snapshot, snapshot);
-    if (!summarise) return rm(at.summary, { force: true });
-    await save(at.summary, { format: SNAPSHOT_FORMAT, readAt: snapshot.readAt, line: summarise(snapshot) } satisfies Summary);
+    if (!summarise) await rm(at.summary, { force: true });
+    else await save(at.summary, { format: SNAPSHOT_FORMAT, readAt: snapshot.readAt, line: summarise(snapshot) } satisfies Summary);
+    await expire();
+  };
+
+  /**
+   * Deletes all that's kept of each Project nothing has touched for a month,
+   * Snapshots and partial reads alike, unless a refresher keeps it warm; and,
+   * of the rest, the temporary files a crash left behind.
+   */
+  const expire = async () => {
+    const snapshots = join(dir, "snapshots");
+    for (const tracker of await readdir(snapshots).catch(() => [])) {
+      for (const project of await readdir(join(snapshots, tracker)).catch(() => [])) {
+        const at = join(snapshots, tracker, project);
+        const kept = await Promise.all(
+          (await readdir(at).catch(() => [])).map(async (name) => ({ name, path: join(at, name), ageMs: clock.now() - ((await stat(join(at, name)).catch(() => null))?.mtimeMs ?? clock.now()) })),
+        );
+        const warm = await Promise.all(kept.filter(({ name }) => name.endsWith(REFRESHER_LOCK)).map(({ path }) => held(path, clock)));
+        if (!warm.includes(true) && kept.every(({ ageMs }) => ageMs >= KEPT_MS)) await rm(at, { recursive: true, force: true });
+        else for (const { name, path, ageMs } of kept) if (/\.(tmp|stale)$/.test(name) && ageMs >= LOCK_LAPSES_MS) await rm(path, { force: true });
+      }
+    }
   };
 
   /** Writes down that someone looked at the Map of `project`, which keeps its refresher going. */
