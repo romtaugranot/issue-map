@@ -118,6 +118,8 @@ The status line's row looks like this, and never reads the Tracker itself:
 
 Under `claude -p` there are no pickers and no display hook: Claude reprints each output instead, and asks nothing.
 
+Where the display hook doesn't run in a session — hooks disabled, only managed hooks allowed, or Node not on the hook's `PATH` — the next command notices, Claude says so once, and reprints each output from then on.
+
 ## What it writes, and what it keeps
 
 **To a Tracker**, the Map writes two things, each only after you confirm it: assigning an Issue to you, and a Link Suggestion you ticked. It reads the Issue again before each write, writes once, and stops at the first refusal. It writes nothing on a Best effort Project, or for a login that may only read.

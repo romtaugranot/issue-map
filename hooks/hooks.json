@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/issue-map-display"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/issue-map-display\""
           }
         ]
       }
