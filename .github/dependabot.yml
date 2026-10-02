@@ -9,6 +9,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # A release waits a week before it's proposed, so a compromised one is likely pulled first.
+    cooldown:
+      default-days: 7
     ignore:
       # The typings follow the Node floor, 22.18, so typecheck catches newer APIs.
       - dependency-name: "@types/node"

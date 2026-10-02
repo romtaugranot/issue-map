@@ -4,8 +4,10 @@
 # release's published schema. Needs no credentials.
 name: Contract
 
+# Once per change: a pull request's commits run as the pull request, and main's as the push.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_call:
 
@@ -25,7 +27,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
 

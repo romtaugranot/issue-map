@@ -3,7 +3,8 @@
 # github.com, GHEC and every promised GHES release, and a change opens one.
 # The contract tier's schema checks then run against it. Pull requests opened
 # with the workflow's own token don't start other workflows: close and
-# reopen it to run the contract tier.
+# reopen it to run the contract tier. A failed weekly run opens an Issue, or
+# adds to the one open.
 name: GHES schemas
 
 on:
@@ -42,3 +43,25 @@ jobs:
             ${{ steps.record.outputs.changed }}
 
             The contract tier checks every query the GitHub adapter sends against them.
+
+  drift:
+    needs: schemas
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open an Issue, or add to the one open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Recording GitHub's published GraphQL schemas failed"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again on $(date -u +%F): $RUN"
+          else
+            gh issue create --title "$title" --body "The weekly run couldn't record the GraphQL schemas GitHub publishes, or open their pull request: $RUN. Fix it in a patch release (ADR 0004)."
+          fi
