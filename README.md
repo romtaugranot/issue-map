@@ -88,6 +88,8 @@ cd path/to/your/checkout
 claude --plugin-dir ~/issue-map
 ```
 
+Permissions: the Map's skill pre-approves only its read-only commands — drawing the Map, opening Groups and Issue cards, moving, `back`, `home`, `start`, `suggest`, `offer` and printing the status line's row — so following Links from card to card raises no prompt. Claude Code asks once to use the skill, since it pre-approves commands, and the approval lasts for that request. Assigning an Issue, confirming Link Suggestions and setting up or removing the status line still ask every time: each writes, and the prompt is a second check that the write is yours, not something an Issue's text talked Claude into.
+
 ## Using it
 
 Run Claude Code in a git checkout. The Map opens on the checkout's Home Project, the Project its remotes lead to; when they lead to several with open Issues, it asks you to pick one, and remembers the pick. Then say what you want in plain words. Claude runs the plugin's commands for you.

@@ -1,6 +1,20 @@
 ---
 name: map
 description: The Map of this checkout's Project and its open Issues. Use when the user asks for the Map, to refresh the Map, their Home Project, a Group or what sits under an Issue, an Issue's card or its Links, their Unlinked Issues, or which Issue to take next; to assign an Issue to themselves or start work on one; for Link Suggestions, the Links nobody recorded; to move to another Project, `go`, `back` or `home`; or to set up or remove the Map's status line.
+allowed-tools:
+  - Bash(issue-map map *)
+  - Bash(issue-map refresh *)
+  - Bash(issue-map unlinked *)
+  - Bash(issue-map group *)
+  - Bash(issue-map groups *)
+  - Bash(issue-map issue *)
+  - Bash(issue-map start *)
+  - Bash(issue-map suggest *)
+  - Bash(issue-map offer *)
+  - Bash(issue-map go *)
+  - Bash(issue-map back *)
+  - Bash(issue-map home *)
+  - Bash(issue-map statusline)
 ---
 
 # The Map
