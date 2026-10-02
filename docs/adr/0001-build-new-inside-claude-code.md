@@ -15,3 +15,5 @@ Every existing Map of Issue Links is a web page or a separate app, and none of t
 - A status line is terminal-only, and a user has just one. The plugin can't declare one itself, so a setup command has to write it into the user's settings.
 
 _Amended by ADR 0010: a read-only HTML Picture of the Map may be opened outside Claude Code, beside it._
+
+_Amended for #83: a Picture may also be printed as Mermaid or DOT text, for the user to paste where GitHub or GitLab render it. It is still printed in the conversation and the plugin writes it nowhere; only its use is outside._

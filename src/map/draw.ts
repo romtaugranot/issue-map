@@ -7,7 +7,7 @@ import type { OpenIssue, ReadableEnd } from "../tracker/tracker.ts";
 import { bandName, bandOf, notes, refusal } from "./band.ts";
 import { layout, ownBeneath, type Group, type Layout, type Member } from "./links.ts";
 import { openGroup, openUnder, type Entry, type Opened } from "./outline.ts";
-import { around, picture, PICTURE_ISSUES, PICTURE_ROWS } from "./picture.ts";
+import { around, exported, picture, PICTURE_ISSUES, PICTURE_ROWS, type Export } from "./picture.ts";
 import { closedBlockers, takeNext, type Pick, type TakeNext } from "./take-next.ts";
 import { age, ago, count, fence, howClosed, OUTSIDE, plural, short, title } from "./text.ts";
 
@@ -25,10 +25,10 @@ export type Command =
   | { kind: "group"; group: number; page: number }
   /** The level beneath the Issue a reference or URL names, in its Group. */
   | { kind: "under"; ref: string; page: number }
-  /** A Group drawn whole, by its place on the overview counting from 1; its outline when it doesn't fit. */
-  | { kind: "picture"; group: number }
+  /** A Group drawn whole, by its place on the overview counting from 1; its outline when it doesn't fit. `as` prints it as Mermaid or DOT instead, to paste where GitHub or GitLab render it (#83). */
+  | { kind: "picture"; group: number; as?: Export }
   /** The Picture around the Issue a reference or URL names: what it waits on and what waits on it (#82). */
-  | { kind: "around"; ref: string };
+  | { kind: "around"; ref: string; as?: Export };
 
 export interface Drawing {
   text: string;
@@ -94,11 +94,11 @@ function drawn(snapshot: Snapshot, command: Command, home: string | undefined, s
     }
     case "picture": {
       const laidOut = layout(snapshot);
-      return pictured(snapshot, openGroup(laidOut, command.group), unblockedIn(takeNext(snapshot, laidOut)), shows);
+      return pictured(snapshot, openGroup(laidOut, command.group), unblockedIn(takeNext(snapshot, laidOut)), shows, command.as);
     }
     case "around": {
       const laidOut = layout(snapshot);
-      return picturedAround(snapshot, openUnder(snapshot, laidOut, command.ref), unblockedIn(takeNext(snapshot, laidOut)), shows);
+      return picturedAround(snapshot, openUnder(snapshot, laidOut, command.ref), unblockedIn(takeNext(snapshot, laidOut)), shows, command.as);
     }
   }
 }
@@ -349,19 +349,22 @@ function outline(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, page:
  * then its rows, then what the marks mean. A Group too large for one opens
  * as its outline, saying why.
  */
-function pictured(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, shows: Shows): string {
+function pictured(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, shows: Shows, as?: Export): string {
   if (opened.kind !== "level") return outline(snapshot, opened, unblocked, 1, shows);
   const { place, groups, group } = opened;
-  const rows = picture(group);
-  if (!rows) {
+  const drawn = picture(group);
+  if (!drawn) {
     const head = group.head.kind === "issue" ? group.head : { kind: "issue" as const, id: group.issues[0]!.id, issue: group.issues[0]! };
     const why = `Group ${count(place)} is too large to draw whole: a Picture holds about ${PICTURE_ISSUES} Issues in ${PICTURE_ROWS} rows. Here is its outline; \`picture '${label(head)}'\` draws the Picture around ${label(head)} instead, as it does around any Issue in it.`;
     return `${why}\n\n${outline(snapshot, opened, unblocked, 1, shows)}`;
   }
   for (const member of group.members.values()) if (member.kind === "issue") shows(member.issue);
+  const line = `${headOf(group)} — ${groupSize(group, unblocked)}`;
+  if (as) return pasted(`**Picture of Group ${count(place)} of ${count(groups)}, as ${EXPORTS[as]}** · ${line}`, exported(group, drawn.drawn, as), as, `\`picture ${place}\` for the Picture · \`group ${place}\` for its outline`);
+  const { rows } = drawn;
   const marks = fence(rows);
   return [
-    `**Picture of Group ${count(place)} of ${count(groups)}** · ${headOf(group)} — ${groupSize(group, unblocked)}`,
+    `**Picture of Group ${count(place)} of ${count(groups)}** · ${line}`,
     "",
     marks,
     ...rows,
@@ -369,6 +372,15 @@ function pictured(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, show
     MARKS,
     `_\`group ${place}\` for its outline · \`map\` for the Map_`,
   ].join("\n");
+}
+
+const EXPORTS: Record<Export, string> = { mermaid: "Mermaid", dot: "DOT" };
+
+/** A Picture as Mermaid or DOT, fenced to copy whole: its line, where to paste it, the text, where to go next. */
+function pasted(head: string, lines: string[], as: Export, next: string): string {
+  const marks = fence(lines);
+  const where = as === "mermaid" ? "Paste it where GitHub or GitLab render Mermaid, such as a comment on the Group's head Issue" : "Graphviz draws it";
+  return [head, `${where}. The Map writes nothing to the Tracker.`, "", `${marks}${as}`, ...lines, marks, `_${next} · \`map\` for the Map_`].join("\n");
 }
 
 /** What a Picture's marks mean. */
@@ -379,12 +391,16 @@ const MARKS = `_\`─\` its Parent above it · \`▶\` Blocked by the Issue abov
  * the rows, what the marks mean. An Issue in no Group says so as opening
  * the level beneath it does.
  */
-function picturedAround(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, shows: Shows): string {
+function picturedAround(snapshot: Snapshot, opened: Opened, unblocked: Unblocked, shows: Shows, as?: Export): string {
   if (opened.kind !== "level" || !opened.above) return outline(snapshot, opened, unblocked, 1, shows);
   const { place, groups, group, above: center } = opened;
   const drawn = around(group, center);
   if (!drawn) return `The Picture around ${label(center)} doesn't fit one screen. Here is the level beneath it.\n\n${outline(snapshot, opened, unblocked, 1, shows)}`;
   for (const member of drawn.drawn) if (member.kind === "issue") shows(member.issue);
+  if (as) {
+    const head = `**Picture around ${label(center)}, as ${EXPORTS[as]}** · in Group ${count(place)} of ${count(groups)} · ${headOf(group)} — ${groupSize(group, unblocked)}`;
+    return pasted(head, exported(group, drawn.drawn, as, center), as, `\`picture '${label(center)}'\` for the Picture · \`issue '${label(center)}'\` for its card`);
+  }
   const marks = fence(drawn.rows);
   return [
     `**Picture around ${label(center)}** · in Group ${count(place)} of ${count(groups)} · ${headOf(group)} — ${groupSize(group, unblocked)}`,
