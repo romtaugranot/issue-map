@@ -16,6 +16,10 @@ export type Command =
   | { kind: "unlinked"; page: number }
   /** Every Group, largest first, each numbered by its place on the overview. */
   | { kind: "groups"; page: number }
+  /** Every Issue in Take next, in its order. */
+  | { kind: "next"; page: number }
+  /** The Unblocked Issues taken by others, each with who has it, in Take next's order. */
+  | { kind: "taken"; page: number }
   /** A Group's outline, by its place on the overview counting from 1. */
   | { kind: "group"; group: number; page: number }
   /** The level beneath the Issue a reference or URL names, in its Group. */
@@ -33,7 +37,7 @@ const TAKE_NEXT_LINES = 5;
 const STAND_INS = 3;
 /** Group lines on the overview; the rest are held in a count. */
 const GROUP_LINES = 8;
-/** Unlinked Issues, or Groups, a page. */
+/** Unlinked Issues, Groups, or Issues in Take next or taken by others, a page. */
 const PAGE = 15;
 /** Issues a page of one level of an outline. */
 const OUTLINE_PAGE = 10;
@@ -74,6 +78,9 @@ function drawn(snapshot: Snapshot, command: Command, home: string | undefined, s
       const laidOut = layout(snapshot);
       return groupsPage(laidOut.groups, unblockedIn(takeNext(snapshot, laidOut)), command.page, shows);
     }
+    case "next":
+    case "taken":
+      return picksPage(snapshot, takeNext(snapshot, layout(snapshot)), command.kind, command.page, shows);
     case "group":
     case "under": {
       const laidOut = layout(snapshot);
@@ -155,27 +162,49 @@ export const NO_MAP = "No Issue here has a Link, so there's no Map to draw";
 
 /** Whether there's no Map to draw; an Unlinked Issue that a closed Issue Blocks is still Unblocked, so Take next can hold something with no Map. */
 export function noMapToDraw({ onMap }: Layout, next: TakeNext): boolean {
-  return onMap.length === 0 && (next.kind === "blocks-unread" || (next.picks.length === 0 && next.takenByOthers === 0));
+  return onMap.length === 0 && (next.kind === "blocks-unread" || (next.picks.length === 0 && next.takenByOthers.length === 0));
 }
 
 /** Take next's headline and why, in the words the overview and the status line share. */
 export function takeNextSaid(next: TakeNext): { head: string; why: string } {
   if (next.kind === "blocks-unread") return { head: "Take next: none", why: "the Map can't read this Project's Blocks Links" };
-  const { picks, takenByOthers } = next;
+  const { picks, takenByOthers: { length: taken } } = next;
   if (picks.length > 0) return { head: `Take next: ${count(picks.length)}`, why: "most waited on first" };
-  if (takenByOthers > 0) return { head: "Take next: 0", why: `all ${plural(takenByOthers, "Unblocked Issue")} ${takenByOthers === 1 ? "is" : "are"} taken by others` };
+  if (taken > 0) return { head: "Take next: 0", why: `all ${plural(taken, "Unblocked Issue")} ${taken === 1 ? "is" : "are"} taken by others` };
   return { head: "Take next: 0", why: "every Issue on the Map is Blocked, or a Parent of Blocked Issues" };
 }
+
+/** Ends a count of the Issues taken by others: `taken` lists them. */
+const ASK_WHO = ", ask who has them";
 
 function takeNextSection(snapshot: Snapshot, next: TakeNext, shows: Shows): string[] {
   const { head, why } = takeNextSaid(next);
   if (next.kind === "blocks-unread") return [`**${head}** — ${why} (${next.reason}), so it calls no Issue Unblocked`];
   const { picks, takenByOthers, closingRequestsUnread } = next;
   const unread = closingRequestsUnread === null ? "" : ` · Closing Requests unread (${closingRequestsUnread}), so none leaves an Issue out`;
-  const taken = picks.length > 0 && takenByOthers > 0 ? ` · ${count(takenByOthers)} taken by others` : "";
+  const taken = takenByOthers.length === 0 ? "" : picks.length > 0 ? ` · ${count(takenByOthers.length)} taken by others${ASK_WHO}` : ASK_WHO;
   const { lines, untold } = pickLines(picks, snapshot, shows);
-  const more = untold > 0 ? ` · ${count(untold)} more not listed` : "";
+  const more = untold > 0 ? ` · ${count(untold)} more not listed, ask to list them` : "";
   return [`**${head}** — ${why}${more}${taken}${unread}`, ...lines];
+}
+
+/** A page of Take next, or of the Unblocked Issues taken by others, in Take next's order and with its lines. */
+function picksPage(snapshot: Snapshot, next: TakeNext, kind: "next" | "taken", page: number, shows: Shows): string {
+  const list = next.kind === "list" ? (kind === "next" ? next.picks : next.takenByOthers) : [];
+  if (list.length === 0) {
+    if (kind === "taken" && next.kind === "list") return "No Unblocked Issue here is taken by others. `map` for the Map.";
+    return `${takeNextSection(snapshot, next, shows)[0]}\n\n_\`map\` for the Map_`;
+  }
+  const pages = Math.ceil(list.length / PAGE);
+  const at = Math.min(Math.max(1, page), pages);
+  const { head, why } = takeNextSaid(next);
+  const heading = kind === "next" ? `**${head}** — ${why}` : `**Taken by others: ${count(list.length)}** — Unblocked, but someone else has them; most waited on first`;
+  return [
+    `${heading}, page ${count(at)} of ${count(pages)}`,
+    ...list.slice((at - 1) * PAGE, at * PAGE).map((pick) => `- ${pickLine(pick, snapshot, shows)}`),
+    "",
+    at < pages ? `_\`more\` for the next ${PAGE} · \`map\` for the Map_` : "_That's all of them. `map` for the Map._",
+  ].join("\n");
 }
 
 /** Take next's lines, where the children standing in for one Parent past the first few are held in a count; and how many picks past the last line neither names nor counts. */
@@ -201,7 +230,7 @@ function pickLines(picks: Pick[], snapshot: Snapshot, shows: Shows): { lines: st
 }
 
 /** One line of Take next, less its `- `: the overview's and, with its title `named` as plain text, the status line's alike. */
-export function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers }: Pick, snapshot: Snapshot, shows: Shows = () => {}, named = title): string {
+export function pickLine({ issue, waiting: { count: n, via, carried }, yours, closedBlockers, heldBy }: Pick, snapshot: Snapshot, shows: Shows = () => {}, named = title): string {
   shows(issue);
   const waits = n === 0 ? "" : carried ? `▶${count(n)} wait on it, via ${via!.ref}` : `▶${count(n)} wait on it`;
   const standsIn = via && !(n > 0 && carried) ? `via ${via.ref}` : "";
@@ -211,6 +240,9 @@ export function pickLine({ issue, waiting: { count: n, via, carried }, yours, cl
     ...unblockedBy(closedBlockers, snapshot),
     issue.planned ? `due ${issue.planned.slice(0, 10)}` : "",
     yours ? "yours" : "",
+    // Logins as a card prints them.
+    heldBy && heldBy.assignees.length > 0 ? `assigned to ${heldBy.assignees.join(", ")}` : "",
+    heldBy && heldBy.requestsBy.length > 0 ? `Closing Request by ${heldBy.requestsBy.join(", ")}` : "",
   ].filter(Boolean);
   return `${issue.ref} ${named(issue.title)}${reasons.length > 0 ? ` — ${reasons.join(" · ")}` : ""}`;
 }

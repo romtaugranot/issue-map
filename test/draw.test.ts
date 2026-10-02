@@ -114,7 +114,7 @@ describe("Take next", () => {
       [[1, "related", 2], [2, "related", 3], [3, "related", 4], [4, "related", 5], [5, "related", 6], [6, "related", 7]],
     );
     assert.deepEqual(takeNext(overview(s)), [
-      "**Take next: 4** — most waited on first · 3 taken by others",
+      "**Take next: 4** — most waited on first · 3 taken by others, ask who has them",
       "- #1 Issue 1",
       "- #2 Issue 2 — yours",
       "- #5 Issue 5 — yours",
@@ -124,7 +124,7 @@ describe("Take next", () => {
 
   test("says so when every Unblocked Issue is taken by others", () => {
     const s = snapshot([{ n: 1, assignees: ["fixture-other"] }, { n: 2, closingRequests: ["fixture-other"] }], [[1, "related", 2]]);
-    assert.deepEqual(takeNext(overview(s)), ["**Take next: 0** — all 2 Unblocked Issues are taken by others"]);
+    assert.deepEqual(takeNext(overview(s)), ["**Take next: 0** — all 2 Unblocked Issues are taken by others, ask who has them"]);
   });
 
   test("a Parent with open children gives way to its Unblocked children, which carry its count", () => {
@@ -171,7 +171,7 @@ describe("Take next", () => {
       [[1, "blocks", 9], [7, "blocks", 8], [2, "related", 3], [3, "related", 4], [4, "related", 5], [5, "related", 6]],
     );
     const expected = [
-      "**Take next: 7** — most waited on first · 2 more not listed",
+      "**Take next: 7** — most waited on first · 2 more not listed, ask to list them",
       "- #7 Issue 7 — ▶1 wait on it · due 2026-11-01",
       "- #1 Issue 1 — ▶1 wait on it",
       "- #3 Issue 3 — due 2026-10-01",
@@ -192,7 +192,7 @@ describe("Take next", () => {
   test("where Closing Requests can't be read, leaves nothing out as taken and says so", () => {
     const s = snapshot([{ n: 1, assignees: ["fixture-other"] }, { n: 2 }], [[1, "related", 2]], { closingRequests: "this login can't read pull requests" });
     assert.deepEqual(takeNext(overview(s)), [
-      "**Take next: 1** — most waited on first · 1 taken by others · Closing Requests unread (this login can't read pull requests), so none leaves an Issue out",
+      "**Take next: 1** — most waited on first · 1 taken by others, ask who has them · Closing Requests unread (this login can't read pull requests), so none leaves an Issue out",
       "- #2 Issue 2",
     ]);
   });
@@ -203,7 +203,7 @@ describe("Take next", () => {
       [[1, "parent", 2], [1, "parent", 3], [1, "parent", 4], [1, "parent", 5], [1, "parent", 6], [20, "related", 21]],
     );
     assert.deepEqual(takeNext(overview(s)), [
-      "**Take next: 7** — most waited on first · 1 more not listed",
+      "**Take next: 7** — most waited on first · 1 more not listed, ask to list them",
       "- #2 Issue 2 — via #1",
       "- #3 Issue 3 — via #1",
       "- #4 Issue 4 — via #1",
@@ -290,7 +290,7 @@ describe("Groups (ADR 0008)", () => {
       "- #10 Issue 10 — 4 Issues, 2 Unblocked, 1↗ Outside",
       "- #1 Issue 1 — 3 Issues, 0 Unblocked",
     ]);
-    assert.equal(takeNext(text)[0], "**Take next: 1** — most waited on first · 1 taken by others", "the 2 Unblocked are Take next's 1 and the 1 taken by others");
+    assert.equal(takeNext(text)[0], "**Take next: 1** — most waited on first · 1 taken by others, ask who has them", "the 2 Unblocked are Take next's 1 and the 1 taken by others");
   });
 
   test("where Blocks Links can't be read, a Group line counts nothing Unblocked", () => {
@@ -633,6 +633,73 @@ describe("the Group list", () => {
 
   test("says so when there's no Group to list", () => {
     assert.equal(draw(snapshot([{ n: 1 }]), { kind: "groups", page: 1 }).text, "No Issue here has a Link, so there's no Group to list. `map` for the Map.");
+  });
+});
+
+describe("the Take next list", () => {
+  // #1 is the Parent of #2–#6, so they stand in for it; #20–#34 are joined in a chain by Related Links. All 20 are Unblocked, none waits on another.
+  const children = [2, 3, 4, 5, 6];
+  const chain = Array.from({ length: 15 }, (_, i) => 20 + i);
+  const s = snapshot(
+    [{ n: 1 }, ...children.map((n) => ({ n })), ...chain.map((n) => ({ n }))],
+    [...children.map((n): LinkSpec => [1, "parent", n]), ...chain.slice(1).map((n): LinkSpec => [n - 1, "related", n])],
+  );
+  const list = (page: number) => draw(s, { kind: "next", page }).text.split("\n");
+
+  test("pages every Issue Take next counts 15 at a time, in its order and with its lines, the stand-ins the overview holds in a count among them", () => {
+    assert.deepEqual(takeNext(overview(s)).slice(0, 5), [
+      "**Take next: 20** — most waited on first · 14 more not listed, ask to list them",
+      "- #2 Issue 2 — via #1",
+      "- #3 Issue 3 — via #1",
+      "- #4 Issue 4 — via #1",
+      "- … 2 more under #1",
+    ]);
+    assert.deepEqual(list(1), [
+      "**Take next: 20** — most waited on first, page 1 of 2",
+      ...children.map((n) => `- #${n} Issue ${n} — via #1`),
+      ...chain.slice(0, 10).map((n) => `- #${n} Issue ${n}`),
+      "",
+      "_`more` for the next 15 · `map` for the Map_",
+    ]);
+    assert.deepEqual(list(2), ["**Take next: 20** — most waited on first, page 2 of 2", ...chain.slice(10).map((n) => `- #${n} Issue ${n}`), "", "_That's all of them. `map` for the Map._"]);
+    assert.deepEqual(list(7), list(2), "a page past the end shows the last");
+  });
+
+  test("says why when it holds none", () => {
+    const s = snapshot([{ n: 1, assignees: ["fixture-other"] }, { n: 2 }], [[1, "blocks", 2]]);
+    assert.equal(draw(s, { kind: "next", page: 1 }).text, "**Take next: 0** — all 1 Unblocked Issue is taken by others, ask who has them\n\n_`map` for the Map_");
+  });
+});
+
+describe("the Issues taken by others", () => {
+  test("lists each Unblocked Issue left out of Take next as taken, in its order, with who holds it: its assignees, or the author of a Closing Request", () => {
+    const s = snapshot(
+      [
+        { n: 1 },
+        { n: 2, assignees: [VIEWER] },
+        { n: 3, assignees: ["fixture-other", "fixture-third"] },
+        { n: 4, closingRequests: ["fixture-other"] },
+        { n: 5, closingRequests: [VIEWER] },
+        { n: 6, assignees: [VIEWER], closingRequests: ["fixture-other"] },
+        { n: 7, assignees: ["fixture-third"], closingRequests: ["fixture-other", "fixture-other"] },
+      ],
+      [[1, "related", 2], [2, "related", 3], [3, "related", 4], [4, "related", 5], [5, "related", 6], [6, "related", 7]],
+    );
+    assert.match(takeNext(overview(s))[0]!, / · 4 taken by others, ask who has them$/);
+    assert.deepEqual(draw(s, { kind: "taken", page: 1 }).text.split("\n"), [
+      "**Taken by others: 4** — Unblocked, but someone else has them; most waited on first, page 1 of 1",
+      "- #3 Issue 3 — assigned to fixture-other, fixture-third",
+      "- #4 Issue 4 — Closing Request by fixture-other",
+      "- #6 Issue 6 — yours · Closing Request by fixture-other",
+      "- #7 Issue 7 — assigned to fixture-third · Closing Request by fixture-other",
+      "",
+      "_That's all of them. `map` for the Map._",
+    ]);
+  });
+
+  test("says so when none is", () => {
+    const s = snapshot([{ n: 1 }, { n: 2 }], [[1, "related", 2]]);
+    assert.equal(draw(s, { kind: "taken", page: 1 }).text, "No Unblocked Issue here is taken by others. `map` for the Map.");
   });
 });
 

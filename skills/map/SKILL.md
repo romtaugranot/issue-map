@@ -34,6 +34,8 @@ What `start` and `suggest` print has no line: it's for you, as said where they'r
 
 The overview opens with **Take next**: the Unblocked Issues the user could take, in an order a fixed rule gives — how many open Issues wait on each (`▶n`), then the earliest Planned date, then the oldest. It is never your judgement, so it is the same on every draw. When the user asks what to take next, draw the Map and point at that list.
 
+The overview shows its first few. When the user asks to list Take next, or for the rest past its `N more not listed` or a `… N more under #n`, run `issue-map next`: every Issue in it, 15 a page, in its order and with its lines; `issue-map next --page <n>` when the user says `more`. When the user asks who has the Issues `taken by others`, or to list those, run `issue-map taken`: each Unblocked Issue left out because someone else has it, with whom it's assigned to or who wrote its Closing Request; `issue-map taken --page <n>` for `more`. Show each as printed.
+
 A closed blocker still unblocks, so Take next can hold Unlinked Issues. `unblocked 2d ago` dates when the last of an Issue's blockers closed, from the Tracker's close dates; a blocker that closed as a duplicate or as not planned is named with how it closed. Closed Issues are never drawn in the overview or an outline — only on cards.
 
 When the user asks what *you* would pick, give your opinion in the conversation: say which Issue and why, quoting what the Map or the Issues say. Keep it separate from the list, and never reorder, redraw or trim Take next to match it.

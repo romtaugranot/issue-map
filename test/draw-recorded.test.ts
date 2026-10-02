@@ -33,7 +33,7 @@ describe("recorded Snapshots", () => {
   // The worked example of #12: the RFC Tracker has four waiting on it and gives way to its unassigned children.
   test("opentofu/opentofu: Take next opens with #3414's children, carrying its count", () => {
     const lines = section(draw(recorded("opentofu__opentofu"), { kind: "overview" }).text, "**Take next");
-    assert.match(lines[0]!, /^\*\*Take next: 15\*\* — most waited on first · 10 more not listed · 4 taken by others · Closing Requests unread \(the recording didn't read them\)/);
+    assert.match(lines[0]!, /^\*\*Take next: 15\*\* — most waited on first · 10 more not listed, ask to list them · 4 taken by others, ask who has them · Closing Requests unread \(the recording didn't read them\)/);
     assert.deepEqual(lines.slice(1, 4).map((l) => l.replace(/^(- #\d+) .* — /, "$1 — ")), ["- #4227 — ▶4 wait on it, via #3414", "- #4297 — ▶4 wait on it, via #3414", "- #4390 — ▶4 wait on it, via #3414"]);
   });
 
@@ -51,6 +51,17 @@ describe("recorded Snapshots", () => {
     const unlinked = pages("unlinked", 16).filter((l) => / — unblocked /.test(l)).length;
     assert.match(draw(snapshot, { kind: "overview" }).text, /^\*\*Take next: 15\*\* — .* · 4 taken by others/m);
     assert.deepEqual([inGroups, unlinked], [13, 6]);
+  });
+
+  test("opentofu/opentofu: the Take next pages reach all 15 Issues it counts, and the 4 taken by others are listed with who has them", () => {
+    const snapshot = recorded("opentofu__opentofu");
+    const listed = (kind: "next" | "taken") => draw(snapshot, { kind, page: 1 }).text.split("\n").concat(draw(snapshot, { kind, page: 2 }).text.split("\n"));
+    const picks = new Set(listed("next").flatMap((l) => /^- (#\d+) /.exec(l)?.[1] ?? []));
+    assert.equal(picks.size, 15);
+    const taken = draw(snapshot, { kind: "taken", page: 1 }).text.split("\n").filter((l) => l.startsWith("- "));
+    assert.equal(taken.length, 4);
+    for (const line of taken) assert.match(line, /^- #\d+ .* — (.* · )?assigned to [\w-]+/);
+    assert.ok(taken.every((l) => !picks.has(l.split(" ")[1]!)), "none of them is in Take next");
   });
 
   test("microsoft/playwright: no Links, so no Map", () => {
@@ -84,6 +95,7 @@ describe("recorded Snapshots", () => {
     test(`the overview holds its line budget of ${OVERVIEW_LINES}`, () => {
       assert.ok(lines.length <= OVERVIEW_LINES, `${lines.length} lines:\n${overview}`);
       assert.equal(section(overview, "**Take next").length, 6, "Take next's heading and 5 lines");
+      assert.match(section(overview, "**Take next")[0]!, / · [\d,]+ more not listed, ask to list them · [\d,]+ taken by others, ask who has them/, "its hints on its heading");
       assert.equal(section(overview, "**Groups").length, 10, "the Groups' heading, 8 lines and a count");
     });
 
