@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { draw } from "../src/map/draw.ts";
+import { layout } from "../src/map/links.ts";
+import { picture, PICTURE_COLUMNS, PICTURE_ROWS } from "../src/map/picture.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
 
 function recorded(name: string): Snapshot {
@@ -127,6 +129,21 @@ describe("recorded Snapshots", () => {
       assert.equal(page.filter((l) => l.startsWith("- ")).length, 15);
     });
   });
+});
+
+describe("Pictures of the recorded Snapshots", () => {
+  // How many Groups each draws whole; the rest open as their outlines.
+  for (const [name, groups, drawn] of [["opentofu__opentofu", 12, 12], ["microsoft__playwright", 0, 0], ["rust-lang__rust", 70, 68], ["gitlab-org__gitlab", 5_812, 5_706]] as const) {
+    test(`${name}: ${drawn} of ${groups} Groups draw whole, each within ${PICTURE_ROWS} rows of ${PICTURE_COLUMNS} characters`, () => {
+      const laidOut = layout(recorded(name));
+      const pictures = laidOut.groups.map(picture).filter((rows) => rows !== null);
+      assert.deepEqual([laidOut.groups.length, pictures.length], [groups, drawn]);
+      for (const rows of pictures) {
+        assert.ok(rows.length <= PICTURE_ROWS, rows.join("\n"));
+        for (const row of rows) assert.ok(row.length <= PICTURE_COLUMNS, row);
+      }
+    });
+  }
 });
 
 /** One section of an overview: the line starting with `heading`, and the lines up to the next blank one. */

@@ -80,7 +80,7 @@ function level(group: Group, place: number, groups: number, above: Member, alone
  * The members nothing in the Group sits above. Where Links run in a circle
  * and leave some out of reach, the first of those by rank joins the top too.
  */
-function topOf(group: Group): Member[] {
+export function topOf(group: Group): Member[] {
   const beneathSome = new Set([...group.beneath.values()].flatMap((below) => [...below.keys()]));
   const tops = [...group.members.values()].filter((member) => !beneathSome.has(member.id));
   const reached = new Set<string>();
@@ -109,7 +109,7 @@ function entry(group: Group, member: Member, how: Beneath | null): Entry {
   return { member, how, under: under(group, member.id), related: related(member) };
 }
 
-function related(member: Member): number {
+export function related(member: Member): number {
   if (member.kind !== "issue") return 0;
   const ends = member.issue.links.filter(({ role, to }) => role === "related" && isOpen(to) && to.id !== member.id);
   return new Set(ends.map(({ to }) => to.id)).size;
