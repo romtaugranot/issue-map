@@ -229,7 +229,7 @@ The floors come from the adapters, which the matrix and the schema checks read t
 
 Three tiers, as [ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md) sets out:
 
-- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, every query checked against the recorded GitHub and GitLab schemas, and the hooks module that pins the status line and serves `/issue-map` run by `claude plugin test` on the pinned Claude Code build. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
+- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, every query checked against the recorded GitHub and GitLab schemas, and the tree users install checked by `claude plugin validate --strict` on the pinned Claude Code build. The hooks module's tests, `hooks/*.test.ts`, run with `claude plugin test` on that tree once copied into it; CI doesn't run them yet ([#131](https://github.com/romtaugranot/issue-map/issues/131)). Once `npm ci` has installed the dev dependencies, it needs no network and no login:
 
   ```sh
   npm ci
