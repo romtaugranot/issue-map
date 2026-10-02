@@ -24,6 +24,8 @@ export interface Pick {
   yours: boolean;
   /** The closed Issues that Blocked it, the last to close first; a closed blocker still unblocks. */
   closedBlockers: ReadableEnd[];
+  /** Who else has it, when it's taken by others: its assignees, when none is the viewer, and the authors of others' open Closing Requests. */
+  heldBy: { assignees: string[]; requestsBy: string[] } | null;
 }
 
 export type TakeNext =
@@ -33,8 +35,8 @@ export type TakeNext =
       kind: "list";
       /** In the order to take them. */
       picks: Pick[];
-      /** Unblocked Issues left out because someone else has them: assigned, or an open Closing Request. */
-      takenByOthers: number;
+      /** Unblocked Issues left out because someone else has them, assigned or with an open Closing Request, in the order they'd be taken in were they free. */
+      takenByOthers: Pick[];
       /** The Unblocked Issues it counts, picked or taken by others; a Parent that gives way isn't one, its children are. */
       unblocked: ReadonlySet<OpenIssue>;
       /** Why Closing Requests couldn't be read, when they couldn't: then none leaves an Issue out. */
@@ -69,8 +71,11 @@ export function takeNext(snapshot: Snapshot, { unlinked }: Layout): TakeNext {
   };
 
   const viewer = snapshot.login;
-  const takenByOthers = (issue: OpenIssue) =>
-    (issue.assignees.length > 0 && !issue.assignees.includes(viewer)) || issue.closingRequests.some((request) => request.author !== viewer);
+  const heldBy = (issue: OpenIssue): Pick["heldBy"] => {
+    const assignees = issue.assignees.includes(viewer) ? [] : issue.assignees;
+    const requestsBy = [...new Set(issue.closingRequests.map((request) => request.author))].filter((author) => author !== viewer);
+    return assignees.length > 0 || requestsBy.length > 0 ? { assignees, requestsBy } : null;
+  };
   const yours = (issue: OpenIssue) =>
     issue.assignees.includes(viewer) || issue.closingRequests.some((request) => request.author === viewer);
 
@@ -119,11 +124,16 @@ export function takeNext(snapshot: Snapshot, { unlinked }: Layout): TakeNext {
   };
 
   const candidates = [...unblocked].filter((issue) => !hasStandIns(issue) && !insideParent(issue));
-  const free = candidates.filter((issue) => !takenByOthers(issue));
-  const picks = free
-    .map((issue) => ({ issue, waiting: waitingFor(issue), yours: yours(issue), closedBlockers: closedBlockers(issue) }))
+  const ordered = candidates
+    .map((issue) => ({ issue, waiting: waitingFor(issue), yours: yours(issue), closedBlockers: closedBlockers(issue), heldBy: heldBy(issue) }))
     .sort((a, b) => b.waiting.count - a.waiting.count || earliestPlanned(a.issue, b.issue) || oldestFirst(a.issue, b.issue));
-  return { kind: "list", picks, takenByOthers: candidates.length - free.length, unblocked: new Set(candidates), closingRequestsUnread: snapshot.unread.closingRequests ?? null };
+  return {
+    kind: "list",
+    picks: ordered.filter((pick) => !pick.heldBy),
+    takenByOthers: ordered.filter((pick) => pick.heldBy),
+    unblocked: new Set(candidates),
+    closingRequestsUnread: snapshot.unread.closingRequests ?? null,
+  };
 }
 
 /** Whether the Issue has a Link of this role to an open Issue whose identity passes `test`. */

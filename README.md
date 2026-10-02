@@ -10,7 +10,7 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 
 > **issue-map-fixtures/map** · 14 open · 8 on the Map · 6 Unlinked · Promised
 >
-> **Take next: 6** — most waited on first · 1 more not listed
+> **Take next: 6** — most waited on first · 1 more not listed, ask to list them
 > - #1 \[b1\] Lay the foundation — ▶2 wait on it
 > - #6 \[p3\] Tag the build — via #4
 > - #7 \[p4\] Proofread the release notes — via #5
@@ -102,11 +102,13 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | `map` | The overview of the Project on screen |
 | `refresh the Map` | The overview, its Snapshot refreshed now even if it's under two minutes old, so a Link you just recorded in the browser shows |
 | `what should I take next?` | The overview, pointing at Take next. Ask what Claude would pick and it says so separately, without reordering the list |
+| `list Take next` | Every Issue in Take next, 15 a page, in its order, the ones the overview leaves out among them |
+| `who has the ones taken by others?` | The Unblocked Issues left out of Take next because someone else has them, each with its assignees or its Closing Request's author, 15 a page |
 | `open group 1` | The outline of the first Group on the overview |
 | `list the Groups` | Every Group, 15 a page, largest first, numbered as `open group <n>` takes them |
 | `what's under #5?` | The level beneath an Issue in its Group |
 | `open #2` | That Issue's card, read live, then a picker of its Links |
-| `more` | The next page of an outline, a card's Links, the Group list or the Unlinked list |
+| `more` | The next page of an outline, a card's Links, the Group list, Take next's list, those taken by others, or the Unlinked list |
 | `list the Unlinked Issues` | The Issues with no Link to another open Issue, 15 a page, newest first |
 | `assign #2 to me` | Asks once, then assigns the Issue to you |
 | `start work on #2` | Claude reads the Issue's body and comments and briefs you in about a dozen lines. No branch, no checkout, no code |
