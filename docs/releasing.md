@@ -8,13 +8,17 @@ The version lives in the release alone. main's `.claude-plugin/plugin.json` stay
 
 ## Before the first release
 
-An owner of the repository, under **Settings → Rules → Rulesets**, adds a branch ruleset for `release` that restricts updates and deletions and blocks force pushes, and a tag ruleset for `v*` that restricts updates and deletions, so only the Release workflow writes them. If a ruleset refuses the workflow's own push, give bypass on it to the actor GitHub lists for Actions or the repository admin role, never everyone.
+An owner of the repository does these once:
+
+1. Under **Settings → Actions → General → Workflow permissions**, ticks **Allow GitHub Actions to create and approve pull requests**, so the GitLab matrix's and the GHES schemas workflow's schema jobs can open their pull requests.
+2. Dispatches **GitLab matrix** with `only` left empty, and **GHES schemas**, from the Actions tab, and merges the schema pull requests they open once the contract tier passes on them. A pull request opened with the workflow's own token doesn't start the contract tier by itself: close and reopen it.
+3. Under **Settings → Rules → Rulesets**, adds a branch ruleset for `release` that restricts updates and deletions and blocks force pushes, and a tag ruleset for `v*` that restricts updates and deletions, so only the Release workflow writes them. If a ruleset refuses the workflow's own push, give bypass on it to the actor GitHub lists for Actions or the repository admin role, never everyone.
 
 ## Releasing a version
 
 1. On main, add a section to `CHANGELOG.md` headed `## <version>`, such as `## 0.2.0`, saying what the release changes for someone using the Map. The workflow refuses a version with no section, or an empty one.
 2. Optionally, try it first: in the Actions tab run **Release** on main with the version and **dry-run** ticked. It runs no tier, pushes and tags nothing; it builds the tree, draws the GitHub Fixture's Map from it on Node 22.18 with nothing installed, and keeps the tree and its notes as the artifact `issue-map-v<version>`.
-3. Run **Release** on main with the version, dry-run left unticked. It refuses any branch but main and a version already tagged. Once every tier and the tree are green, it commits the tree to `release`, pushes that commit with the tag `v<version>` together, and makes the GitHub release with the notes.
+3. Run **Release** on main with the version, dry-run left unticked. It refuses any branch but main and a version already tagged. Once every tier and the tree are green, it commits the tree to `release`, pushes that commit with the tag `v<version>` together, and makes the GitHub release with the notes. Recording the EE schemas the full matrix read is bookkeeping, not a tier, so a failure there alone doesn't stop the release: look for a failed schemas job in the run, and see that its pull request is opened and merged.
 4. If the run fails after the push, while making the GitHub release, make it by hand from the artifact's notes: `gh release create v<version> --verify-tag --title v<version> --notes-file notes.md`. Don't run the workflow again for the same version: the tag is already there.
 
 ## What users see
