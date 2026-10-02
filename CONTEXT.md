@@ -78,6 +78,10 @@ _Avoid_: ready, available, actionable
 The drawing of one Project's open Issues joined by their Links, which the user moves through. It never holds another Project's Issues; they appear only as Outside Issues. Not the planning Issue, #1 in this repository, labelled `wayfinder:map`.
 _Avoid_: graph, board, tree
 
+**Picture**:
+The Map of one Project drawn whole on a read-only page outside Claude Code, from the same Snapshot (ADR 0010). It never writes to a Tracker; the way back into the session is an Issue's URL, copied from it.
+_Avoid_: graph view, web Map, artifact
+
 **Snapshot**:
 One Project's open Issues and Links as one login last read them from the Tracker. The Map is drawn from it, and it says how old it is once it stops being fresh.
 _Avoid_: cache, saved copy
