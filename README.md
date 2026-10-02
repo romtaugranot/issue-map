@@ -131,6 +131,12 @@ pkill -f 'src/cli.ts refresher'
 
 Drawing the Map again starts it again.
 
+Each `gh` or `glab` call is stopped after 60 seconds, or 5 minutes for a page of a full read, and a full read after 3 hours; the Map then says the Tracker didn't answer, keeps drawing from the Snapshot, and tries again on the next draw or refresher round. A stopped full read resumes from its last page. To stop a stuck full read sooner:
+
+```sh
+pkill -f 'src/cli.ts read'
+```
+
 **Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
 
 ## Uninstall

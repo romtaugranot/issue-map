@@ -6,7 +6,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { github } from "../src/tracker/github.ts";
 import type { IssueAnswer, IssuePage, ProjectResolution, Tracker } from "../src/tracker/tracker.ts";
-import type { HttpResult } from "../src/tracker/boundary.ts";
+import { CALL_SECONDS, type HttpResult } from "../src/tracker/boundary.ts";
 import { authStatus, ghApi, newer, probe } from "./fakes/fake-gh.ts";
 import { trackerContract, type World } from "./contract/tracker-contract.ts";
 
@@ -35,7 +35,7 @@ trackerContract({
     const env = world.envTokenFor === undefined ? {} : world.envTokenFor === "github.com" ? { GH_TOKEN: "env-token" } : { GH_ENTERPRISE_TOKEN: "env-token", GH_HOST: world.envTokenFor };
     const kind = github({
       env,
-      cli: async (command, args, unset = []) => {
+      cli: async (command, args, unset = [], seconds = CALL_SECONDS) => {
         if (command !== "gh" || (world.cli ?? "installed") === "missing") return { kind: "missing" };
         // Read from gh's own config, without the network.
         if (args[0] === "auth") return authStatus(world, args);
@@ -47,7 +47,8 @@ trackerContract({
           tokenSentTo.push(host);
           if (host !== world.envTokenFor) return ghApi({ ...world, login: "refused" }, args);
         }
-        return ghApi(world, args);
+        const answer = ghApi(world, args);
+        return world.network === "hangs" ? { kind: "exited", code: 1, stdout: "", stderr: "", timedOut: seconds } : answer;
       },
       http: async (url) => {
         requests++;

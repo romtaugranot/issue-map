@@ -6,7 +6,7 @@
  * answer holds only the widgets and fields the query asked for.
  */
 import { gitlab } from "../../src/tracker/gitlab.ts";
-import type { CliResult, HttpResult } from "../../src/tracker/boundary.ts";
+import { CALL_SECONDS, type CliResult, type HttpResult } from "../../src/tracker/boundary.ts";
 import type { IssueSpec, ProjectSpec, World } from "../contract/tracker-contract.ts";
 
 /** Environment variables `glab` takes a token from, before the login it stores for a host. */
@@ -28,7 +28,7 @@ export function arrange(given: World, env: Record<string, string> = envFor(given
   const queries: string[] = [];
   const kind = gitlab({
     env,
-    cli: async (command, args, unset = []) => {
+    cli: async (command, args, unset = [], seconds = CALL_SECONDS) => {
       if (command !== "glab" || (world.cli ?? "installed") === "missing") return { kind: "missing" };
       const set = (name: string) => (name in env && !unset.includes(name) ? env[name] : undefined);
       const host = args[args.indexOf(args[0] === "config" ? "--host" : "--hostname") + 1]!;
@@ -46,7 +46,8 @@ export function arrange(given: World, env: Record<string, string> = envFor(given
       const query = args.find((a) => a.startsWith("query="));
       if (query !== undefined) queries.push(query.slice("query=".length));
       const login = envToken ? (apiHost === world.envTokenFor ? "ok" : "refused") : stored ? (world.login === "refused" ? "refused" : "ok") : "none";
-      return glabApi(world, apiHost, login, args);
+      const answer = glabApi(world, apiHost, login, args);
+      return world.network === "hangs" ? { kind: "exited", code: 1, stdout: "", stderr: "", timedOut: seconds } : answer;
     },
     http: async (url) => {
       requests++;

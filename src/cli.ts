@@ -197,8 +197,16 @@ function toOpen(arg: string | undefined, page: number): Command | undefined {
   return Number(arg) >= 1 ? { kind: "group", group: Number(arg), page } : undefined;
 }
 
+/** How long a full read may run in all: well past the 37 minutes `gitlab-org/gitlab` takes. */
+const FULL_READ_HOURS = 3;
+
 /** Reads a Project in full into its Snapshot, resuming where an earlier read stopped. */
 async function fullRead(known: Trackers, host: string, path: string): Promise<number> {
+  // One stopped here resumes from its last page when the next draw or refresher round starts it.
+  setTimeout(() => {
+    console.log(`${new Date().toISOString()} stopped reading ${host}/${path}: it ran past ${FULL_READ_HOURS} hours`);
+    process.exit(1);
+  }, FULL_READ_HOURS * 3_600_000).unref();
   const connected = await connect(known, host, path);
   if (!connected) return 1;
   const { tracker, project } = connected;
