@@ -4,7 +4,9 @@
  * took since (ADR 0006), and the write happens only on a Promised Project
  * (ADR 0003). Where the Tracker can't say whether this login may write, it
  * tries once and stops at the first refusal. Once written, the Snapshot
- * takes it in, so the card and Take next show it at once.
+ * takes it in, so the card and Take next show it at once; where it can't,
+ * the next refresh does. A write whose answer is lost may have landed, and
+ * says so.
  */
 import type { SnapshotStore } from "../snapshot/store.ts";
 import type { IssueRead, Project, Tracker } from "../tracker/tracker.ts";
@@ -43,7 +45,15 @@ export async function assignToViewer({ store }: { store: SnapshotStore }, tracke
 
   const wrote = await tracker.assign(read.ref, viewer.login);
   if (wrote.kind === "not-allowed") return refusal(`${tracker.product} refused the write — ${wrote.reason}`);
+  // The write may have reached the Tracker though its answer was lost, so this isn't a refusal.
+  if (wrote.kind === "cant-tell") return { text: `Can't tell whether ${shortRef} was assigned — ${wrote.reason}. Open its card again to see.`, choices: [], opened: false };
   if (wrote.kind !== "assigned") return refusal(why(tracker, wrote));
-  await store.assigned({ tracker: tracker.host, project: project.id, login: viewer.login }, read.id, wrote.assignees);
-  return withCard(`Assigned ${shortRef} to you on ${tracker.product}.`, { ...read, assignees: wrote.assignees });
+  let line = `Assigned ${shortRef} to you on ${tracker.product}.`;
+  try {
+    await store.assigned({ tracker: tracker.host, project: project.id, login: viewer.login }, read.id, wrote.assignees);
+  } catch (error) {
+    // Written all the same; the next refresh reads it from the Tracker.
+    line += `\nThe Map shows it after the next refresh: ${(error as Error).message}`;
+  }
+  return withCard(line, { ...read, assignees: wrote.assignees });
 }

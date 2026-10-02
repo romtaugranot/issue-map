@@ -740,10 +740,12 @@ async function issue(ctx: Ctx, locator: string): Promise<IssueAnswer> {
     unread.closingRequests = CANT_READ_PULLS;
   }
   const hiddenParent = errors.some((e) => e.path?.[2] === "parent");
-  const mentionedBy = node.timelineItems.nodes.flatMap((item): Mention[] => {
+  // An Issue that names this one again is noted again: it's one Mention.
+  const mentions = node.timelineItems.nodes.flatMap((item): [string, Mention][] => {
     const source = item?.source;
-    return source?.__typename === "Issue" && source.id && source.repository ? [{ id: source.id, ref: `${source.repository.nameWithOwner}#${source.number}` }] : [];
+    return source?.__typename === "Issue" && source.id && source.repository ? [[source.id, { id: source.id, ref: `${source.repository.nameWithOwner}#${source.number}` }]] : [];
   });
+  const mentionedBy = [...new Map(mentions).values()];
   return {
     kind: "issue",
     issue: {
@@ -920,7 +922,9 @@ function failure(answer: Extract<CliResult, { kind: "exited" }>, body: Record<st
     return { kind: "refused", reason: `not logged in to ${host} — run \`gh auth login --hostname ${host}\`` };
   }
   const errors = (body?.errors ?? []) as GraphqlError[];
-  if (errors.some((e) => e.type === "NOT_FOUND") || String(body?.status) === "404") {
+  // Only what was asked for missing, the repository or its one Issue; not something deeper in the answer, gone mid-read.
+  const missing = (e: GraphqlError) => e.type === "NOT_FOUND" && (e.path === undefined || e.path.length === 1 || (e.path.length === 2 && e.path[1] === "issue"));
+  if (errors.some(missing) || String(body?.status) === "404") {
     return { kind: "not-found", reason: `no repository ${what} on ${host} that this login can see` };
   }
   // A used-up rate limit answers 403 too, but it says nothing about the login.

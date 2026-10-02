@@ -135,3 +135,22 @@ describe("GHES by release: each Link kind is known from the GHES's own schema, n
     assert.deepEqual(Object.values(links).map((l) => l.kind), ["cant-record", "cant-record", "cant-record"]);
   });
 });
+
+test("GitHub: only the repository itself missing is not-found, not a pull request gone from a page mid-read", async () => {
+  const tools = "fixture-org/tools";
+  const world: World = { projects: [{ path: tools, number: 1, open: 1, issues: [{ number: 1 }] }], closingRequests: [{ closes: `${tools}#1`, number: 40, author: "fixture-bot" }] };
+  const gone = { type: "NOT_FOUND", path: ["repository", "issues", "nodes", 0, "closedByPullRequestsReferences", "nodes", 0], message: "Could not resolve to a PullRequest." };
+  const cli = async (_: string, args: string[]) => {
+    if (args[0] === "auth") return authStatus(world, args);
+    const answer = ghApi(world, args);
+    if (answer.kind !== "exited" || !args.some((a) => a.includes("issues(states: OPEN, first:"))) return answer;
+    const body = JSON.parse(answer.stdout) as { errors?: object[] };
+    return { ...answer, code: 1, stdout: JSON.stringify({ ...body, errors: [...(body.errors ?? []), gone] }) };
+  };
+  const tracker = (await github({ env: {}, cli, http: async (url) => probe(world, new URL(url)) }).recognise("github.com"))!;
+  const resolved = (await tracker.resolveProject(tools)) as Extract<ProjectResolution, { kind: "project" }>;
+  const page = await tracker.openIssues(resolved.project, null);
+  assert.notEqual(page.kind, "not-found", JSON.stringify(page));
+  assert.equal((await tracker.issue(`${tools}#9`)).kind, "not-found", "a missing Issue still is");
+  assert.equal((await tracker.resolveProject("fixture-org/gone")).kind, "not-found", "a missing repository still is");
+});
