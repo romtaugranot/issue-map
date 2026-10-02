@@ -155,7 +155,9 @@ Each `gh` or `glab` call is stopped after 60 seconds, or 5 minutes for a page of
 pkill -f 'src/cli.ts read'
 ```
 
-**Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
+**Over the network**, besides `gh` and `glab`, it sends anonymous HTTPS requests to a remote's host, or to a host you name with `go`, to tell whether it runs GitHub or GitLab: one to `/api/v3/meta` and one to `/api/v4/version`, never with a credential. It skips them for the hosts it knows by name: github.com, `*.ghe.com`, gitlab.com and `*.gitlab-dedicated.com`. A host found only that way, with no login for it, is never read.
+
+**To the model provider**, Issue text goes wherever the conversation goes. Claude reads what each command prints, so the titles of the Issues it shows reach your model provider, as everything in a Claude Code conversation does; so do an Issue's body and comments when you start work on it or ask for Link Suggestions. A host you type into `go` gets the requests above, unless the Map knows it by name, whether or not it runs a Tracker.
 
 ## Uninstall
 
@@ -178,6 +180,13 @@ pkill -f 'src/cli.ts read'
    ```sh
    git config --local --unset issue-map.home
    ```
+
+## Troubleshooting
+
+- **Claude's reply shows a bare line such as `⟦issue-map 3f9a0c1b2d4e⟧` instead of the output.** The display hook isn't running. It needs Claude Code 2.1.152 or later, hooks not turned off (`disableAllHooks`) or limited to managed ones (`allowManagedHooksOnly`), and Node.js 22.18 or later on the `PATH` Claude Code runs hooks with, which isn't always your shell's. The next command notices, and Claude reprints each output from then on.
+- **The first Map of a large Project takes minutes.** The first read pages through every open Issue and its Links, and the Map draws only once it's done; meanwhile, asking for the Map shows how far it's got and about how long is left. That read, and the full read each Snapshot gets again weekly or sooner, spend your login's API rate limit; when it runs out, the Map says so, and asking again later resumes the read where it stopped.
+- **Something in the background seems stuck or silent.** What the full reads and the refresher print goes to `background.log` in the [state directory](#what-it-writes-and-what-it-keeps).
+- **Claude doesn't pick the Map up from what you say.** Invoke its skill by name: `/issue-map:map`, followed by what you want.
 
 ## Support
 
