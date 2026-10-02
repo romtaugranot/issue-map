@@ -194,6 +194,8 @@ pkill -f 'src/cli.ts read'
 - **Something in the background seems stuck or silent.** What the full reads and the refresher print goes to `background.log` in the [state directory](#what-it-writes-and-what-it-keeps).
 - **Claude doesn't pick the Map up from what you say.** Invoke its skill by name: `/issue-map:map`, followed by what you want.
 
+Anything else that looks wrong: [report a bug](https://github.com/romtaugranot/issue-map/issues/new?template=bug_report.yml). Its form asks for what it takes to diagnose one.
+
 ## Support
 
 The Map puts every Project in a band from what its Tracker shows there ([ADR 0003](docs/adr/0003-support-by-detected-capability.md)). A Promised Tracker is tested on a running Tracker where the build can run one, and stood in for where it can't ([ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md)):
