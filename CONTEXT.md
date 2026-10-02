@@ -99,7 +99,7 @@ The Unblocked Issues the viewer could take, in the order the Map suggests taking
 _Avoid_: ready queue, up next, recommendations
 
 **Planned date**:
-The date an Issue is planned for, as the Tracker records it — on GitHub and GitLab, its milestone's due date. Take next orders by the earliest one.
+The date an Issue is planned for, as the Tracker records it — on GitHub, its milestone's due date; on GitLab, its own due date, or its milestone's where it has none. Take next orders by the earliest one.
 _Avoid_: deadline, target date, milestone date
 
 **Issue card**:

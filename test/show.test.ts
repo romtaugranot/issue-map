@@ -246,7 +246,7 @@ describe("opening an Issue card", () => {
     const tracker = liveTracker(asked);
     for (const typed of ["#2", "fixture-org/tools#2", `${project.url}/issues/2`, " #2 "]) {
       const card = await showCard(tracker, project, typed);
-      assert.match(card.text, /^\*\*#2 Issue 2\*\*$/m, typed);
+      assert.match(card.text, /^\*\*#2 Issue 2\*\*\\$/m, typed);
       assert.deepEqual(card.choices, [{ label: "#1", description: "Parent issue · Issue 1" }]);
     }
     assert.deepEqual(asked, [read.ref, read.ref, read.url, read.ref]);

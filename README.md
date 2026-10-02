@@ -11,16 +11,16 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 > **issue-map-fixtures/map** · 14 open · 8 on the Map · 6 Unlinked · Promised
 >
 > **Take next: 6** — most waited on first · 1 more not listed
-> - #1 [b1] Lay the foundation — ▶2 wait on it
-> - #6 [p3] Tag the build — via #4
-> - #7 [p4] Proofread the release notes — via #5
-> - #9 [u1] Remove the compatibility shims — unblocked 2d ago
-> - #11 [u2] Keep the old parser working — unblocked 2d ago · #10 closed as not planned
+> - #1 \[b1\] Lay the foundation — ▶2 wait on it
+> - #6 \[p3\] Tag the build — via #4
+> - #7 \[p4\] Proofread the release notes — via #5
+> - #9 \[u1\] Remove the compatibility shims — unblocked 2d ago
+> - #11 \[u2\] Keep the old parser working — unblocked 2d ago · #10 closed as not planned
 >
 > **Groups: 3** — largest first
-> - #4 [p1] Plan the release — 4 Issues, 1↗
-> - #1 [b1] Lay the foundation — 3 Issues
-> - ↗issue-map-fixtures-b/elsewhere#1 [x1] Publish the shared config — 1 Issue, 1↗
+> - #4 \[p1\] Plan the release — 4 Issues, 1↗
+> - #1 \[b1\] Lay the foundation — 3 Issues
+> - ↗issue-map-fixtures-b/elsewhere#1 \[x1\] Publish the shared config — 1 Issue, 1↗
 >
 > **Unlinked: 6** — no Link to another open Issue. Ask to list them.
 
@@ -28,26 +28,26 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 
 Opening a Group lists what sits at its top, one level at a time:
 
-> **Group 1 of 3** · #4 [p1] Plan the release — 4 Issues, 1↗
+> **Group 1 of 3** · #4 \[p1\] Plan the release — 4 Issues, 1↗
 >
 > **Under #4, alone at the top: 3** — most under it first
-> - #5 [p2] Write the release notes — 1 under it
-> - #6 [p3] Tag the build
-> - ↗issue-map-fixtures/site#1 [s1] Update the website for the release
+> - #5 \[p2\] Write the release notes — 1 under it
+> - #6 \[p3\] Tag the build
+> - ↗issue-map-fixtures/site#1 \[s1\] Update the website for the release
 >
 > _Name one to open the level below it · `map` for the Map_
 
 Opening an Issue shows its card, read live from the Tracker, with its Links under the Tracker's own names:
 
-> **#2 [b2] Build the walls**\
+> **#2 \[b2\] Build the walls**\
 > https://github.com/issue-map-fixtures/map/issues/2\
 > **Blocked** — 1 open Issue Blocks it · unassigned
 >
 > **Blocked by**
-> - #1 [b1] Lay the foundation
+> - #1 \[b1\] Lay the foundation
 >
 > **Blocking**
-> - #3 [b3] Put on the roof
+> - #3 \[b3\] Put on the roof
 
 Claude then asks where to go next, in a picker: **Assign #2 to me**, **Start work on #2**, **#1** (Blocked by · [b1] Lay the foundation) and **More Links**.
 
@@ -126,10 +126,12 @@ Where the display hook doesn't run in a session — hooks disabled, only managed
 
 **On your machine**, it keeps its state in `$ISSUE_MAP_STATE_DIR`, or `$XDG_STATE_HOME/issue-map`, or `~/.local/state/issue-map`, readable only by your OS user:
 
-- a Snapshot of each Project's open Issues and Links per login, which holds private Issue titles and is deleted once the Tracker says the login can no longer read the Project;
-- each output shown through the display hook, kept a month;
-- this session's trail for `back`, kept a month, the Projects you moved to lately, the last Home Project of each checkout, the Link Suggestions offered this session (references only, never an Issue's text) and those you declined;
-- `background.log`, what the background processes print.
+- a Snapshot of each Project's open Issues and Links per login, and the pages of a read not yet finished. They hold private Issue titles, and are deleted once the Tracker says the login can no longer read the Project, or once nothing has drawn or read the Project for a month. The Home Project's is kept warm by the refresher and never expires while it runs; one of a Project you visited with `go` lasts until it's drawn again or expires;
+- each output shown through the display hook, kept a month, even once its Project's Snapshot is deleted;
+- this session's trail for `back`, kept a month;
+- the 10 Projects you moved to last, and the last Home Project of each checkout, each kept until replaced;
+- the Link Suggestions offered in each session (references only, never an Issue's text), kept until that session's next offer replaces them, and those you declined, kept so they aren't offered again;
+- `background.log`, what the background processes print: past a megabyte it's moved to `background.log.1`, replacing the one there.
 
 Both variables must be absolute paths. One that is empty or relative is ignored, as if unset, so private Issue titles never land in your working tree.
 
@@ -141,7 +143,7 @@ Outside that directory it writes only when you ask: `issue-map.home` in the chec
 pkill -f 'src/cli.ts refresher'
 ```
 
-Drawing the Map again starts it again.
+Drawing the Map again starts it again, and after an update replaces one of the version before.
 
 Each `gh` or `glab` call is stopped after 60 seconds, or 5 minutes for a page of a full read, and a full read after 3 hours; the Map then says the Tracker didn't answer, keeps drawing from the Snapshot, and tries again on the next draw or refresher round. A stopped full read resumes from its last page. To stop a stuck full read sooner:
 

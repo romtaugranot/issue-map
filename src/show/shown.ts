@@ -9,11 +9,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { access, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readJson, writeJson, writeWhole } from "../state.ts";
+import { KEPT_MS, readJson, writeJson, writeWhole } from "../state.ts";
 
 /** A line standing for a kept output: only a whole line of its own, so a mention in a sentence is left as written. */
 const LINE = /^⟦issue-map ([0-9a-f]{12})⟧$/gm;
-const KEPT_MS = 30 * 86_400_000;
 
 /** Keeps `text` in `dir`, readable only by this OS user, and returns the line that shows it; outputs untouched for a month are deleted. */
 export async function keepShown(dir: string, text: string): Promise<string> {

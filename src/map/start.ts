@@ -7,7 +7,7 @@
  */
 import type { IssueComment, Project, Thread, Tracker } from "../tracker/tracker.ts";
 import { issueLocator, typedRef, why } from "./show.ts";
-import { count, cut, FENCED_NOTE, fenced, fenceTag, plural, short } from "./text.ts";
+import { count, cut, FENCED_NOTE, fenced, fenceTag, oneLine, plural, short } from "./text.ts";
 
 /** The most characters a thread is handed over in, however long it is. */
 export const THREAD_BUDGET = 12_000;
@@ -29,7 +29,7 @@ export async function startWork(tracker: Tracker, project: Project, typed: strin
 /** Pure. `project` is the path of the Project whose Map it's started from. */
 export function drawThread(thread: Thread, project: string): string {
   const head = [
-    `**${short(thread.ref, project)} ${thread.title}**`,
+    `**${short(thread.ref, project)} ${oneLine(thread.title)}**`,
     thread.url,
     `${thread.open ? "Open" : "Closed"} · ${commentCount(thread)}`,
     "",

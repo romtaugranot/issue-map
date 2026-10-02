@@ -73,3 +73,26 @@ test("a GitLab group's epic joins the Issues it parents into one Group, drawn as
   assert.match(epic, /#2 Issue 2/);
   assert.doesNotMatch(epic, /#4 /, "the Related Link from #4 joins nothing");
 });
+
+test("Take next orders by an Issue's own due date where it has one, and by its milestone's where it has none", async () => {
+  const snapshot = await snapshotOf({
+    projects: [
+      {
+        path: tools,
+        number: 1,
+        open: 4,
+        issues: [{ number: 1 }, { number: 2, due: "2026-10-15T00:00:00Z", planned: "2026-12-01T00:00:00Z" }, { number: 3, due: "2026-11-01T00:00:00Z" }, { number: 4, planned: "2026-10-20T00:00:00Z" }],
+      },
+    ],
+    links: [
+      [`${tools}#1`, "related", `${tools}#2`],
+      [`${tools}#3`, "related", `${tools}#4`],
+    ],
+  });
+  assert.deepEqual(section(draw(snapshot, { kind: "overview" }).text, "**Take next").slice(1), [
+    "- #2 Issue 2 — due 2026-10-15",
+    "- #4 Issue 4 — due 2026-10-20",
+    "- #3 Issue 3 — due 2026-11-01",
+    "- #1 Issue 1",
+  ]);
+});

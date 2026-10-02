@@ -60,11 +60,14 @@ interface Options {
   capabilities?: CapabilitiesAnswer;
   /** What a write answers instead of linking. */
   refuse?: LinkAnswer;
+  /** Links recorded besides `world()`'s. */
+  links?: [number, LinkKind, number][];
 }
 
 /** A Tracker holding `world()`, whose writes change its Links, noting every read of a thread and every write. */
 function liveTracker(options: Options = {}) {
   const { held, links } = world();
+  links.push(...(options.links ?? []));
   const threads: string[] = [];
   const writes: string[] = [];
   const find = (locator: string) => held.find((h) => full(h.n) === locator);
@@ -259,6 +262,14 @@ describe("offer checks each proposal and offers the ones that hold up", () => {
     assert.deepEqual(offered.confirm?.choices.map((c) => c.label), ["#12 Blocks #10"]);
   });
 
+  test("a Blocks Link whose far end already reaches the near end isn't offered, and names the Issues that would wait on one another", async () => {
+    const { tracker, deps } = await arrange({ links: [[2, "blocks", 3]] });
+    await suggest(deps, tracker, project, { kind: "overview" });
+    const offered = await offer(deps, tracker, project, [proposal("#3", "blocks", "#1", "Every importer.", "#3")]);
+    assert.match(offered.text, /^- #3 Blocks #1 — #1 Blocks #2, which Blocks #3: #1, #2 and #3 would wait on one another$/m);
+    assert.deepEqual(offered.confirm?.choices.map((c) => c.label), ["#12 Blocks #10"]);
+  });
+
   test("offers nothing before suggest has read a page", async () => {
     const { tracker, deps } = await arrange();
     const offered = await offer(deps, tracker, project, [CREDENTIALS]);
@@ -327,6 +338,16 @@ describe("confirm writes the ticked suggestions and remembers the rest as declin
     links.push([6, "blocks", 1]);
     assert.match(await confirm(deps, tracker, project, [1, 2]), /^#6 Blocks #1 is already recorded\.$/m);
     assert.deepEqual(writes, [`${full(12)} blocks ${full(10)}`]);
+  });
+
+  test("one that a Link written before it in the same confirm would close into a cycle isn't written", async () => {
+    const { tracker, deps, writes } = await arrange();
+    await suggest(deps, tracker, project, { kind: "overview" });
+    const offered = await offer(deps, tracker, project, [proposal("#2", "blocks", "#3", "Every importer.", "#3"), proposal("#3", "blocks", "#1", "Every importer.", "#3")]);
+    assert.deepEqual(offered.confirm?.choices.map((c) => c.label), ["#2 Blocks #3", "#3 Blocks #1", "#12 Blocks #10"]);
+    const said = await confirm(deps, tracker, project, [1, 2, 3]);
+    assert.match(said, /^Not written: #3 Blocks #1 — #1 Blocks #2, which Blocks #3: #1, #2 and #3 would wait on one another\.$/m);
+    assert.deepEqual(writes, [`${full(2)} blocks ${full(3)}`, `${full(12)} blocks ${full(10)}`]);
   });
 
   test("the Tracker's refusal stops the writes, and says why", async () => {

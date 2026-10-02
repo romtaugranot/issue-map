@@ -22,7 +22,6 @@
  */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -34,7 +33,7 @@ import { trackers, type Project, type Tracker, type Trackers } from "./tracker/t
 import { checkoutRoot, gitCheckout } from "./home/checkout.ts";
 import { readdir, stat, unlink } from "node:fs/promises";
 import { resolveHome, type HomeAnswer } from "./home/home.ts";
-import { declinesOf, lastHomeOf, readJson, stateDir, writeJson } from "./state.ts";
+import { declinesOf, lastHomeOf, openBackgroundLog, readJson, stateDir, writeJson } from "./state.ts";
 import { snapshotStore, type SnapshotKey } from "./snapshot/store.ts";
 import { keepWarm } from "./snapshot/refresher.ts";
 import { statusRow } from "./map/status.ts";
@@ -247,9 +246,7 @@ function openStore() {
 
 /** Runs this CLI again in a process of its own that outlives this one; what it prints goes to a log beside the Snapshots. */
 function detach(args: string[]): void {
-  const dir = stateDir();
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const log = openSync(join(dir, "background.log"), "a", 0o600);
+  const log = openBackgroundLog(stateDir());
   spawn(process.execPath, [fileURLToPath(import.meta.url), ...args], { detached: true, stdio: ["ignore", log, log] }).unref();
 }
 

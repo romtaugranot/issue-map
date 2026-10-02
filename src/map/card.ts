@@ -7,7 +7,7 @@
 import type { IssueRead, NamedLink, WriteAnswer } from "../tracker/tracker.ts";
 import { wontWrite, type Band } from "./band.ts";
 import { isOpen } from "./links.ts";
-import { count, howClosed, OUTSIDE, plural, short, trim } from "./text.ts";
+import { count, howClosed, OUTSIDE, plainTitle, plural, short, title } from "./text.ts";
 import type { Drawing } from "./draw.ts";
 
 /** A choice to offer in a picker: its label is what opens it, typed as it is. */
@@ -58,7 +58,8 @@ const PER_KIND = 10;
  * of each kind that has more, and nothing else.
  */
 export function drawCard(issue: IssueRead, project: string, page = 1, context: CardContext = {}): Card {
-  const head = [`**${short(issue.ref, project)} ${trim(issue.title)}**`, issue.url];
+  // Hard breaks, so each of the first lines renders as a line of its own.
+  const head = [`**${short(issue.ref, project)} ${title(issue.title)}**\\`, `${issue.url}\\`];
   const outside = issue.project !== project;
   if (outside || !issue.open) {
     const state = issue.open ? "Open" : `Closed${issue.closedAs ? ` as ${issue.closedAs}` : ""}`;
@@ -79,12 +80,12 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
   const pages = Math.max(1, ...kinds.map(([, links]) => Math.ceil(links.length / PER_KIND)));
   const at = Math.min(Math.max(1, page), pages);
   const from = (at - 1) * PER_KIND;
-  if (kinds.length > 0) lines.push("");
   for (const [name, links] of kinds) {
     const shown = links.slice(from, from + PER_KIND);
     if (shown.length === 0) continue;
     const range = at > 1 ? ` · ${from + 1}–${from + shown.length}` : "";
-    lines.push(links.length > 1 ? `**${name}: ${count(links.length)}**${range}` : `**${name}**`);
+    // A blank line before each kind, so none reads as part of the list above it.
+    lines.push("", links.length > 1 ? `**${name}: ${count(links.length)}**${range}` : `**${name}**`);
     for (const { to } of shown) {
       if (!to.readable) {
         lines.push(`- ${OUTSIDE} an Issue this login can't read`);
@@ -93,11 +94,11 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
       const ref = short(to.ref, project);
       const how = howClosed(to.closedAs);
       const closed = to.open ? "" : how ? `closed ${how}` : "closed";
-      lines.push(`- ${ref} ${trim(to.title)}${closed ? ` — ${closed}` : ""}`);
+      lines.push(`- ${ref} ${title(to.title)}${closed ? ` — ${closed}` : ""}`);
       const outside = ref.startsWith(OUTSIDE);
       choices.push({
         label: outside ? to.ref : ref,
-        description: [name, closed, `${outside ? `${OUTSIDE} ` : ""}${trim(to.title)}`].filter(Boolean).join(" · "),
+        description: [name, closed, `${outside ? `${OUTSIDE} ` : ""}${plainTitle(to.title)}`].filter(Boolean).join(" · "),
       });
     }
     const left = links.length - from - shown.length;

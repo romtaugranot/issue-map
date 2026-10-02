@@ -207,6 +207,7 @@ class Gitlab {
         ["WorkItemWidgetDescription", { description: issue.body ?? null }],
         ["WorkItemWidgetAssignees", { assignees: { nodes: (issue.assignees ?? []).map((username) => ({ username })) } }],
         ["WorkItemWidgetMilestone", { milestone: issue.planned ? { dueDate: issue.planned.slice(0, 10) } : null }],
+        ["WorkItemWidgetStartAndDueDate", { startDate: null, dueDate: issue.due?.slice(0, 10) ?? null }],
         [
           "WorkItemWidgetHierarchy",
           { ...(this.query.includes("hasParent") ? { hasParent: parent !== undefined } : {}), parent: parent ? this.readable(parent) : null, children: { nodes: children } },
@@ -445,7 +446,11 @@ function restPost(gl: Gitlab, endpoint: string, field: (name: string) => string 
  */
 function restApi(gl: Gitlab, endpoint: string): CliResult {
   const { world, host } = gl;
-  if (endpoint === "version") return exited(0, JSON.stringify({ version: gl.version, revision: "0000000" }));
+  if (endpoint === "version") {
+    const server = world.servers?.[host];
+    if (server?.runs === "this-kind" && server.hidesVersion) return exited(1, JSON.stringify({ message: "403 Forbidden" }), "glab: 403 Forbidden (HTTP 403)\n");
+    return exited(0, JSON.stringify({ version: gl.version, revision: "0000000" }));
+  }
   if (endpoint === "personal_access_tokens/self") {
     // From 15.5, for a personal access token; any other kind of token is a bad request.
     if (!gl.at("15.5")) return exited(1, JSON.stringify({ error: "404 Not Found" }), "glab: 404 Not Found (HTTP 404)\n");
@@ -568,6 +573,7 @@ function restIssue(gl: Gitlab, spec: ProjectSpec, issue: IssueSpec) {
     updated_at: gl.updatedAt(spec, issue),
     assignees: (issue.assignees ?? []).map((username) => ({ username })),
     milestone: issue.planned ? { title: "next", due_date: issue.planned.slice(0, 10) } : null,
+    due_date: issue.due?.slice(0, 10) ?? null,
     _links: { closed_as_duplicate_of: duplicate ? `https://${gl.host}/api/v4/projects/${projectId(duplicate.spec)}/issues/${duplicate.issue.number}` : null },
   };
 }

@@ -8,8 +8,53 @@ export const ROW = "◆";
 /** Marks an Outside Issue. */
 export const OUTSIDE = "↗";
 
-export function trim(title: string): string {
-  return title.length <= TITLE ? title : `${title.slice(0, TITLE - 1)}…`;
+/** An Issue title as a screen rendered as Markdown prints it: as `plainTitle`, with what Markdown reads as formatting escaped, so it renders as typed. */
+export function title(text: string): string {
+  return plainTitle(text).replace(/[\\`*_~[\]<>|&]/g, "\\$&");
+}
+
+/** An Issue title as plain text prints it, as the status line does: on one line and cut to length. */
+export function plainTitle(text: string): string {
+  return clip(oneLine(text), TITLE);
+}
+
+/** A Markdown code fence longer than any run of backticks in `titles`, so none can close it. */
+export function fence(titles: string[]): string {
+  const longest = Math.max(2, ...titles.flatMap((t) => t.match(/`+/g) ?? []).map((run) => run.length));
+  return "`".repeat(longest + 1);
+}
+
+/** `text` cut to at most `max` characters, ending in `…` where it was cut. */
+export function clip(text: string, max: number): string {
+  return text.length <= max ? text : `${fitting(text, max - 1)}…`;
+}
+
+const graphemes = new Intl.Segmenter();
+
+/**
+ * The most of `text` from its start, or its end, that fits in `max`
+ * characters as JavaScript counts them, cut only between what a reader sees
+ * as one character, so an emoji is kept whole or left out whole.
+ */
+function fitting(text: string, max: number, fromEnd = false): string {
+  const chars = Array.from(graphemes.segment(text), (s) => s.segment);
+  if (fromEnd) chars.reverse();
+  const kept: string[] = [];
+  let length = 0;
+  for (const char of chars) {
+    if (length + char.length > max) break;
+    kept.push(char);
+    length += char.length;
+  }
+  return (fromEnd ? kept.reverse() : kept).join("");
+}
+
+/** `text` on one line, less what a terminal or a renderer would act on: escape sequences, other control characters, and bidi overrides and isolates. */
+export function oneLine(text: string): string {
+  return text
+    .replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ")
+    .replace(/\x1b(\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)?)/g, "")
+    .replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069]/gu, "");
 }
 
 export function count(n: number): string {
@@ -53,9 +98,9 @@ export function ago(then: string, now: string): string {
 /** `text` at most about `max` characters long: its start and its end, with how much was left out between. */
 export function cut(text: string, max: number): string {
   if (text.length <= max) return text;
-  const start = Math.floor((max * 2) / 3);
-  const end = max - start;
-  return `${text.slice(0, start)}\n[… ${count(text.length - start - end)} characters left out …]\n${text.slice(-end)}`;
+  const start = fitting(text, Math.floor((max * 2) / 3));
+  const end = fitting(text, max - start.length, true);
+  return `${start}\n[… ${count(text.length - start.length - end.length)} characters left out …]\n${end}`;
 }
 
 /** Said above text fenced with `fenced`, so Claude reads it as data. */
