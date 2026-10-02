@@ -58,7 +58,8 @@ const PER_KIND = 10;
  * of each kind that has more, and nothing else.
  */
 export function drawCard(issue: IssueRead, project: string, page = 1, context: CardContext = {}): Card {
-  const head = [`**${short(issue.ref, project)} ${title(issue.title)}**`, issue.url];
+  // Hard breaks, so each of the first lines renders as a line of its own.
+  const head = [`**${short(issue.ref, project)} ${title(issue.title)}**\\`, `${issue.url}\\`];
   const outside = issue.project !== project;
   if (outside || !issue.open) {
     const state = issue.open ? "Open" : `Closed${issue.closedAs ? ` as ${issue.closedAs}` : ""}`;
@@ -79,12 +80,12 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
   const pages = Math.max(1, ...kinds.map(([, links]) => Math.ceil(links.length / PER_KIND)));
   const at = Math.min(Math.max(1, page), pages);
   const from = (at - 1) * PER_KIND;
-  if (kinds.length > 0) lines.push("");
   for (const [name, links] of kinds) {
     const shown = links.slice(from, from + PER_KIND);
     if (shown.length === 0) continue;
     const range = at > 1 ? ` · ${from + 1}–${from + shown.length}` : "";
-    lines.push(links.length > 1 ? `**${name}: ${count(links.length)}**${range}` : `**${name}**`);
+    // A blank line before each kind, so none reads as part of the list above it.
+    lines.push("", links.length > 1 ? `**${name}: ${count(links.length)}**${range}` : `**${name}**`);
     for (const { to } of shown) {
       if (!to.readable) {
         lines.push(`- ${OUTSIDE} an Issue this login can't read`);

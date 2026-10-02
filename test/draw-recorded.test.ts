@@ -21,8 +21,8 @@ function recorded(name: string): Snapshot {
  */
 const OVERVIEW_LINES = 21;
 
-/** One level of a Group's outline, whatever the Group holds: the header, a blank line, the level's heading, 10 lines and a hint. */
-const OUTLINE_LINES = 14;
+/** One level of a Group's outline, whatever the Group holds: the header, a blank line, the level's heading, 10 lines, a blank line and a hint. */
+const OUTLINE_LINES = 15;
 
 describe("recorded Snapshots", () => {
   test("opentofu/opentofu: 277 open, 233 of them Unlinked", () => {

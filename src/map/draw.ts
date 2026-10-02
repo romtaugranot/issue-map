@@ -227,6 +227,7 @@ function unlinkedPage(snapshot: Snapshot, unlinked: OpenIssue[], page: number, s
       const unblocked = snapshot.unread.blocks === undefined ? unblockedBy(closedBlockers(issue), snapshot) : [];
       return `- ${issue.ref} ${title(issue.title)}${unblocked.length > 0 ? ` — ${unblocked.join(" · ")}` : ""}`;
     }),
+    "",
     at < pages ? `_\`more\` for the next ${PAGE}_` : "_That's all of them. `map` for the Map._",
   ];
 }
@@ -262,7 +263,7 @@ function outline(snapshot: Snapshot, opened: Opened, page: number, shows: Shows)
     "`map` for the Map",
   ].filter(Boolean);
   const hint = hints.join(" · ");
-  lines.push(`_${hint[0]!.toUpperCase()}${hint.slice(1)}_`);
+  lines.push("", `_${hint[0]!.toUpperCase()}${hint.slice(1)}_`);
   return lines.join("\n");
 }
 

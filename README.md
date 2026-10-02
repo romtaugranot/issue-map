@@ -11,16 +11,16 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 > **issue-map-fixtures/map** · 14 open · 8 on the Map · 6 Unlinked · Promised
 >
 > **Take next: 6** — most waited on first · 1 more not listed
-> - #1 [b1] Lay the foundation — ▶2 wait on it
-> - #6 [p3] Tag the build — via #4
-> - #7 [p4] Proofread the release notes — via #5
-> - #9 [u1] Remove the compatibility shims — unblocked 2d ago
-> - #11 [u2] Keep the old parser working — unblocked 2d ago · #10 closed as not planned
+> - #1 \[b1\] Lay the foundation — ▶2 wait on it
+> - #6 \[p3\] Tag the build — via #4
+> - #7 \[p4\] Proofread the release notes — via #5
+> - #9 \[u1\] Remove the compatibility shims — unblocked 2d ago
+> - #11 \[u2\] Keep the old parser working — unblocked 2d ago · #10 closed as not planned
 >
 > **Groups: 3** — largest first
-> - #4 [p1] Plan the release — 4 Issues, 1↗
-> - #1 [b1] Lay the foundation — 3 Issues
-> - ↗issue-map-fixtures-b/elsewhere#1 [x1] Publish the shared config — 1 Issue, 1↗
+> - #4 \[p1\] Plan the release — 4 Issues, 1↗
+> - #1 \[b1\] Lay the foundation — 3 Issues
+> - ↗issue-map-fixtures-b/elsewhere#1 \[x1\] Publish the shared config — 1 Issue, 1↗
 >
 > **Unlinked: 6** — no Link to another open Issue. Ask to list them.
 
@@ -28,26 +28,26 @@ Asking for the Map draws the overview. Take next comes first: the Unblocked Issu
 
 Opening a Group lists what sits at its top, one level at a time:
 
-> **Group 1 of 3** · #4 [p1] Plan the release — 4 Issues, 1↗
+> **Group 1 of 3** · #4 \[p1\] Plan the release — 4 Issues, 1↗
 >
 > **Under #4, alone at the top: 3** — most under it first
-> - #5 [p2] Write the release notes — 1 under it
-> - #6 [p3] Tag the build
-> - ↗issue-map-fixtures/site#1 [s1] Update the website for the release
+> - #5 \[p2\] Write the release notes — 1 under it
+> - #6 \[p3\] Tag the build
+> - ↗issue-map-fixtures/site#1 \[s1\] Update the website for the release
 >
 > _Name one to open the level below it · `map` for the Map_
 
 Opening an Issue shows its card, read live from the Tracker, with its Links under the Tracker's own names:
 
-> **#2 [b2] Build the walls**\
+> **#2 \[b2\] Build the walls**\
 > https://github.com/issue-map-fixtures/map/issues/2\
 > **Blocked** — 1 open Issue Blocks it · unassigned
 >
 > **Blocked by**
-> - #1 [b1] Lay the foundation
+> - #1 \[b1\] Lay the foundation
 >
 > **Blocking**
-> - #3 [b3] Put on the roof
+> - #3 \[b3\] Put on the roof
 
 Claude then asks where to go next, in a picker: **Assign #2 to me**, **Start work on #2**, **#1** (Blocked by · [b1] Lay the foundation) and **More Links**.
 

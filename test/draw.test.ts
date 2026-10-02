@@ -410,6 +410,7 @@ describe("a Group's outline (ADR 0008)", () => {
         "**At the top: 2** — most under it first",
         "- #1 Issue 1 — 4 under it",
         "- #6 Issue 6 — 1 under it",
+        "",
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
     );
@@ -425,6 +426,7 @@ describe("a Group's outline (ADR 0008)", () => {
         "- #2 Issue 2 — 1 under it",
         "- #3 Issue 3",
         "- #7 Issue 7 — Blocked by it",
+        "",
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
     );
@@ -456,12 +458,13 @@ describe("a Group's outline (ADR 0008)", () => {
     const links = issues.slice(1).map(({ n }): LinkSpec => [n - 1, "related", n]);
     const first = outline(snapshot(issues, links), 1).split("\n");
     assert.deepEqual(first.slice(2, 5), ["**At the top: 12** — oldest first · page 1 of 2", "- #1 Issue 1 — 1 Related", "- #2 Issue 2 — 2 Related"]);
-    assert.equal(first.length, 14);
+    assert.equal(first.length, 15);
     assert.equal(first.at(-1), "_`more` for the next 10 · `map` for the Map_");
     assert.deepEqual(outline(snapshot(issues, links), 1, 2).split("\n").slice(2), [
       "**At the top: 12** — oldest first · page 2 of 2",
       "- #11 Issue 11 — 2 Related",
       "- #12 Issue 12 — 1 Related",
+      "",
       "_`map` for the Map_",
     ]);
   });
@@ -477,6 +480,7 @@ describe("a Group's outline (ADR 0008)", () => {
         "**Under ↗fixture-org/plans#7, alone at the top: 2** — most under it first",
         "- #2 Issue 2 — 1 under it",
         "- #1 Issue 1",
+        "",
         "_Name one to open the level below it · `map` for the Map_",
       ].join("\n"),
     );
@@ -495,7 +499,7 @@ describe("a Group's outline (ADR 0008)", () => {
 
   test("where Links run in a circle, the oldest Issue in it stands at the top", () => {
     const s = snapshot([{ n: 1 }, { n: 2 }, { n: 3 }], [[1, "blocks", 2], [2, "blocks", 3], [3, "blocks", 1]]);
-    assert.deepEqual(outline(s, 1).split("\n").slice(2, 5), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — Blocked by it · 2 under it", "_Name one to open the level below it · `map` for the Map_"]);
+    assert.deepEqual(outline(s, 1).split("\n").slice(2, 6), ["**Under #1, alone at the top: 1** — most under it first", "- #2 Issue 2 — Blocked by it · 2 under it", "", "_Name one to open the level below it · `map` for the Map_"]);
   });
 
   test("says so when the Issue named has nothing beneath it, is Unlinked, isn't there, or the Group doesn't exist", () => {
@@ -519,8 +523,8 @@ describe("the Unlinked list", () => {
   test("pages 15 at a time, newest first", () => {
     const lines = draw(s, { kind: "unlinked", page: 1 }).text.split("\n");
     assert.equal(lines[0], "**Unlinked: 40** — newest first, page 1 of 3");
-    assert.deepEqual(lines.slice(1, 17), [...Array.from({ length: 15 }, (_, i) => `- #${40 - i} Issue ${40 - i}`), "_`more` for the next 15_"]);
-    assert.equal(lines.length, 17);
+    assert.deepEqual(lines.slice(1, 18), [...Array.from({ length: 15 }, (_, i) => `- #${40 - i} Issue ${40 - i}`), "", "_`more` for the next 15_"]);
+    assert.equal(lines.length, 18);
   });
 
   test("the last page holds what's left, oldest last, and offers the Map back", () => {
@@ -529,6 +533,7 @@ describe("the Unlinked list", () => {
       "**Unlinked: 40** — newest first, page 3 of 3",
       ...[10, 9, 8, 7, 6, 5, 4, 3, 2].map((n) => `- #${n} Issue ${n}`),
       "- #41 Issue 41",
+      "",
       "_That's all of them. `map` for the Map._",
     ]);
   });
