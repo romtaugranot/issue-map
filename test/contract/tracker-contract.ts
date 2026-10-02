@@ -33,8 +33,10 @@ export interface IssueSpec {
   /** ISO date; defaults to day `number` of 2026. */
   createdAt?: string;
   assignees?: string[];
-  /** ISO date. */
+  /** Its milestone's due date, as an ISO date. */
   planned?: string;
+  /** Its own due date, as an ISO date, where the Tracker records one apart from its milestone's, as GitLab does. */
+  due?: string;
   /** Closed Issues are never listed, but a Link can reach one. */
   closed?: boolean;
   /** How it closed; `completed` by default. One closed as a duplicate names the Issue it duplicates in `duplicateOf`. */
@@ -65,8 +67,12 @@ export interface IssueSpec {
 export type IssueAddress = string;
 
 export interface World {
-  /** What answers at each host other than the well-known one. A host not listed can't be reached. */
-  servers?: Record<string, { runs: "this-kind"; version: string } | { runs: "something-else" }>;
+  /**
+   * What answers at each host other than the well-known one. A host not
+   * listed can't be reached. `hidesVersion`: it won't say its version, even
+   * to a login.
+   */
+  servers?: Record<string, { runs: "this-kind"; version: string; hidesVersion?: boolean } | { runs: "something-else" }>;
   projects?: ProjectSpec[];
   login?: "ok" | "none" | "refused";
   cli?: "installed" | "missing";
