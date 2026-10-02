@@ -1,10 +1,10 @@
 /**
- * The status line's module (ADR 0011), run by `claude plugin test` on the
+ * The status line (ADR 0011), run by `claude plugin test` on the
  * release tree with this file copied in: the plugin's status line process is
  * stood in for, and each row it prints is what ends up pinned.
  */
-import { expect, mock, test } from "claude-code/testing";
-import type { Engine, On } from "claude-code";
+import { expect, mock, test, type Engine } from "claude-code/testing";
+import type { On } from "claude-code";
 
 /** Answers each run of the status line process with the next of `outputs`, `null` failing it, and records what ran and what was pinned. */
 function world(on: On, outputs: (string | null)[]) {
@@ -20,6 +20,7 @@ function world(on: On, outputs: (string | null)[]) {
     return { value: { exitCode: 0, stdout, stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
   });
   on("ui.status", (_$, e) => (pinned.push(e.text), { value: undefined }));
+  on("command.register", (_$, e) => ({ value: { command: e.name } }));
   return { ran, pinned };
 }
 

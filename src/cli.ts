@@ -26,6 +26,8 @@
  * `issue-map statusline [--remove]`: the status line's row for this checkout; with `--remove`, takes the status line 0.1.0 set up out of the user's Claude Code settings, putting theirs back.
  * `issue-map read --host <host> --path <path>`: a full read of a Project, run detached by `map` and the refresher.
  * `issue-map refresher --host <host> --path <path> --login <login>`: keeps the Home Project's Snapshot warm, run detached by `map`.
+ *
+ * `--shown` on any command prints what it would keep to be shown plain: its caller, the `/issue-map` slash command, shows it itself (ADR 0012).
  */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -56,7 +58,7 @@ import { confirm, offer, suggest, type Pending, type PendingSuggestions, type Pr
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--remove] — each takes [--pick <URL>]";
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--remove] — each takes [--pick <URL>] [--shown]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -74,6 +76,7 @@ async function main(argv: string[]): Promise<number> {
       mermaid: { type: "boolean" },
       dot: { type: "boolean" },
       artifact: { type: "boolean" },
+      shown: { type: "boolean" },
     },
   });
   const [verb, ...rest] = positionals;
@@ -144,7 +147,7 @@ async function main(argv: string[]): Promise<number> {
     : { text: `No Home Project: ${cwd} isn't inside a git checkout.`, choices: [], others: [] };
   // A tie is asked before any Map is drawn.
   if (home.choices.length > 0) {
-    console.log(render(await shown(pickHome(home))));
+    console.log(render(await shown(pickHome(home), values.shown)));
     return 0;
   }
 
@@ -196,12 +199,13 @@ async function main(argv: string[]): Promise<number> {
     request,
   );
   // What `start`, `suggest` and `html --artifact` print is for Claude to work from, not to show.
-  console.log(render(verb === "start" || verb === "suggest" || (verb === "html" && values.artifact) ? answer : await shown(answer)));
+  console.log(render(verb === "start" || verb === "suggest" || (verb === "html" && values.artifact) ? answer : await shown(answer, values.shown)));
   return 0;
 }
 
-/** The answer, its text kept to be shown exactly as printed (ADR 0009). */
-async function shown(answer: Answer): Promise<Answer> {
+/** The answer, its text kept to be shown exactly as printed (ADR 0009), unless its caller shows it itself (ADR 0012). */
+async function shown(answer: Answer, plain = false): Promise<Answer> {
+  if (plain) return answer;
   return { ...answer, text: await withLine(stateDir(), answer.text, process.env.CLAUDE_CODE_SESSION_ID) };
 }
 

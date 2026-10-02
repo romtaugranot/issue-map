@@ -1,5 +1,5 @@
 {
-  "description": "Shows what the Map prints exactly as printed, in place of the line Claude writes for it (ADR 0009), and pins the Home Project's row as the plugin's status line (ADR 0011)",
+  "description": "Shows what the Map prints exactly as printed, in place of the line Claude writes for it (ADR 0009), pins the Home Project's row as the plugin's status line (ADR 0011), and serves /issue-map (ADR 0012)",
   "hooks": {
     "MessageDisplay": [
       {
@@ -12,5 +12,5 @@
       }
     ]
   },
-  "modules": ["./status.ts"]
+  "modules": ["./plugin.ts"]
 }

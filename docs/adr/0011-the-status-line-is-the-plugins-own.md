@@ -2,7 +2,7 @@
 
 ADR 0001 put the Map optionally in the status line. A plugin couldn't declare one then, so a setup command wrote it into the user's Claude Code `settings.json`, wrapping any status line they had (#40, #50, #56). That meant editing a file the user owns, re-pointing it after each update moved the plugin, and telling users to take it out before uninstalling, or their status line would run a command that's gone.
 
-Claude Code now lets a plugin ship a hooks module, a mod, that pins a line of its own under the prompt with `$.ui.status`. So the plugin's module, `hooks/status.ts`, pins the Home Project's row there whenever the plugin is enabled, from the same process the settings status line ran, which reads only what the background refresher keeps. It refreshes the row when a session starts, after each turn, and every minute. Nothing is written to the user's settings, and the line goes when the plugin is disabled or uninstalled.
+Claude Code now lets a plugin ship a hooks module, a mod, that pins a line of its own under the prompt with `$.ui.status`. So the plugin's module, `hooks/plugin.ts`, pins the Home Project's row there whenever the plugin is enabled, from the same process the settings status line ran, which reads only what the background refresher keeps. It refreshes the row when a session starts, after each turn, and every minute. Nothing is written to the user's settings, and the line goes when the plugin is disabled or uninstalled.
 
 A status line set up by 0.1.0 is not changed for the user. While one is still in their settings, the row ends by saying how to take it out, and `issue-map statusline --remove` still puts back the status line it wrapped. There is no setup command any more.
 

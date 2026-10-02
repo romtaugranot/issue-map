@@ -53,10 +53,12 @@ Claude then asks where to go next, in a picker: **Assign #2 to me**, **Start wor
 
 Claude doesn't retype any of this. Each output ends with a line such as `⟦issue-map 3f9a0c1b2d4e⟧`; Claude writes that line in its reply, and the plugin's display hook shows the output in its place, exactly as printed ([ADR 0009](docs/adr/0009-show-output-through-a-display-hook.md)).
 
+Or skip Claude: type `/issue-map` for the Map, or `/issue-map` followed by a view, such as `/issue-map group 1`, `/issue-map issue 2` or `/issue-map back`. It shows the output at once, with no reply to wait for, and Claude reads it too, so you can carry on by asking ([ADR 0012](docs/adr/0012-a-slash-command-shows-the-map-without-claude.md)). Assigning, briefing and Link Suggestions are asked of Claude.
+
 ## Requirements
 
 - Linux, or macOS 13 or later. On Windows, run Claude Code under WSL: the plugin is untested on Windows itself. The build runs its tests on Linux.
-- Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.) The status line also needs a build that loads plugins' hooks modules, which are early access; it's tested on 2.1.287. Without one, everything else works and there is no status line.
+- Claude Code 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. (A plugin's `bin/` on the Bash tool's `PATH`, which it also needs, came earlier, in 2.1.91.) The status line and `/issue-map` also need a build that loads plugins' hooks modules, which are early access; they're tested on 2.1.287. Without one, everything else works, through Claude.
 - Node.js 22.18 or later on your `PATH`. The plugin is TypeScript that Node runs directly, with no runtime dependencies, and a release holds only what it runs, so there is nothing to install or build.
 - `bash`, which the plugin's entry points are written in, and `git`, which it reads the checkout's remotes with.
 - For GitHub, the [GitHub CLI](https://cli.github.com/) logged in to the host: `gh auth login --hostname <host>`. Writing a Link or assigning needs the triage role or above in the Project, and the `repo` scope on a classic token. `gh` 2.81 or later tells the Map whether your login may write; with an older one it offers writes anyway and stops at the first refusal.
@@ -227,7 +229,7 @@ The floors come from the adapters, which the matrix and the schema checks read t
 
 Three tiers, as [ADR 0004](docs/adr/0004-promised-means-run-or-stood-in.md) sets out:
 
-- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, every query checked against the recorded GitHub and GitLab schemas, and the hooks module that pins the status line run by `claude plugin test` on the pinned Claude Code build. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
+- **Contract**, on every pull request and every push to main: the drawing code against hand-written and recorded Snapshots, both adapters against fake `gh` and `glab`, every query checked against the recorded GitHub and GitLab schemas, and the hooks module that pins the status line and serves `/issue-map` run by `claude plugin test` on the pinned Claude Code build. Once `npm ci` has installed the dev dependencies, it needs no network and no login:
 
   ```sh
   npm ci
