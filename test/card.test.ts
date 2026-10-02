@@ -115,6 +115,11 @@ describe("an Issue card", () => {
     assert.match(text, /^\*\*Closing Requests: unread\*\* — this login can't read pull requests$/m);
   });
 
+  test("says when some of its children couldn't be read", () => {
+    const { text } = card(read(12, { unread: { children: "the Map reads the first 100" } }));
+    assert.match(text, /^\*\*Child items: more unread\*\* — the Map reads the first 100$/m);
+  });
+
   test("says when Mentions couldn't be read, rather than counting none", () => {
     const { text } = card(read(12, { unread: { mentions: "GitLab gave no answer for them" } }));
     assert.match(text, /^\*\*Mentions: unread\*\* — GitLab gave no answer for them$/m);

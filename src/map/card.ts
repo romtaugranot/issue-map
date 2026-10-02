@@ -105,6 +105,7 @@ export function drawCard(issue: IssueRead, project: string, page = 1, context: C
   }
   const offered = { ...(assign ? { assign } : {}), start };
   if (at > 1) return { text: lines.join("\n"), choices, ...offered };
+  if (issue.unread.children !== undefined) lines.push("", `**Child items: more unread** — ${issue.unread.children}`);
   lines.push(...closingRequests(issue));
   const mentions = mentionedOnly(issue);
   if (issue.unread.mentions !== undefined) lines.push("", `**Mentions: unread** — ${issue.unread.mentions}`);

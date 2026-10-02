@@ -341,6 +341,77 @@ describe("GitLab: writing a Link (need 10)", () => {
   });
 });
 
+describe("GitLab: only the Project itself missing is not-found; what vanishes mid-read is skipped or read again", () => {
+  const host = "git.example.com";
+  const tools = "fixture-org/tools";
+  const since = "2026-09-20T00:00:00Z";
+  const after = "2026-09-21T00:00:00Z";
+  const issues = (n: number, more: Record<number, Partial<NonNullable<ProjectSpec["issues"]>[number]>> = {}) => Array.from({ length: n }, (_, i) => ({ number: i + 1, ...more[i + 1] }));
+
+  async function trackerAt(world: World, version = LATEST) {
+    const probed = await arrange({ servers: { [host]: { runs: "this-kind", version } }, loggedInTo: [host], ...world }).kind.probe(host);
+    const tracker = (probed as Extract<typeof probed, { kind: "identified" }>).tracker;
+    const resolved = await tracker.resolveProject(tools);
+    assert.equal(resolved.kind, "project", JSON.stringify(resolved));
+    return { tracker, project: (resolved as Extract<ProjectResolution, { kind: "project" }>).project };
+  }
+
+  async function changes(world: World, version = LATEST) {
+    const { tracker, project } = await trackerAt(world, version);
+    const answer = await tracker.changes(project, since, []);
+    assert.equal(answer.kind, "changes", JSON.stringify(answer));
+    return answer as Extract<ChangesAnswer, { kind: "changes" }>;
+  }
+
+  test("a merge request deleted mid-refresh is skipped, and the rest is still read", async () => {
+    const read = await changes({
+      projects: [{ path: tools, number: 1, open: 6, issues: issues(6) }],
+      closingRequests: [
+        { closes: `${tools}#4`, number: 40, author: "fixture-bot", updatedAt: after, vanished: true },
+        { closes: `${tools}#5`, number: 41, author: "fixture-bot", updatedAt: after },
+      ],
+    });
+    assert.deepEqual(read.open.map((i) => i.ref), ["#5"]);
+  });
+
+  test("a merge request that closes 25 Issues gives its Closing Request to all 25", async () => {
+    const read = await changes({
+      projects: [{ path: tools, number: 1, open: 30, issues: issues(30) }],
+      closingRequests: Array.from({ length: 25 }, (_, i) => ({ closes: `${tools}#${i + 1}`, number: 40, author: "fixture-bot", updatedAt: after })),
+    });
+    assert.equal(read.open.length, 25);
+    assert.ok(read.open.every((i) => i.closingRequests.map((r) => r.ref).join() === `${tools}!40`), JSON.stringify(read.open.map((i) => i.closingRequests)));
+  });
+
+  test("before 17.8, an Issue deleted mid-refresh is left out, and the refresh says it didn't catch up", async () => {
+    const read = await changes({ projects: [{ path: tools, number: 1, open: 3, issues: issues(3, { 2: { updatedAt: after, vanished: true }, 3: { updatedAt: after } }) }] }, "17.7.0");
+    assert.deepEqual([read.open.map((i) => i.ref), read.caughtUp], [["#3"], false]);
+  });
+
+  test("before 17.8, an Issue deleted mid-read is left off its page, and its card says the Issue, not the Project, is gone", async () => {
+    const { tracker, project } = await trackerAt({ projects: [{ path: tools, number: 1, open: 3, issues: issues(3, { 2: { vanished: true } }) }] }, "17.7.0");
+    const page = await tracker.openIssues(project, null);
+    assert.equal(page.kind, "page", JSON.stringify(page));
+    assert.deepEqual((page as Extract<IssuePage, { kind: "page" }>).issues.map((i) => i.ref), ["#1", "#3"]);
+    const card = await tracker.issue(`${tools}#2`);
+    assert.equal(card.kind, "not-found");
+    assert.match((card as { reason: string }).reason, /no Issue/);
+  });
+
+  test("before 17.7, a legacy epic with more than 100 Issues in it says the rest are unread", async () => {
+    const epic: ProjectSpec = { path: "fixture-org", number: 2, open: 1, namespace: true, issues: [{ number: 12 }] };
+    const { tracker } = await trackerAt({
+      projects: [{ path: tools, number: 1, open: 101, issues: issues(101) }, epic],
+      links: Array.from({ length: 101 }, (_, i): [string, "parent", string] => ["fixture-org#12", "parent", `${tools}#${i + 1}`]),
+    }, "17.2.0");
+    const card = await tracker.issue("fixture-org&12");
+    assert.equal(card.kind, "issue", JSON.stringify(card));
+    const { links, unread } = (card as Extract<IssueAnswer, { kind: "issue" }>).issue;
+    assert.equal(links.length, 100);
+    assert.match(unread.children ?? "", /100/);
+  });
+});
+
 describe("GitLab's environment token goes only to the host glab takes it for", () => {
   const selfHosted = { runs: "this-kind", version: LATEST } as const;
   const servers = { "git.example.com": selfHosted, "git.example.org": selfHosted };

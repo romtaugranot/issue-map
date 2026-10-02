@@ -392,7 +392,7 @@ ${itemFragment(ctx)}`;
   const project = answer.data.project as { userPermissions: { readMergeRequest: boolean }; workItems: Page<ItemNode> & { count?: number } } | null;
   if (!project) return gone(ctx, found.path);
   const filled = await fillFromRest(ctx, found, project.workItems.nodes);
-  if (filled) return filled;
+  if (!Array.isArray(filled)) return filled;
   const unread = closingRequestsUnread(ctx, project.userPermissions, found.path);
   if (first) {
     const blocks = await readBlocksUnread(ctx, found.path, answer.data, unread);
@@ -400,7 +400,7 @@ ${itemFragment(ctx)}`;
   }
   return {
     kind: "page",
-    issues: project.workItems.nodes.map(openIssue),
+    issues: filled.map(openIssue),
     total: project.workItems.count ?? (found.issues === "off" ? 0 : found.issues.open),
     next: project.workItems.pageInfo.hasNextPage ? project.workItems.pageInfo.endCursor : null,
     unread,
@@ -473,27 +473,35 @@ ${itemFragment(ctx)}`;
     if (!Array.isArray(read)) return read;
     for (const node of read) changed.set(node.id, node);
   }
-  const filled = await fillFromRest(ctx, found, [...changed.values()].filter((node) => node.state === "OPEN"));
-  if (filled) return filled;
+  const opened = [...changed.values()].filter((node) => node.state === "OPEN");
+  const filled = await fillFromRest(ctx, found, opened);
+  if (!Array.isArray(filled)) return filled;
+  // An Issue deleted mid-read is still in the Snapshot, until a full read leaves it out.
+  if (filled.length < opened.length) caughtUp = false;
   const ends = await readEnds(ctx, outside);
   if (!Array.isArray(ends)) return ends;
-  const open: OpenIssue[] = [];
-  for (const node of changed.values()) {
-    if (node.state === "OPEN") open.push(openIssue(node));
-    else ends.push(farEnd(node));
-  }
-  return { kind: "changes", open, ends, requests, caughtUp, unread };
+  ends.push(...[...changed.values()].filter((node) => node.state !== "OPEN").map(farEnd));
+  return { kind: "changes", open: filled.map(openIssue), ends, requests, caughtUp, unread };
 }
 
-/** The iids of the Project's Issues that these merge requests close, from REST, which alone says. */
+/**
+ * The iids of the Project's Issues that these merge requests close, from
+ * REST, which alone says, a page at a time. One deleted since it was listed
+ * closes nothing.
+ */
 async function closedBy(ctx: Ctx, found: Project, iids: string[]): Promise<string[] | Failure> {
   const projectId = numberIn(found.id);
   const closes = new Set<string>();
   for (const iid of iids) {
-    const answer = await rest(ctx, `projects/${encodeURIComponent(found.path)}/merge_requests/${iid}/closes_issues`, found.path);
-    if ("kind" in answer) return answer;
-    for (const issue of Array.isArray(answer.json) ? (answer.json as { iid: number; project_id: number }[]) : []) {
-      if (issue.project_id === projectId) closes.add(String(issue.iid));
+    for (let page = 1, full = true; full; page++) {
+      const answer = await rest(ctx, `projects/${encodeURIComponent(found.path)}/merge_requests/${iid}/closes_issues?per_page=${REST_PAGE}&page=${page}`, found.path);
+      if ("kind" in answer) {
+        if (answer.kind !== "not-found") return answer;
+        break;
+      }
+      const issues = Array.isArray(answer.json) ? (answer.json as { iid: number; project_id: number }[]) : [];
+      for (const issue of issues) if (issue.project_id === projectId) closes.add(String(issue.iid));
+      full = issues.length === REST_PAGE;
     }
   }
   return [...closes];
@@ -568,11 +576,13 @@ ${itemFragment(ctx, notes)}`;
   if ("kind" in found) return notFound(found, ctx, locator);
   const { answer, container } = found;
   const node = container?.workItems.nodes[0];
-  if (!node) return { kind: "not-found", reason: `no Issue ${path}#${iid} on ${ctx.host} that this login can read` };
+  const missing: IssueAnswer = { kind: "not-found", reason: `no Issue ${path}#${iid} on ${ctx.host} that this login can read` };
+  if (!node) return missing;
   const { id, userPermissions } = container!;
   if (id) {
     const filled = await fillFromRest(ctx, { path, id }, [node]);
-    if (filled) return filled;
+    if (!Array.isArray(filled)) return filled;
+    if (filled.length === 0) return missing;
   }
   const unread: Unread = userPermissions ? closingRequestsUnread(ctx, userPermissions, path) : {};
   // Before 18.3 only a Project's Issues tell by REST whether it can record Blocks.
@@ -991,9 +1001,11 @@ function closingRequestsUnread(ctx: Ctx, permissions: { readMergeRequest: boolea
  * What an older GitLab's GraphQL leaves out, filled in from REST: before
  * 17.8, Blocks and Related Links, an Issue at a time, with the Issue each
  * closed as a duplicate of; before 17.7, the epic each Issue is in, as its
- * Parent.
+ * Parent. An Issue REST no longer finds, deleted mid-read, is left out of
+ * the nodes it answers with.
  */
-async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nodes: ItemNode[]): Promise<Failure | undefined> {
+async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nodes: ItemNode[]): Promise<ItemNode[] | Failure> {
+  const vanished = new Set<ItemNode>();
   if (!ctx.has.epicWorkItems && nodes.length > 0) {
     const epics = await epicsOf(ctx, project.path, nodes);
     if (!(epics instanceof Map)) return epics;
@@ -1007,8 +1019,9 @@ async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nod
     const closed = nodes.filter((node) => node.state === "CLOSED" && node.workItemType.name !== "Task");
     for (const node of closed) {
       const answer = await rest(ctx, `projects/${encodeURIComponent(project.path)}/issues/${node.iid}`, project.path);
-      if ("kind" in answer) return answer;
-      node.duplicatedToWorkItemUrl = (answer.json as RestIssue)._links?.closed_as_duplicate_of ?? null;
+      if (!("kind" in answer)) node.duplicatedToWorkItemUrl = (answer.json as RestIssue)._links?.closed_as_duplicate_of ?? null;
+      else if (answer.kind === "not-found") vanished.add(node);
+      else return answer;
     }
     for (const node of nodes) {
       // An ordinary Issue's Links come from REST, which tells a Related Link `/duplicate` made from any other; a task's can't.
@@ -1016,13 +1029,17 @@ async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nod
       else if (!widgetsOf(node).linkedItems) node.widgets.push({ linkedItems: { nodes: [] } });
     }
   }
-  const unlinked = nodes.filter((node) => !widgetsOf(node).linkedItems);
+  const unlinked = nodes.filter((node) => !vanished.has(node) && !widgetsOf(node).linkedItems);
   for (let at = 0; at < unlinked.length; at += REST_AT_ONCE) {
     const turn = unlinked.slice(at, at + REST_AT_ONCE);
     const answers = await Promise.all(turn.map((node) => rest(ctx, `projects/${encodeURIComponent(project.path)}/issues/${node.iid}/links`, project.path)));
     for (const [i, answer] of answers.entries()) {
-      if ("kind" in answer) return answer;
       const node = turn[i]!;
+      if ("kind" in answer) {
+        if (answer.kind !== "not-found") return answer;
+        vanished.add(node);
+        continue;
+      }
       // REST names the Issue a duplicate closed as a duplicate of by its API address.
       const self = `/projects/${numberIn(project.id)}/issues/${node.iid}`;
       const linked = (answer.json as RestIssue[]).map((issue) => {
@@ -1032,7 +1049,7 @@ async function fillFromRest(ctx: Ctx, project: { path: string; id: string }, nod
       node.widgets.push({ linkedItems: { nodes: linked } });
     }
   }
-  return undefined;
+  return nodes.filter((node) => !vanished.has(node));
 }
 
 /** The epic each of these Issues is in before 17.7, by iid, from REST, which gives it only where the tier has epics. */
@@ -1094,8 +1111,10 @@ async function legacyEpicCard(ctx: Ctx, group: string, iid: string, locator: str
   const epic = await readLegacyEpic(ctx, group, Number(iid));
   if (epic === null) return { kind: "not-found", reason: `no Issue ${locator} on ${ctx.host} that this login can read` };
   if ("kind" in epic) return epic;
-  const children = await rest(ctx, `groups/${encodeURIComponent(group)}/epics/${iid}/issues?per_page=100`, locator);
+  const children = await rest(ctx, `groups/${encodeURIComponent(group)}/epics/${iid}/issues?per_page=${REST_PAGE}`, locator);
   if ("kind" in children) return notFound(children, ctx, locator);
+  const unread: Unread = { blocks: `GitLab ${ctx.version} keeps epics apart from Issues, and the Map doesn't read the Links between epics` };
+  if ((children.json as RestIssue[]).length === REST_PAGE) unread.children = `the Map reads the first ${REST_PAGE} Issues in a legacy epic, and ${epic.reference} may have more`;
   return {
     kind: "issue",
     issue: {
@@ -1111,7 +1130,7 @@ async function legacyEpicCard(ctx: Ctx, group: string, iid: string, locator: str
       links: (children.json as RestIssue[]).map((child): NamedLink => ({ role: "child", name: "Child items", to: farEnd(restEnd(child)) })),
       closingRequests: [],
       mentionedBy: [],
-      unread: { blocks: `GitLab ${ctx.version} keeps epics apart from Issues, and the Map doesn't read the Links between epics` },
+      unread,
     },
   };
 }
@@ -1136,7 +1155,7 @@ const REST_PAGE = 100;
 async function openIssuesFromRest(ctx: Ctx, found: Project, after: string | null): Promise<IssuePage> {
   const page = after === null ? 1 : Number(after);
   const read = await restItems(ctx, found, `state=opened&order_by=created_at&sort=asc&page=${page}`);
-  if (!Array.isArray(read)) return read;
+  if ("kind" in read) return read;
   const unread = closingRequestsUnread(ctx, { readMergeRequest: true }, found.path);
   if (page === 1) {
     const blocks = await readBlocksUnread(ctx, found.path, {}, unread);
@@ -1144,9 +1163,9 @@ async function openIssuesFromRest(ctx: Ctx, found: Project, after: string | null
   }
   return {
     kind: "page",
-    issues: read.map(openIssue),
+    issues: read.nodes.map(openIssue),
     total: found.issues === "off" ? 0 : found.issues.open,
-    next: read.length === REST_PAGE ? String(page + 1) : null,
+    next: read.listed === REST_PAGE ? String(page + 1) : null,
     unread,
   };
 }
@@ -1159,12 +1178,16 @@ async function openIssuesFromRest(ctx: Ctx, found: Project, after: string | null
 async function changesFromRest(ctx: Ctx, found: Project, since: string, outside: string[]): Promise<ChangesAnswer> {
   const changed: ItemNode[] = [];
   let caughtUp = false;
+  let vanished = false;
   for (let page = 1; page <= REFRESH_PAGES && !caughtUp; page++) {
     const read = await restItems(ctx, found, `updated_after=${encodeURIComponent(since)}&order_by=updated_at&sort=asc&page=${page}`, (node) => node.state === "OPEN");
-    if (!Array.isArray(read)) return read;
-    changed.push(...read);
-    caughtUp = read.length < REST_PAGE;
+    if ("kind" in read) return read;
+    changed.push(...read.nodes);
+    caughtUp = read.listed < REST_PAGE;
+    // An Issue deleted mid-read is still in the Snapshot, until a full read leaves it out.
+    vanished ||= read.nodes.length < read.listed;
   }
+  caughtUp &&= !vanished;
   const ends = await readEnds(ctx, outside);
   if (!Array.isArray(ends)) return ends;
   const open = changed.filter((node) => node.state === "OPEN");
@@ -1180,20 +1203,26 @@ async function issueFromRest(ctx: Ctx, path: string, iid: string, locator: strin
   const found = answer.json as RestItem;
   const node = restItem(found);
   const filled = await fillFromRest(ctx, { path, id: String(found.project_id) }, [node]);
-  if (filled) return filled;
+  if (!Array.isArray(filled)) return filled;
+  if (filled.length === 0) return { kind: "not-found", reason: `no Issue ${locator} on ${ctx.host} that this login can read` };
   const unread = closingRequestsUnread(ctx, { readMergeRequest: true }, path);
   const failed = await readBlocksUnread(ctx, path, {}, unread);
   if (failed) return failed;
   return card(node, [], unread);
 }
 
-/** A page of a Project's Issues from REST, as work items, with the Links of those `fill` picks filled in. */
-async function restItems(ctx: Ctx, found: Project, params: string, fill: (node: ItemNode) => boolean = () => true): Promise<ItemNode[] | Failure> {
+/**
+ * A page of a Project's Issues from REST, as work items, with the Links of
+ * those `fill` picks filled in; `listed` is how many the page held, with
+ * any deleted mid-read that `nodes` leaves out.
+ */
+async function restItems(ctx: Ctx, found: Project, params: string, fill: (node: ItemNode) => boolean = () => true): Promise<{ nodes: ItemNode[]; listed: number } | Failure> {
   const answer = await rest(ctx, `projects/${encodeURIComponent(found.path)}/issues?${params}&per_page=${REST_PAGE}`, found.path);
   if ("kind" in answer) return answer;
   const nodes = (answer.json as RestItem[]).map(restItem);
   const filled = await fillFromRest(ctx, found, nodes.filter(fill));
-  return filled ?? nodes;
+  if (!Array.isArray(filled)) return filled;
+  return { nodes: nodes.filter((node) => !fill(node) || filled.includes(node)), listed: nodes.length };
 }
 
 /** An Issue from REST as GitLab's GraphQL gives a work item, before its Links are filled in. */

@@ -47,6 +47,8 @@ export interface IssueSpec {
   updatedAt?: string;
   /** This login can't read it, though a Link to it is recorded. */
   hidden?: boolean;
+  /** Deleted mid-read: it's listed, but a read of it alone finds nothing. */
+  vanished?: boolean;
   /** At the Tracker's smallest level, such as a GitLab task; its Parent is set with a `parent` Link. */
   taskLevel?: boolean;
   /** Closed as a duplicate of this Issue, as the Tracker marks it. */
@@ -91,7 +93,8 @@ export interface World {
   viewer?: string;
   /** Pull or merge requests that close an Issue when merged. */
   /** `updatedAt` is when one was last updated, as an ISO date; long ago by default. */
-  closingRequests?: { closes: IssueAddress; number: number; author: string; draft?: boolean; state?: "open" | "closed" | "merged"; updatedAt?: string }[];
+  /** `vanished`: deleted mid-read, after it's listed and before the Issues it closes are read. */
+  closingRequests?: { closes: IssueAddress; number: number; author: string; draft?: boolean; state?: "open" | "closed" | "merged"; updatedAt?: string; vanished?: boolean }[];
   /** `false` for a login that may read Issues but not pull or merge requests. */
   readsClosingRequests?: boolean;
   /** `[a, b]` reads "a names b in its text". */

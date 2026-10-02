@@ -400,8 +400,9 @@ function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: st
   }
   if (query.includes("mergeRequests(updatedAfter:")) {
     const since = Date.parse(field("since")!);
+    // A World lists a merge request once for each Issue it closes; GitLab lists it once.
     const requests = (gl.world.closingRequests ?? [])
-      .filter((r) => r.closes.startsWith(`${spec.path}#`) && Date.parse(r.updatedAt ?? LONG_AGO) >= since)
+      .filter((r, i, all) => r.closes.startsWith(`${spec.path}#`) && Date.parse(r.updatedAt ?? LONG_AGO) >= since && all.findIndex((o) => o.number === r.number && o.closes.startsWith(`${spec.path}#`)) === i)
       .sort((a, b) => Date.parse(b.updatedAt ?? LONG_AGO) - Date.parse(a.updatedAt ?? LONG_AGO))
       .map((r) => ({ iid: String(r.number), reference: `${spec.path}!${r.number}`, updatedAt: r.updatedAt }));
     answer.mergeRequests = { nodes: requests.slice(0, PAGE), pageInfo: { hasNextPage: requests.length > PAGE, endCursor: "x" } };
@@ -411,7 +412,7 @@ function projectAnswer(gl: Gitlab, query: string, path: string, field: (name: st
 
 function byIids(gl: Gitlab, spec: ProjectSpec, query: string) {
   const iids = JSON.parse(/iids: (\[[^\]]*\])/.exec(query)![1]!) as string[];
-  return (spec.issues ?? []).filter((i) => !i.hidden && iids.includes(String(i.number))).map((i) => gl.item(spec, i, query));
+  return (spec.issues ?? []).filter((i) => !i.hidden && !i.vanished && iids.includes(String(i.number))).map((i) => gl.item(spec, i, query));
 }
 
 /**
@@ -467,7 +468,7 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
     if (rest[2] === "issues") {
       const self = gl.addr(group, epic);
       const children = gl.links().filter(([a, k]) => k === "parent" && a === self).map(([, , b]) => gl.found(b)).filter((c) => !c.issue.hidden);
-      return exited(0, JSON.stringify(children.map((c) => restIssue(gl, c.spec, c.issue))));
+      return exited(0, JSON.stringify(pageOf(url, children.map((c) => restIssue(gl, c.spec, c.issue)))));
     }
     return exited(0, JSON.stringify(restEpic(gl, group, epic)));
   }
@@ -482,10 +483,11 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
   }
   if (rest[0] === "merge_requests" && rest[2] === "closes_issues") {
     const closes = (world.closingRequests ?? []).filter((r) => r.number === Number(rest[1]) && r.closes.startsWith(`${spec.path}#`));
-    return exited(0, JSON.stringify(closes.map((r) => {
+    if (closes.length === 0 || closes.some((r) => r.vanished)) return notFound;
+    return exited(0, JSON.stringify(pageOf(url, closes.map((r) => {
       const iid = Number(r.closes.split("#")[1]);
       return { id: gidNumber(spec, { number: iid }), iid, project_id: projectId(spec) };
-    })));
+    }))));
   }
   // `weight` and `epic` are given only where the tier that has them is licensed.
   const withTier = (issue: IssueSpec) => {
@@ -510,16 +512,16 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
   }
   if (rest[0] === "issues" && rest.length === 2) {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
-    return issue && !issue.hidden ? exited(0, JSON.stringify(withTier(issue))) : notFound;
+    return issue && !issue.hidden && !issue.vanished ? exited(0, JSON.stringify(withTier(issue))) : notFound;
   }
   if (rest[0] === "issues" && rest[2] === "notes") {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
-    return issue && !issue.hidden ? restNotes(gl, spec, issue, url) : notFound;
+    return issue && !issue.hidden && !issue.vanished ? restNotes(gl, spec, issue, url) : notFound;
   }
   if (rest[0] === "issues" && rest[2] === "links") {
     const issue = spec.issues?.find((i) => i.number === Number(rest[1]));
     // REST's Issue Links don't know a task, as the matrix found on 16.0.
-    if (!issue || issue.hidden || issue.taskLevel) return notFound;
+    if (!issue || issue.hidden || issue.vanished || issue.taskLevel) return notFound;
     const linked = gl.linkedTo(gl.addr(spec, issue)).flatMap(([linkType, to]) => {
       const end = gl.found(to);
       // REST leaves out an Issue this login can't read.
@@ -528,6 +530,13 @@ function restApi(gl: Gitlab, endpoint: string): CliResult {
     return exited(0, JSON.stringify(linked));
   }
   return notFound;
+}
+
+/** The page of `all` a REST request asks for: 20 to a page unless it says. */
+function pageOf<T>(url: URL, all: T[]): T[] {
+  const perPage = Number(url.searchParams.get("per_page") ?? 20);
+  const page = Number(url.searchParams.get("page") ?? 1);
+  return all.slice((page - 1) * perPage, page * perPage);
 }
 
 /** An Issue's or an epic's notes, a page at a time in the order asked for: the notes GitLab makes by itself, marked `system`, and the comments. */
