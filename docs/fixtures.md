@@ -1,5 +1,7 @@
 # Fixture Projects
 
+[← Docs](README.md)
+
 The Projects the live reads assert on (spec #25, Seam B; ADR 0004's nightly tier). What they hold is declared once, in [`test/live/fixtures.ts`](../test/live/fixtures.ts): the seeder writes it to the Trackers, and the live reads assert the adapters read exactly that back. They live in project-owned organisations and groups, never a personal account, and name no person, private Project or machine.
 
 `scripts/fixtures/setup-wizard.sh` walks through every manual step below.

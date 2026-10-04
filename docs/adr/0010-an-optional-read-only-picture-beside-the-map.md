@@ -29,4 +29,4 @@ Publishing the Picture as a claude.ai Artifact is allowed, but only on the user'
 - **Two drawings of one Snapshot.** The HTML Picture and the Map come from the same drawing rules and the same Snapshot, so they never disagree on what's Blocked or on Take next's order.
 - **The Picture can be old.** It is a file, frozen at the Snapshot's age when it was made, and says so.
 - **Size.** The largest Snapshots put tens of thousands of Issues on one page; the page has to stay usable at that size, and an Artifact under its 16 MB limit.
-- **The README's privacy section gains the HTML Picture**: under *On your machine*, the Picture file and how long it is kept; under *Over the network*, that a local Picture sends nothing; and a line that an Artifact sends the Project's open Issue titles to claude.ai, only after the user says yes, each time.
+- **The privacy notes ([docs/privacy.md](../privacy.md)) gain the HTML Picture**: under *On your machine*, the Picture file and how long it is kept; under *Over the network*, that a local Picture sends nothing; and a line that an Artifact sends the Project's open Issue titles to claude.ai, only after the user says yes, each time.
