@@ -2,6 +2,12 @@
 
 What each release changes for someone using the Map. The Release workflow publishes the section headed with the version it releases as that release's notes, and refuses a version with none ([docs/releasing.md](docs/releasing.md)).
 
+## 0.2.1
+
+Nothing about the Map changes, and it needs the same Claude Code and Node.js as 0.2.0.
+
+- The README is laid out anew: a quick start, a tour, the features and a short usage table come first. Every phrase, the privacy notes and troubleshooting have their own pages under `docs/` on GitHub.
+
 ## 0.2.0
 
 It needs the same Claude Code and Node.js as 0.1.0. The status line and `/issue-map` also need a Claude Code build that loads plugins' hooks modules; without one, everything else works, through Claude.
