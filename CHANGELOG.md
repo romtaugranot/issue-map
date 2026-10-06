@@ -2,6 +2,12 @@
 
 What each release changes for someone using the Map. The Release workflow publishes the section headed with the version it releases as that release's notes, and refuses a version with none ([docs/releasing.md](docs/releasing.md)).
 
+## 0.3.0
+
+It needs the same Claude Code and Node.js as 0.2.0.
+
+- The HTML Picture is drawn anew, as a sea chart: it opens on the Issue to start with, each Group is an island you open by selecting it, its Issues rise in with the lines between them, and on a phone they stand in one column. Take next, every Group and the Unlinked Issues slide in as lists.
+
 ## 0.2.1
 
 Nothing about the Map changes, and it needs the same Claude Code and Node.js as 0.2.0.

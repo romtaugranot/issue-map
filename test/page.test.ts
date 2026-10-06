@@ -45,6 +45,14 @@ describe("what the page shows", () => {
     assert.equal(data.issues.find((i) => i.ref === "#1")?.url, "https://github.com/fixture-org/tools/issues/1");
   });
 
+  test("each Take next line carries its reasons apart from the Issue's name, even where the title holds a dash", () => {
+    const data = pageData(snapshot([{ n: 1, title: "Split the runner — then the queue" }, { n: 2 }, { n: 3 }], [[1, "blocks", 2], [1, "blocks", 3]]));
+    const [first] = data.next.picks;
+    assert.equal(data.issues[first!.issue]!.ref, "#1");
+    assert.equal(first!.why, "2 wait on it");
+    assert.ok(first!.line.endsWith(" — ▶2 wait on it"), first!.line);
+  });
+
   test("it says how old its Snapshot is, and why it couldn't be refreshed", () => {
     const data = pageData(built(), { stale: { ageMs: 3_600_000, reason: "github.com didn't answer" } });
     assert.equal(data.readAt, "2026-09-23T00:00:00Z");
@@ -57,6 +65,19 @@ describe("the page itself", () => {
     const html = htmlPicture(built());
     assert.match(html, /<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">/);
     assert.doesNotMatch(html, /<link\b|\bsrc=|@import|url\(/i);
+  });
+
+  test("its script compiles, so the page can draw at all", () => {
+    const scripts = [...htmlPicture(built()).matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    assert.equal(scripts.length, 1);
+    assert.doesNotThrow(() => new Function(scripts[0]![1]!));
+  });
+
+  test("every colour is set for light and dark, and follows a theme a claude.ai Artifact sets", () => {
+    const html = htmlPicture(built());
+    assert.match(html, /@media \(prefers-color-scheme: dark\) \{ :root:not\(\[data-theme="light"\]\)/);
+    assert.match(html, /:root\[data-theme="dark"\]/);
+    assert.match(html, /prefers-reduced-motion: reduce/);
   });
 
   test("a title can't close the script it's kept in", () => {

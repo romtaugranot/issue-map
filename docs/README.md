@@ -45,3 +45,4 @@ Each decision is recorded as an ADR in [`adr/`](adr), along with what was weighe
 | [0010](adr/0010-an-optional-read-only-picture-beside-the-map.md) | An optional, read-only HTML Picture beside the in-session Map |
 | [0011](adr/0011-the-status-line-is-the-plugins-own.md) | The status line is the plugin's own, pinned by a hooks module |
 | [0012](adr/0012-a-slash-command-shows-the-map-without-claude.md) | A slash command shows the Map without Claude |
+| [0013](adr/0013-the-html-picture-draws-groups-as-islands.md) | The HTML Picture draws Groups as islands |

@@ -36,7 +36,7 @@ On GitLab Free and CE, and on GHES 3.18, the Tracker records no Blocks Links, so
 | You say | What happens |
 |---|---|
 | `group 1 as Mermaid` | That Group's Picture, or the Picture around an Issue, as a Mermaid block to paste where GitHub or GitLab render it, such as a comment on the Group's head Issue. It draws one box per Issue, with Blocks as arrows toward the Issue that waits. `as DOT` gives Graphviz's DOT instead. Nothing is written to the Tracker |
-| `show the whole Map in a browser` | One read-only HTML page of the whole Map: Take next, every Group as a tile to open, and the Unlinked Issues. Each Issue has a copy button for its URL, which you paste back into the conversation to open its card. The page opens in your browser. Over SSH, it prints the path and an `scp` command to fetch it. In a cloud or Remote Control session, it says the page can't reach your device |
+| `show the whole Map in a browser` | One read-only HTML page of the whole Map: the Issue to start with, every Group as an island to open, and lists of Take next, every Group and the Unlinked Issues. Each Issue has a copy button for its URL, which you paste back into the conversation to open its card. The page opens in your browser. Over SSH, it prints the path and an `scp` command to fetch it. In a cloud or Remote Control session, it says the page can't reach your device |
 | `publish the whole Map as an Artifact` | The same page as a private claude.ai Artifact, for a session the local page can't reach. It asks before every publish, naming the Project and what is sent, and never shares it. Not offered under `claude -p`, with an API key, on Bedrock, Vertex or Foundry, or where Artifacts are turned off |
 
 ### Acting on an Issue
