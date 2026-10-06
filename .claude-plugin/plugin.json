@@ -1,7 +1,7 @@
 {
   "name": "issue-map",
   "description": "Draws a Project's open Issues as a Map joined by the Links its Tracker records, inside Claude Code.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": {
     "name": "romtaugranot",
     "url": "https://github.com/romtaugranot"
