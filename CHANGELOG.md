@@ -2,6 +2,12 @@
 
 What each release changes for someone using the Map. The Release workflow publishes the section headed with the version it releases as that release's notes, and refuses a version with none ([docs/releasing.md](docs/releasing.md)).
 
+## 0.3.1
+
+It needs the same Claude Code and Node.js as 0.3.0.
+
+- The HTML Picture's Take next list no longer ends in "nullnullnull" when no Issue in it is taken by others.
+
 ## 0.3.0
 
 It needs the same Claude Code and Node.js as 0.2.0.

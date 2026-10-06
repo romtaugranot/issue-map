@@ -435,7 +435,8 @@ const list = el("aside", { class: "list off" });
 page.append(list);
 const closeList = () => list.classList.add("off");
 function openList(head, ...body) {
-  list.replaceChildren(el("h2", {}, head, el("button", { class: "btn", textContent: "Close", onclick: closeList })), ...body);
+  // A part a list lacks is null, which the DOM would print as the word.
+  list.replaceChildren(el("h2", {}, head, el("button", { class: "btn", textContent: "Close", onclick: closeList })), ...body.filter((part) => part != null));
   list.scrollTop = 0;
   list.classList.remove("off");
 }
