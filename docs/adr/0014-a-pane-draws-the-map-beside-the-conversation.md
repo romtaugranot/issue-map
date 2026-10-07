@@ -6,7 +6,7 @@ It is drawn from what `issue-map pane` prints: the HTML Picture's own data (ADR 
 
 It is made of screens that lead one to another, each fitting the pane with no scroll bar:
 
-- **Map**: the Project, a share line ("15 to take next, 34 waiting, 228 other Unlinked"), the Issue to start with, the Groups as a sea chart that fills the rest, and buttons for Take next, the Groups and the Unlinked list.
+- **Map**: the Project, a share line ("15 to take next, 34 waiting, 228 other Unlinked"), the Issue to start with, the Groups as a sea chart that fills the rest, and buttons for Take next, the Groups and the Unlinked list. A Project with no Group to draw lists its Unlinked Issues in the chart's place, beside Suggest Links ↗.
 - **Island**: a Group opened in place. It grows into the chart while the others sink, and its Issues stand as one outline, as the HTML Picture draws a narrow screen (ADR 0013). A red arrow is a Blocks Link and a dotted line a Parent Link, and no line crosses a box. Each box says its state in a word: "1st in Take next", "Unblocked", "Blocked" or "Outside".
 - **Issue**: its title and state, Brief me ↗, Assign to me ↗, a link to the Tracker, and its Links to go on to.
 - **Take next, Groups and Unlinked**: one list each, paged to fit.
