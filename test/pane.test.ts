@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { pageData } from "../src/map/page.ts";
 import { paneData, type PaneData } from "../src/map/pane.ts";
-import { earlier, islandChart, islandPage, packIslands, seaChart, shareBar } from "../src/pane/chart.ts";
+import { CELL, earlier, islandChart, islandPage, isleCaption, isleLabel, packIslands, seaChart, shareBar, TEXT } from "../src/pane/chart.ts";
 import { fitLine, textWidth, wrap } from "../src/pane/fit.ts";
 import { groupOf, island, issueAt, issueSaid, membersOf, ordinal, outline, shares, stateOf, upOf } from "../src/pane/screens.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
@@ -186,6 +186,26 @@ describe("the chart", () => {
     }
   });
 
+  test("an opened island's boxes lie on the pane's cells, a row for the reference and one for each line of the title, so the pane can write them in", () => {
+    const d = paneData(recorded("opentofu__opentofu"));
+    for (const [w, h] of SIZES) {
+      for (const b of islandPage(d, 0, w, h, {}).boxes) {
+        assert.deepEqual([b.x % CELL.w, b.y % CELL.h, b.w % CELL.w, b.h % CELL.h], [0, 0, 0, 0]);
+        assert.equal(b.h / CELL.h, 1 + b.lines.length);
+        for (const line of b.lines) assert.ok(textWidth(line, TEXT) <= b.w - 2 * CELL.w, line);
+      }
+    }
+  });
+
+  test("an island's label gives its size only where the island holds it", () => {
+    const d = paneData(recorded("opentofu__opentofu"));
+    for (const c of packIslands(d, 420, 600)) {
+      const { n, size } = isleLabel(d, c);
+      assert.equal(n, String(c.k + 1));
+      if (size) assert.ok(textWidth(size, TEXT) <= 2 * c.r - 10);
+    }
+  });
+
   test("an opened island's lines never cross a box", () => {
     const d = paneData(recorded("opentofu__opentofu"));
     for (let k = 0; k < d.groups.length; k++) {
@@ -214,11 +234,13 @@ describe("the chart", () => {
     assert.ok(page.boxes.some((b) => b.i === last));
   });
 
-  test("is one SVG document, its titles as text, never markup", () => {
+  test("is one SVG document, its titles as text, never markup, as is each island's name card", () => {
     const s = small();
     s.issues[3]!.title = `</text><script>alert(1)</script> & "quoted"`;
     const d = paneData(s);
-    for (const source of [seaChart(d, 420, 400, { caps: true }).source, islandChart(d, 0, 420, 400, islandPage(d, 0, 420, 400, {}), { grow: true })]) {
+    const cards = d.groups.map((_, k) => isleCaption(d, k, 420).source);
+    assert.ok(cards.some((card) => card.includes("&#60;/text&#62;&#60;script&#62;")));
+    for (const source of [seaChart(d, 420, 400).source, islandChart(d, 0, 420, 400, islandPage(d, 0, 420, 400, {}), { grow: true }), ...cards]) {
       assert.match(source, /^<svg [^>]*>[\s\S]*<\/svg>$/);
       assert.doesNotMatch(source, /<script/);
       assert.ok(source.length < 131_072);
@@ -227,7 +249,7 @@ describe("the chart", () => {
 
   test("an island's lantern marks a Group holding an Issue in Take next, larger on the one to start with", () => {
     const d = paneData(small());
-    const { source } = seaChart(d, 420, 400, { caps: false });
+    const { source } = seaChart(d, 420, 400);
     assert.equal((source.match(/fill="var\(--pick\)"/g) ?? []).length, 2);
     assert.match(source, /r="6" fill="var\(--pick\)"/);
   });

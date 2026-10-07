@@ -21,8 +21,8 @@
 import type { EngineInterface, Register, RenderElement } from "claude-code";
 import type { IssueMapProgress, IssueMapRead, IssueMapScreen } from "../types";
 import type { PaneData, PaneLink } from "../src/map/pane.ts";
-import { earlier, islandChart, islandPage, seaChart, shareBar } from "../src/pane/chart.ts";
-import { fitLine } from "../src/pane/fit.ts";
+import { CELL, earlier, islandChart, islandPage, isleCaption, isleLabel, seaChart, shareBar, TEXT } from "../src/pane/chart.ts";
+import { fitLine, textWidth } from "../src/pane/fit.ts";
 import {
   count,
   firstPick,
@@ -47,7 +47,7 @@ import {
   type Screen,
   type Tone,
 } from "../src/pane/screens.ts";
-import type { ChartProps } from "./chart.tsx";
+import type { LinkPost, LinkProps } from "./link.tsx";
 
 /** How often the row is worked out again while nothing else happens: the refresher keeps a new one every 90 s, and its age goes on growing. */
 const EVERY_MS = 60_000;
@@ -70,15 +70,20 @@ const READ_EVERY_MS = 120_000;
 const FOLLOW_MS = 1_000;
 /** How long an opened island grows into the chart: its screen draws the growing only this soon after. */
 const GROWS_MS = 1_500;
+/** The cells a Link's role takes on an Issue's screen: "Blocked by". */
+const ROLE = 10;
+/** How soon after a press the pane asks for the keys back, once the press has drawn the next screen. */
+const REFOCUS_MS = 120;
 
 /**
- * A cell of the pane in CSS pixels, as the desktop app's code font is
- * reckoned to set it: the chart is drawn this many pixels to a cell, then
- * scaled to the pane's width, so only the ratio of the two must hold for the
- * chart to fill its cells.
+ * Rows each part of a screen takes: as the terminal draws it, and as the
+ * desktop app was measured to, where a gap is half a row, a Button or the
+ * share bar with its line a row and a third, and a panel's frame most of one.
  */
-const CELL_W = 8;
-const CELL_H = 20;
+const ROWS = {
+  terminal: { gap: 1, button: 1, bar: 1, frame: 2 },
+  remote: { gap: 0.5, button: 1.3, bar: 1.3, frame: 0.8 },
+} as const;
 
 /** One of the plugin's launchers: itself, or on Windows, where a bash script can't be started without a shell, Node on its source. */
 function launch($: EngineInterface, bin: string, source: string): string[] {
@@ -118,10 +123,10 @@ async function answer($: EngineInterface, args: string): Promise<string> {
   return (await run($, ["--shown", ...argv], 60_000)).text.trimEnd();
 }
 
-/** Opens the pane on the Map, and reads what it draws. */
+/** Opens the pane on the Map, holding the keys where the prompt gives them up, so its first click presses; and reads what it draws. */
 async function openPane($: EngineInterface): Promise<string> {
   await $.state.set(SCREEN, { kind: "map" });
-  const opened = await $.ui.open({ id: PANE, title: "Issue Map" });
+  const opened = await $.ui.open({ id: PANE, title: "Issue Map", focus: true });
   void readPane($);
   return opened.isPlaced ? "Opened the Issue Map pane." : `The Issue Map pane is open, but not shown: ${opened.reason}`;
 }
@@ -155,8 +160,19 @@ function parse(text: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * After a press draws the next screen, the desktop app hands the keys back to
+ * the prompt, and takes the next click on the pane to give them back, so it
+ * presses nothing: the pane asks for them again. Only granted while the
+ * prompt holds the keys over an empty composer, so nothing typed is taken.
+ */
+const refocus = ($: EngineInterface) => $.clock.after(REFOCUS_MS, () => void $.ui.open({ id: PANE, title: "Issue Map", focus: true }));
+
 /** Whether the pane is open; not, where nothing says. */
 const isOpen = async ($: EngineInterface) => (await $.ui.panes().catch(() => [])).some((pane) => pane.id === PANE);
+
+/** Whether a region taking the pane's presses failed on the desktop, so the pane is drawn without them. */
+let clientFailed = false;
 
 /** The last data read, parsed once. */
 let parsed: { json: string; data: PaneData } | null = null;
@@ -174,15 +190,6 @@ const fit = (text: string, cells: number) => fitLine(text, Math.max(1, cells) * 
 
 /** Markdown that prints `text` as typed. */
 const md = (text: string) => text.replace(/[\\`*_~[\]<>|&#]/g, "\\$&");
-
-/** Where a press on a link in the pane goes: an Issue, or a Group by its head; no link leaves the pane. */
-const href = (to: { issue: string } | { group: string }) => ("issue" in to ? `https://issue-map.invalid/issue/${encodeURIComponent(to.issue)}` : `https://issue-map.invalid/group/${encodeURIComponent(to.group)}`);
-function hrefTo(link: string): { issue: string } | { group: string } | null {
-  const m = /^https:\/\/issue-map\.invalid\/(issue|group)\/(.+)$/.exec(link);
-  if (!m) return null;
-  const ref = decodeURIComponent(m[2]!);
-  return m[1] === "issue" ? { issue: ref } : { group: ref };
-}
 
 /** An SVG drawn `w` pixels across, made wider than any pane, so the pane draws it exactly as wide as itself. */
 const wide = (source: string, w: number) => source.replace(/ width="[\d.]+" height="[\d.]+"/, (sized) => sized.replace(/[\d.]+/g, (n) => String(Math.round(Number(n) * (4000 / w)))));
@@ -210,35 +217,33 @@ export const register: Register = (on) => {
   });
   on("command.run", { command: "issue-map" }, async ($, e) => ({ text: await answer($, e.args) }));
 
-  // A press on the chart, which the region laid over it posts.
-  on("ui.message", { requestId: PANE, element: "chart" }, async ($, e) => {
-    const data = dataOf((await $.state.get(READ)).value);
-    const open = (e.data as { open?: unknown } | null)?.open;
-    if (!data || typeof open !== "string") return {};
-    const { value: screen } = await $.state.get(SCREEN);
-    if (screen?.kind === "island") {
-      if (issueAt(data, open) !== undefined) await $.state.set(SCREEN, { kind: "issue", ref: open });
-    } else {
-      const k = groupAt(data, open);
-      if (k !== undefined) await $.state.set(SCREEN, island(data, k, { openedAt: await $.clock.now() }));
-    }
+  // Where a link's region fails, the pane is drawn without them, Buttons standing in.
+  on("ui.fault", { requestId: PANE }, ($, e) => {
+    clientFailed = true;
+    $.ui.log(`The Issue Map pane's links can't be drawn here (${e.phase}: ${e.reason}); Buttons stand in for them.`);
+    return {};
+  });
+
+  // What a link posts: the screen it leads to.
+  on("ui.message", { requestId: PANE }, async ($, e) => {
+    const post = e.data as LinkPost | null;
+    if (post && typeof post === "object" && typeof post.go?.kind === "string") await $.state.set(SCREEN, post.go).then(() => refocus($));
     return {};
   });
 
   on("ui.render", { component: "Pane", requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Markdown, Link } = $.ui.resolve(e);
-    // A chart where a surface draws one, pressed through a region laid over it where a surface draws that too.
+    // A chart where a surface draws one, its labels Buttons laid over it; and on the desktop, regions drawing the links, whose presses its Markdown hands no plugin.
     const pictured = e.surface === "terminal" ? null : $.ui.resolve(e);
-    const pressed = e.surface === "desktop" ? $.ui.resolve(e) : null;
+    const pressed = e.surface === "desktop" && !clientFailed ? $.ui.resolve(e) : null;
     const surface = e.surface;
     const columns = Math.max(20, e.props.bodyColumns);
     const rows = Math.max(8, e.props.scroll.bodyRows);
     const { value: read } = await $.state.get(READ);
     const { value: reading = false } = await $.state.get(READING);
     const data = dataOf(read);
-    const go = (to: Screen) => void $.state.set(SCREEN, to as IssueMapScreen);
-    /** On the terminal Buttons are one row; a desktop's are about two. */
-    const BUTTON = surface === "terminal" ? 1 : 2;
+    const go = (to: Screen) => void $.state.set(SCREEN, to as IssueMapScreen).then(() => refocus($));
+    const size = surface === "terminal" ? ROWS.terminal : ROWS.remote;
 
     if (!data && read?.reading) {
       const progress = read.reading;
@@ -280,15 +285,18 @@ export const register: Register = (on) => {
     const screen: Screen =
       stored?.kind === "island" && groupAt(d, stored.head) === undefined ? { kind: "map" } : stored?.kind === "issue" && issueAt(d, stored.ref) === undefined ? { kind: "map" } : (stored ?? { kind: "map" });
     const now = await $.clock.now();
-    const pressable = (i: number) => href({ issue: d.issues[i]!.ref });
 
-    /** A link to Issue `i` that opens its screen, its title cut to `cells`. */
+    /** A link reading `text` that opens `to`: on the desktop a region drawing it, cut to its room; elsewhere a Button, its text cut to `cells`. */
+    const linkTo = (key: string, text: string, cells: number, to: Screen, marked = false): RenderElement => {
+      if (!pressed) return <Button key={key} plain label={fit(text, cells)} onPress={() => go(to)} />;
+      const props: LinkProps = { text, bold: marked, to: to as IssueMapScreen };
+      return <pressed.Client key={key} module="./link.tsx" props={props} width={cells} height={1} />;
+    };
+    /** A link to Issue `i` that opens its screen. */
     const issueLink = (key: string, i: number, cells: number, marked = false): RenderElement => {
       const issue = d.issues[i]!;
-      const text = `${md(issue.ref)} ${md(fit(plain(issue.title), cells - issue.ref.length - 1))}`;
       if (surface === "terminal") return <Text bold={marked}>{`${issue.ref} ${fit(plain(issue.title), cells - issue.ref.length - 1)}`}</Text>;
-      const link = `[${text}](${pressable(i)})`;
-      return <Markdown key={key} text={marked ? `**${link}**` : link} pressableLinks={[pressable(i)]} onLinkPress={() => go({ kind: "issue", ref: issue.ref })} />;
+      return linkTo(key, `${issue.ref} ${plain(issue.title)}`, cells, { kind: "issue", ref: issue.ref }, marked);
     };
 
     /** The way up, named for where it leads, and what this screen is. */
@@ -320,7 +328,9 @@ export const register: Register = (on) => {
     /** A numbered row of a list: its number, a link, and a dim line under it. */
     const numbered = (key: string, n: number, link: RenderElement, under: string): RenderElement => (
       <Box key={key} flexDirection="row" gap={1}>
-        <Text dimColor>{`${count(n)}.`.padStart(4)}</Text>
+        <Box width={4} flexShrink={0} justifyContent="flex-end">
+          <Text dimColor>{`${count(n)}.`}</Text>
+        </Box>
         <Box flexDirection="column" flexGrow={1}>
           {link}
           {under && (
@@ -339,27 +349,39 @@ export const register: Register = (on) => {
         const slash = d.project.lastIndexOf("/");
         // A bar over the share line where a chart is drawn, and Start with in a panel round it.
         const barred = pictured !== null;
-        const panel = first !== undefined ? 2 + 2 : 1;
-        // Title, the share line, Start with, the buttons, and a row between each.
-        const fixed = 1 + 1 + (barred ? 2 : 1) + 1 + panel + 1 + BUTTON + 1;
+        const panel = first !== undefined ? 2 + size.frame : 1;
+        // Title, the share line, Start with, the buttons, and a gap between each.
+        const fixed = Math.ceil(1 + size.gap + size.bar + size.gap + panel + size.gap + size.gap + size.button);
         const room = rows - fixed;
         const sea = d.groups.length > 0 && room >= 5;
         let chart: RenderElement | null = null;
         if (sea && pictured) {
           const { Svg } = pictured;
-          const w = columns * CELL_W;
-          const high = room * CELL_H;
-          const Client = pressed?.Client;
-          const drawn = seaChart(d, w, high, { caps: !Client });
-          const props: ChartProps = { width: w, height: high, isles: drawn.isles.map((c) => [c.x, c.y, c.r, d.issues[d.groups[c.k]!.head]!.ref, nameOf(d, d.groups[c.k]!.head), groupSaid(d.groups[c.k]!)]), boxes: [] };
+          const w = columns * CELL.w;
+          const high = room * CELL.h;
+          const drawn = seaChart(d, w, high);
+          // An image, which takes no press, so each island's label is a Button laid over it; and a hover scope, so pointing at it shows its name card over the chart's foot.
           chart = (
             <Box key="sea" height={room} overflow="hidden">
-              <Svg source={wide(drawn.source, w)} alt={`${plural(d.groups.length, "Group")} as islands`} isInteractive />
-              {Client && (
-                <Box position="absolute" top={0} left={0} right={0} bottom={0}>
-                  <Client key="chart" module="./chart.tsx" props={props} width="100%" height={room} />
-                </Box>
-              )}
+              <Svg source={wide(drawn.source, w)} alt={`${plural(d.groups.length, "Group")} as islands`} />
+              {drawn.isles.map((c) => {
+                const label = isleLabel(d, c);
+                const tall = label.size ? 2 : 1;
+                const span = Math.ceil(textWidth(label.size || label.n, TEXT) / CELL.w) + 2;
+                const top = Math.max(0, Math.round(c.y / CELL.h - tall / 2));
+                const left = Math.max(0, Math.round(c.x / CELL.w - span / 2));
+                const caption = isleCaption(d, c.k, w);
+                const open = () => void $.clock.now().then((at) => go(island(d, c.k, { openedAt: at })));
+                return (
+                  <Box key={`isle${c.k}`} position="absolute" top={top} left={left} width={span} flexDirection="column" alignItems="center">
+                    <Button key={`isle-${c.k}`} plain label={label.n} onPress={open} />
+                    {label.size && <Button key={`isle-${c.k}-size`} plain dimColor label={label.size} onPress={open} />}
+                    <Box position="absolute" top={room - caption.rows - top} left={-left} width={columns} display="none" hover={{ display: "flex" }}>
+                      <Svg source={wide(caption.source, w)} alt={nameOf(d, d.groups[c.k]!.head)} />
+                    </Box>
+                  </Box>
+                );
+              })}
             </Box>
           );
         } else if (sea) {
@@ -398,7 +420,7 @@ export const register: Register = (on) => {
               {d.project.slice(slash + 1)}
             </Text>
             <Box flexDirection="column">
-              {barred && pictured && <pictured.Svg source={wide(shareBar([parts.next, parts.waiting, parts.unlinked], columns * CELL_W), columns * CELL_W)} alt={`${count(parts.next)} to take next, ${count(parts.waiting)} waiting, ${count(parts.unlinked)} Unlinked`} />}
+              {barred && pictured && <pictured.Svg source={wide(shareBar([parts.next, parts.waiting, parts.unlinked], columns * CELL.w), columns * CELL.w)} alt={`${count(parts.next)} to take next, ${count(parts.waiting)} waiting, ${count(parts.unlinked)} Unlinked`} />}
               <Text wrap="truncate-end">
                 <Text bold color={COLOR.pick}>{count(parts.next)}</Text>
                 <Text dimColor> to take next, </Text>
@@ -440,32 +462,52 @@ export const register: Register = (on) => {
       case "island": {
         const k = groupAt(d, screen.head)!;
         const g = d.groups[k]!;
-        const room = rows - BUTTON - 1 - BUTTON - 1;
+        const room = rows - Math.ceil(size.button + size.gap + size.gap + size.button);
         const head = topRow(`Group ${count(k + 1)}`, `of ${count(d.groups.length)}`);
         const mark = screen.mark === undefined ? undefined : issueAt(d, screen.mark);
-        if (pressed) {
-          const { Svg, Client } = pressed;
-          const w = columns * CELL_W;
-          const high = room * CELL_H;
+        if (pictured) {
+          const { Svg } = pictured;
+          const w = columns * CELL.w;
+          const high = room * CELL.h;
           const page = islandPage(d, k, w, high, { ...(screen.from === undefined ? {} : { from: screen.from }), ...(mark === undefined ? {} : { mark }) });
           const grow = screen.openedAt !== undefined && now - screen.openedAt < GROWS_MS;
           const source = islandChart(d, k, w, high, page, { ...(mark === undefined ? {} : { mark }), grow });
-          const props: ChartProps = { width: w, height: high, isles: [], boxes: page.boxes.map((b) => [b.x, b.y, b.w, b.h, d.issues[b.i]!.ref]) };
-          const end = page.first + page.boxes.length;
+          // The chart draws each Issue's box; its words are laid over it, its title Buttons that open it.
           return (
             <Box flexDirection="column" gap={1} height={rows}>
               {head}
               <Box key="island" height={room} overflow="hidden">
-                <Svg source={wide(source, w)} alt={`${nameOf(d, g.head)}: ${groupSaid(g)}`} isInteractive />
-                <Box position="absolute" top={0} left={0} right={0} bottom={0}>
-                  <Client key="chart" module="./chart.tsx" props={props} width="100%" height={room} />
+                <Svg source={wide(source, w)} alt={`${nameOf(d, g.head)}: ${groupSaid(g)}`} />
+                <Box position="absolute" top={0} left={2}>
+                  <Text dimColor bold wrap="truncate-end">
+                    {groupSaid(g)}
+                  </Text>
                 </Box>
+                {page.boxes.map((b, j) => {
+                  const issue = d.issues[b.i]!;
+                  const state = stateOf(d, b.i);
+                  const open = () => go({ kind: "issue", ref: issue.ref });
+                  return (
+                    <Box key={`b${j}`} position="absolute" top={b.y / CELL.h} left={b.x / CELL.w + 1} width={b.w / CELL.w - 2} flexDirection="column">
+                      <Box flexDirection="row" justifyContent="space-between">
+                        <Text wrap="truncate-end">
+                          {state && <Text color={COLOR[state.tone]}>● </Text>}
+                          <Text dimColor>{issue.ref}</Text>
+                        </Text>
+                        {state && <Text color={COLOR[state.tone]}>{state.word}</Text>}
+                      </Box>
+                      {b.lines.map((line, l) => (
+                        <Button key={l === 0 ? `row-${j}` : `row-${j}-${l}`} plain label={line} onPress={open} />
+                      ))}
+                    </Box>
+                  );
+                })}
               </Box>
               {pager(page.first, page.boxes.length, page.rows, (first, back) => go({ kind: "island", head: screen.head, from: back ? earlier(d, k, w, high, first) : first }))}
             </Box>
           );
         }
-        // Where the chart can't be pressed, the outline is a list of its Issues, indented as the chart draws it.
+        // On the terminal, which draws no chart, the outline is a list of its Issues, indented as the chart draws it.
         const all = outline(g);
         const per = Math.max(1, Math.min(9, room));
         const at = mark === undefined ? -1 : all.findIndex((r) => r.i === mark);
@@ -499,25 +541,36 @@ export const register: Register = (on) => {
         const links: PaneLink[] = d.links[i] ?? [];
         // The title wraps to three lines at most.
         const titleRows = Math.min(3, Math.ceil(((issue.ref.length + issue.title.length + 1) * 1.3) / columns)) * (surface === "terminal" ? 1 : 2);
-        const room = rows - BUTTON - 1 - titleRows - 1 - 1 - BUTTON - 1 - BUTTON;
+        const room = rows - Math.ceil(size.button + size.gap + titleRows + 1 + size.gap + size.button + size.gap + size.button);
         const per = Math.max(1, Math.min(surface === "terminal" ? 9 : 40, room));
         const first = Math.min(links.length - 1, Math.max(0, (screen.page ?? 0) * per));
         const linkRow = (l: PaneLink, j: number) => {
           const state = !l.open ? { word: "Closed", tone: "muted" as Tone } : l.to === undefined ? null : stateOf(d, l.to);
-          const label = `${l.ref} ${fit(plain(l.title), columns - l.ref.length - 26)}`;
+          // The role and the state word keep their room, and the link takes what's left, so a long title is cut and never pushes the word off.
+          const word = !state ? 0 : surface === "terminal" ? state.word.length : Math.ceil(textWidth(state.word, TEXT) / CELL.w);
+          const cells = columns - ROLE - 1 - (state ? word + 1 : 0) - 1;
+          const label = `${l.ref} ${fit(plain(l.title), cells - l.ref.length - 1)}`;
           return (
             <Box key={`l${j}`} flexDirection="row" gap={1}>
-              <Text dimColor>{ROLES[l.role].padEnd(10)}</Text>
-              <Box flexGrow={1}>
+              <Box width={ROLE} flexShrink={0}>
+                <Text dimColor wrap="truncate-end">
+                  {ROLES[l.role]}
+                </Text>
+              </Box>
+              <Box width={cells} flexShrink={0} overflow="hidden">
                 {l.to === undefined ? (
                   <Text dimColor={!l.open} wrap="truncate-end">{label}</Text>
                 ) : surface === "terminal" ? (
                   <Button key={`link-${j}`} plain hotkey={String(j + 1)} label={label} onPress={() => go({ kind: "issue", ref: d.issues[l.to!]!.ref })} />
                 ) : (
-                  issueLink(`link-${j}`, l.to, columns - 26)
+                  issueLink(`link-${j}`, l.to, cells)
                 )}
               </Box>
-              {state && <Text color={COLOR[state.tone]}>{state.word}</Text>}
+              {state && (
+                <Box flexShrink={0}>
+                  <Text color={COLOR[state.tone]}>{state.word}</Text>
+                </Box>
+              )}
             </Box>
           );
         };
@@ -549,7 +602,7 @@ export const register: Register = (on) => {
         const which: List = screen.which;
         const total = which === "next" ? d.next.picks.length : which === "groups" ? d.groups.length : d.unlinked.length;
         const tall = which === "unlinked" ? 1 : 2;
-        const room = rows - BUTTON - 1 - BUTTON - 1;
+        const room = rows - Math.ceil(size.button + size.gap + size.gap + size.button);
         const per = Math.max(1, Math.min(surface === "terminal" ? 9 : 99, Math.floor(room / tall)));
         const mark = screen.mark === undefined ? undefined : issueAt(d, screen.mark);
         const markAt = mark === undefined ? -1 : d.unlinked.indexOf(mark);
@@ -559,12 +612,11 @@ export const register: Register = (on) => {
           const hot = surface === "terminal" ? String(j + 1) : undefined;
           if (which === "groups") {
             const g = d.groups[n]!;
-            const name = fit(nameOf(d, g.head), columns - 8);
             const link =
               surface === "terminal" ? (
-                <Button key={`row-${j}`} plain hotkey={hot!} label={name} onPress={() => go(island(d, n))} />
+                <Button key={`row-${j}`} plain hotkey={hot!} label={fit(nameOf(d, g.head), columns - 8)} onPress={() => go(island(d, n))} />
               ) : (
-                <Markdown key={`row-${j}`} text={`[${md(name)}](${href({ group: d.issues[g.head]!.ref })})`} pressableLinks={[href({ group: d.issues[g.head]!.ref })]} onLinkPress={() => go(island(d, n))} />
+                linkTo(`row-${j}`, nameOf(d, g.head), columns - 6, island(d, n))
               );
             return numbered(`n${j}`, n + 1, link, `${groupSaid(g)}${holdsNext(d, g) ? ", holds Take next" : ""}`);
           }
@@ -574,7 +626,7 @@ export const register: Register = (on) => {
             surface === "terminal" ? (
               <Button key={`row-${j}`} plain hotkey={hot!} label={`${issue.ref} ${fit(plain(issue.title), columns - issue.ref.length - 12)}`} onPress={() => go({ kind: "issue", ref: issue.ref })} />
             ) : (
-              issueLink(`row-${j}`, i, columns - 8, i === mark)
+              issueLink(`row-${j}`, i, which === "unlinked" ? columns - 1 : columns - 6, i === mark)
             );
           if (which === "next") return numbered(`n${j}`, n + 1, link, d.because[n] || "Nothing open blocks it");
           return <Box key={`n${j}`}>{link}</Box>;

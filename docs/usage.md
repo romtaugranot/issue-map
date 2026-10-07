@@ -66,7 +66,7 @@ It needs a Claude Code build that loads plugins' hooks modules.
 
 ## The Issue Map pane
 
-`/issue-map pane` opens the Map in a pane beside the conversation ([ADR 0014](adr/0014-a-pane-draws-the-map-beside-the-conversation.md)). It opens on the Map: the Project, how many Issues are there to take next, waiting and Unlinked, the Issue to start with, and each Group as an island, its ring filling with the share Unblocked and a lantern on one holding an Issue in Take next. Point at an island to name it, and select it to open it. Its Issues stand in one column, each under the one it was reached from: a red arrow is a Blocks Link and a dotted line a Parent Link.
+`/issue-map pane` opens the Map in a pane beside the conversation ([ADR 0014](adr/0014-a-pane-draws-the-map-beside-the-conversation.md)). It opens on the Map: the Project, how many Issues are there to take next, waiting and Unlinked, the Issue to start with, and each Group as an island, its ring filling with the share Unblocked and a lantern on one holding an Issue in Take next. Point at an island's number to name it, and select it to open it. Its Issues stand in one column, each under the one it was reached from: a red arrow is a Blocks Link and a dotted line a Parent Link. Select an Issue's title to open it.
 
 Select an Issue for its screen: its state, its Links to go on to, a link to the Tracker, **Brief me ↗**, which asks Claude to start work on it, and **Assign to me ↗**, which puts the request in the prompt box for you to send. The "←" button goes up a level and names where: an Issue to its Group, or in none to the Unlinked list, and a Group or a list to the Map. Take next, the Groups and the Unlinked list each have a button on the Map.
 

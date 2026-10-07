@@ -28,8 +28,8 @@ function world(on: On, printed = PRINTED, later: string[] = []) {
   on("turn.complete", (_$, e) => ({ text: e.answer }));
   const clock = mock.clock(on);
   on("ui.status", () => ({ value: undefined }));
-  on("ui.open", (_$, e) => (opened.push(e.id), { value: { isPlaced: true as const } }));
-  on("ui.panes", () => ({ value: opened.map((id) => ({ id, title: "Issue Map", isShown: true, isFocused: false, isPlaced: true })) }));
+  on("ui.open", (_$, e) => (opened.push(e.focus ? `${e.id}, focused` : e.id), { value: { isPlaced: true as const } }));
+  on("ui.panes", () => ({ value: [...new Set(opened.map((id) => id.split(",")[0]!))].map((id) => ({ id, title: "Issue Map", isShown: true, isFocused: false, isPlaced: true })) }));
   on("prompt.submit", (_$, e) => (submitted.push(e.text), { text: e.text }));
   on("prompt.fill", (_$, e) => (filled.push(e.text), { isFilled: true }));
   on("process.run", (_$, e) => {
@@ -56,22 +56,30 @@ const PANE: RenderPropsOf["Pane"] = { title: "Issue Map", isFocused: true, bodyC
 const mount = ($: Engine, surface: (typeof SURFACES)[number]) =>
   $.ui.mount({ plugin: "issue-map", surface, component: "Pane", requestId: "map", props: PANE, viewport: { columns: 160, rows: 40, isFullscreen: true } });
 
-/** Every text the drawing shows, in order. */
-async function shown(ui: { findAll: (q: { type?: string }) => Promise<{ text: string }[]> }): Promise<string> {
-  const found = [...(await ui.findAll({ type: "Text" })), ...(await ui.findAll({ type: "Markdown" })), ...(await ui.findAll({ type: "Button" }))];
-  return found.map((t) => t.text).join(" | ");
+type Found = { text: string; props: { props?: { text?: string; to?: unknown } } };
+type Drawn = { findAll: (q: { type?: string }) => Promise<Found[]>; find: (q: { type?: string; key?: string }) => Promise<Found | undefined> };
+
+/** Every text the drawing shows, in order, the desktop's links' included. */
+async function shown(ui: Drawn): Promise<string> {
+  const found = [...(await ui.findAll({ type: "Text" })), ...(await ui.findAll({ type: "Markdown" })), ...(await ui.findAll({ type: "Button" }))].map((t) => t.text);
+  const links = (await ui.findAll({ type: "Client" })).map((c) => c.props.props?.text ?? "");
+  return [...found, ...links].join(" | ");
 }
 
-/** Opens what a row or a Link shows: its Button on the terminal, its link on the desktop. */
-const open = (ui: { press: (t: { key: string; link?: { href: string } }) => Promise<unknown> }, surface: (typeof SURFACES)[number], key: string, to: string) =>
-  surface === "terminal" ? ui.press({ key }) : ui.press({ key, link: { href: `https://issue-map.invalid/${to}` } });
+/** Opens what a row or a Link shows: its Button on the terminal; on the desktop its link, which posts the screen it leads to. */
+async function open(ui: Drawn & { press: (t: { key: string }) => Promise<unknown>; post: (data: unknown, at: { in: string }) => Promise<unknown> }, surface: (typeof SURFACES)[number], key: string) {
+  if (surface === "terminal") return ui.press({ key });
+  const link = await ui.find({ type: "Client", key });
+  expect(link?.props.props?.to).toBeDefined();
+  return ui.post({ go: link!.props.props!.to }, { in: key });
+}
 
-test("/issue-map pane opens the pane on the Map, read from the plugin's own CLI where the session is", async ($, on) => {
+test("/issue-map pane opens the pane on the Map, asking for the keys, read from the plugin's own CLI where the session is", async ($, on) => {
   const { ran, opened, clock } = world(on);
   await start($);
   const { text } = await command($, clock, "pane");
   expect(text).toBe("Opened the Issue Map pane.");
-  expect(opened).toEqual(["map"]);
+  expect(opened).toEqual(["map, focused"]);
   expect(ran).toEqual([["pane"]]);
 });
 
@@ -91,10 +99,10 @@ test("the Map screen leads with the Project, the share line, where to start, and
     expect((await ui.find({ key: "next" }))?.text).toBe("4 Take next");
     expect((await ui.find({ key: "groups" }))?.text).toBe("3 Groups");
     expect((await ui.find({ key: "unlinked" }))?.text).toBe("4 Unlinked");
-    // The desktop draws the chart, and lays over it the region that takes its presses; the terminal lists the Groups in its place.
+    // The desktop draws the chart, and writes each island's label over it; the terminal lists the Groups in its place.
     if (surface === "desktop") {
       expect(await ui.find({ type: "Svg" })).toBeDefined();
-      expect(await ui.find({ type: "Client", key: "chart" })).toBeDefined();
+      expect((await ui.find({ key: "isle-0" }))?.text).toBe("1");
     } else {
       expect((await ui.find({ key: "group-0" }))?.text).toContain("Plan the release");
     }
@@ -110,11 +118,10 @@ test("a list opens an island, the island an Issue, and up goes back up the Map's
     const ui = await mount($, surface);
     await ui.press({ key: "groups" });
     expect((await ui.find({ key: "up" }))?.text).toBe("← Map");
-    await open(ui, surface, "row-0", "group/%234");
+    await open(ui, surface, "row-0");
     expect(await shown(ui)).toContain("Group 1");
-    // An Issue in the island: on the desktop a press on the chart, which the region over it posts; on the terminal its row.
-    if (surface === "desktop") await ui.post({ open: "#5" }, { in: "chart" });
-    else await ui.press({ key: "row-1" });
+    // An Issue in the island: its title in its box on the desktop, its row on the terminal.
+    await ui.press({ key: "row-1" });
     expect(await shown(ui)).toContain("Write the release notes");
     expect((await ui.find({ key: "up" }))?.text).toBe("← Group 1");
     await ui.press({ key: "up" });
@@ -125,13 +132,28 @@ test("a list opens an island, the island an Issue, and up goes back up the Map's
   }
 });
 
-test("on the desktop, a press on an island opens it", async ($, on) => {
+test("on the desktop, an island's label opens it, and pointing at it shows its name card", async ($, on) => {
   const { clock } = world(on);
   await start($);
   await command($, clock, "pane");
   const ui = await mount($, "desktop");
-  await ui.post({ open: "#1" }, { in: "chart" });
+  const svgs = (await ui.findAll({ type: "Svg" })) as unknown as { props: { alt: string; source: string } }[];
+  // Group 2 is headed by #1, Lay the foundation.
+  expect(svgs.find((svg) => svg.props.alt === "Lay the foundation")?.props.source).toContain("3 Issues, 1 Unblocked");
+  await ui.press({ key: "isle-1" });
   expect(await shown(ui)).toContain("Group 2");
+  await ui.unmount();
+});
+
+test("after a press draws the next screen, the pane asks for the keys back, which the desktop hands to the prompt", async ($, on) => {
+  const { opened, clock } = world(on);
+  await start($);
+  await command($, clock, "pane");
+  const ui = await mount($, "desktop");
+  await ui.press({ key: "groups" });
+  await open(ui, "desktop", "row-0");
+  await clock.advance(1_000);
+  expect(opened).toEqual(["map, focused", "map, focused", "map, focused"]);
   await ui.unmount();
 });
 
@@ -144,7 +166,7 @@ test("an Issue's screen says its state, hands work to Claude, and lists its Link
     await command($, clock, "pane");
     const ui = await mount($, surface);
     await ui.press({ key: "next" });
-    await open(ui, surface, "row-1", "issue/%237");
+    await open(ui, surface, "row-1");
     const text = await shown(ui);
     expect(text).toContain("Proofread the release notes");
     expect(text).toContain("2nd in Take next.");
@@ -153,7 +175,7 @@ test("an Issue's screen says its state, hands work to Claude, and lists its Link
     await ui.press({ key: "brief" });
     await ui.press({ key: "assign" });
     // Its Parent, #5, opens from its Link.
-    await open(ui, surface, "link-0", "issue/%235");
+    await open(ui, surface, "link-0");
     expect(await shown(ui)).toContain("Write the release notes");
     await ui.unmount();
   }
@@ -183,7 +205,7 @@ test("an Issue in no Group goes up to the Unlinked list", async ($, on) => {
     await command($, clock, "pane");
     const ui = await mount($, surface);
     await ui.press({ key: "unlinked" });
-    await open(ui, surface, "row-0", "issue/%2313");
+    await open(ui, surface, "row-0");
     expect(await shown(ui)).toContain("Document the new layout");
     expect((await ui.find({ key: "up" }))?.text).toBe("← Unlinked");
     await ui.press({ key: "up" });
@@ -229,7 +251,7 @@ test("with no Group to draw, the Map screen lists the Unlinked Issues in the cha
     expect(text.split("Apply for open source").length).toBe(2);
     expect(await ui.find({ key: "groups" })).toBeUndefined();
     await ui.press({ key: "suggest" });
-    await open(ui, surface, "row-0", "issue/%23137");
+    await open(ui, surface, "row-0");
     expect((await ui.find({ key: "up" }))?.text).toBe("← Unlinked");
     await ui.unmount();
   }
