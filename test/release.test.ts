@@ -19,7 +19,7 @@ function built(): string {
 
 test("the release tree holds only the plugin's runtime parts: no package manifest, lockfile, tests, Snapshots, schemas or developer notes", () => {
   const tree = built();
-  assert.deepEqual(readdirSync(tree).sort(), [".claude-plugin", "LICENSE", "README.md", "SECURITY.md", "bin", "hooks", "skills", "src"]);
+  assert.deepEqual(readdirSync(tree).sort(), [".claude-plugin", "LICENSE", "README.md", "SECURITY.md", "bin", "hooks", "skills", "src", "types"]);
   assert.deepEqual(readdirSync(join(tree, ".claude-plugin")), ["plugin.json"]);
   const everything = readdirSync(tree, { recursive: true, encoding: "utf8" });
   assert.deepEqual(everything.filter((path) => /(^|\/)(package-lock\.json|node_modules|test|CLAUDE\.md|.*\.test\.ts)$/.test(path)), []);

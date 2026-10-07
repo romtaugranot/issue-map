@@ -34,7 +34,7 @@ test("pins the Home Project's row as a session starts, from the plugin's own sta
   await clock.settle();
   expect(ran.length).toBe(1);
   expect(ran[0]!.argv.length).toBe(1);
-  expect(ran[0]!.argv[0]).toMatch(/^\/.*\/bin\/issue-map-status-line$/);
+  expect(ran[0]!.argv[0]).toMatch(/^(\/|[A-Za-z]:\\).*\/bin\/issue-map-status-line$/);
   expect(ran[0]!.cwd).toBe("/work/checkout");
   expect(pinned).toEqual(["◆ o/r · Take next: #1 First"]);
 });
