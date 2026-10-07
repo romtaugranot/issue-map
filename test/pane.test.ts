@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { pageData } from "../src/map/page.ts";
 import { paneData, type PaneData } from "../src/map/pane.ts";
-import { earlier, islandChart, islandPage, packIslands, seaChart } from "../src/pane/chart.ts";
+import { earlier, islandChart, islandPage, packIslands, seaChart, shareBar } from "../src/pane/chart.ts";
 import { fitLine, textWidth, wrap } from "../src/pane/fit.ts";
 import { groupOf, island, issueAt, issueSaid, membersOf, ordinal, outline, shares, stateOf, upOf } from "../src/pane/screens.ts";
 import type { Snapshot } from "../src/snapshot/snapshot.ts";
@@ -230,5 +230,11 @@ describe("the chart", () => {
     const { source } = seaChart(d, 420, 400, { caps: false });
     assert.equal((source.match(/fill="var\(--pick\)"/g) ?? []).length, 2);
     assert.match(source, /r="6" fill="var\(--pick\)"/);
+  });
+
+  test("the share bar gives each share its length, leaving out an empty one", () => {
+    const widths = (source: string) => [...source.matchAll(/<rect x="[\d.]+" width="([\d.]+)" height="7" fill="var\(--(\w+)\)"/g)].map((m) => [m[2], Number(m[1])]);
+    assert.deepEqual(widths(shareBar([1, 0, 2], 302)), [["pick", 100], ["faint", 200]]);
+    assert.deepEqual(widths(shareBar([15, 34, 228], 400)).map(([kind]) => kind), ["pick", "stop", "faint"]);
   });
 });

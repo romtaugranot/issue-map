@@ -21,7 +21,7 @@
 import type { EngineInterface, Register, RenderElement } from "claude-code";
 import type { IssueMapProgress, IssueMapRead, IssueMapScreen } from "../types";
 import type { PaneData, PaneLink } from "../src/map/pane.ts";
-import { earlier, islandChart, islandPage, seaChart } from "../src/pane/chart.ts";
+import { earlier, islandChart, islandPage, seaChart, shareBar } from "../src/pane/chart.ts";
 import { fitLine } from "../src/pane/fit.ts";
 import {
   count,
@@ -337,8 +337,11 @@ export const register: Register = (on) => {
         const parts = shares(d);
         const first = firstPick(d);
         const slash = d.project.lastIndexOf("/");
+        // A bar over the share line where a chart is drawn, and Start with in a panel round it.
+        const barred = pictured !== null;
+        const panel = first !== undefined ? 2 + 2 : 1;
         // Title, the share line, Start with, the buttons, and a row between each.
-        const fixed = 1 + 1 + 1 + 1 + (first !== undefined ? 2 : 1) + 1 + BUTTON + 1;
+        const fixed = 1 + 1 + (barred ? 2 : 1) + 1 + panel + 1 + BUTTON + 1;
         const room = rows - fixed;
         const sea = d.groups.length > 0 && room >= 5;
         let chart: RenderElement | null = null;
@@ -394,25 +397,28 @@ export const register: Register = (on) => {
               {slash >= 0 && <Text dimColor>{d.project.slice(0, slash + 1)}</Text>}
               {d.project.slice(slash + 1)}
             </Text>
-            <Text wrap="truncate-end">
-              <Text bold color={COLOR.pick}>{count(parts.next)}</Text>
-              <Text dimColor> to take next, </Text>
-              <Text bold color={COLOR.stop}>{count(parts.waiting)}</Text>
-              <Text dimColor> waiting, </Text>
-              <Text bold>{count(parts.unlinked)}</Text>
-              <Text dimColor>{parts.others ? " other Unlinked" : " Unlinked"}</Text>
-            </Text>
+            <Box flexDirection="column">
+              {barred && pictured && <pictured.Svg source={wide(shareBar([parts.next, parts.waiting, parts.unlinked], columns * CELL_W), columns * CELL_W)} alt={`${count(parts.next)} to take next, ${count(parts.waiting)} waiting, ${count(parts.unlinked)} Unlinked`} />}
+              <Text wrap="truncate-end">
+                <Text bold color={COLOR.pick}>{count(parts.next)}</Text>
+                <Text dimColor> to take next, </Text>
+                <Text bold color={COLOR.stop}>{count(parts.waiting)}</Text>
+                <Text dimColor> waiting, </Text>
+                <Text bold>{count(parts.unlinked)}</Text>
+                <Text dimColor>{parts.others ? " other Unlinked" : " Unlinked"}</Text>
+              </Text>
+            </Box>
             {first !== undefined ? (
-              <Box flexDirection="column">
+              <Box flexDirection="column" borderStyle="round" borderColor={COLOR.pick} paddingX={1}>
                 <Text wrap="truncate-end">
                   <Text color={COLOR.pick}>● </Text>
                   <Text bold color={COLOR.pick}>Start with</Text>
                   {d.because[0] && <Text dimColor>{`  ${d.because[0]}`}</Text>}
                 </Text>
                 {surface === "terminal" ? (
-                  <Button key="start" plain hotkey="s" label={`${d.issues[first]!.ref} ${fit(plain(d.issues[first]!.title), columns - 12)}`} onPress={() => go({ kind: "issue", ref: d.issues[first]!.ref })} />
+                  <Button key="start" plain hotkey="s" label={`${d.issues[first]!.ref} ${fit(plain(d.issues[first]!.title), columns - 16)}`} onPress={() => go({ kind: "issue", ref: d.issues[first]!.ref })} />
                 ) : (
-                  issueLink("start", first, columns - 2)
+                  issueLink("start", first, columns - 6)
                 )}
               </Box>
             ) : d.groups.length > 0 ? (

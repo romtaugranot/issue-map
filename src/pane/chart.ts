@@ -109,6 +109,30 @@ function islandSvg(d: PaneData, c: Isle, w: number, h: number, { cap, sink }: { 
 const svg = (w: number, h: number, label: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px(w)} ${px(h)}" width="${px(w)}" height="${px(h)}" role="img" aria-label="${esc(label)}"><style>${STYLE}</style><rect width="${px(w)}" height="${px(h)}" rx="10" fill="var(--water)"/>${body}</svg>`;
 
+/** The Map screen's share bar, `w` across: to take next, waiting and Unlinked, each as long as its share, in the chart's colors. */
+export function shareBar([next, waiting, unlinked]: readonly [number, number, number], w: number): string {
+  const tall = 7;
+  const gap = 2;
+  const parts = [
+    { n: next, fill: "var(--pick)" },
+    { n: waiting, fill: "var(--stop)" },
+    { n: unlinked, fill: "var(--faint)" },
+  ].filter((p) => p.n > 0);
+  const total = parts.reduce((sum, p) => sum + p.n, 0);
+  const room = w - gap * Math.max(0, parts.length - 1);
+  let x = 0;
+  const bars = parts
+    .map((p) => {
+      const long = (room * p.n) / total;
+      const bar = `<rect x="${px(x)}" width="${px(long)}" height="${tall}" fill="${p.fill}"/>`;
+      x += long + gap;
+      return bar;
+    })
+    .join("");
+  const label = `${count(next)} to take next, ${count(waiting)} waiting, ${count(unlinked)} Unlinked`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px(w)} ${tall}" width="${px(w)}" height="${tall}" role="img" aria-label="${esc(label)}"><style>${STYLE}</style><clipPath id="round"><rect width="${px(w)}" height="${tall}" rx="${tall / 2}"/></clipPath><g clip-path="url(#round)">${bars}</g></svg>`;
+}
+
 /** The Map screen's chart: every island drawn in `w` by `h`; `caps` names an island under the pointer, where nothing laid over the chart does. */
 export function seaChart(d: PaneData, w: number, h: number, { caps }: { caps: boolean }): { source: string; isles: Isle[] } {
   const isles = packIslands(d, w, h);
