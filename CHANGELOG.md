@@ -2,6 +2,13 @@
 
 What each release changes for someone using the Map. The Release workflow publishes the section headed with the version it releases as that release's notes, and refuses a version with none ([docs/releasing.md](docs/releasing.md)).
 
+## 0.4.0
+
+It needs the same Claude Code and Node.js as 0.3.1. The pane also needs a build that opens plugins' panes; it's tested on 2.1.289.
+
+- `/issue-map pane` opens the Map in a pane beside the conversation. The Groups are a sea chart: point at an island's number to name it, and select it to open its Issues in place. Each Issue has its state, Brief me ↗, Assign to me ↗ and its Links, and Take next, the Groups and the Unlinked Issues are lists. On a Project's first read it shows how far the read has got, and draws the Map as soon as it finishes.
+- On Windows, the status line and `/issue-map` now run, and a read in the background no longer opens console windows.
+
 ## 0.3.1
 
 It needs the same Claude Code and Node.js as 0.3.0.
