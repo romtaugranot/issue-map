@@ -373,6 +373,20 @@ export const register: Register = (on) => {
               ))}
             </Box>
           );
+        } else if (d.groups.length === 0 && room >= 1) {
+          // No Group to draw: the Unlinked Issues, all the Project holds, stand in the chart's room.
+          const rest = d.unlinked.filter((i) => i !== first).slice(0, Math.min(surface === "terminal" ? 9 : 99, room));
+          chart = (
+            <Box key="sea" flexDirection="column" height={room} overflow="hidden">
+              {rest.map((i, j) =>
+                surface === "terminal" ? (
+                  <Button key={`row-${j}`} plain hotkey={String(j + 1)} label={`${d.issues[i]!.ref} ${fit(plain(d.issues[i]!.title), columns - d.issues[i]!.ref.length - 6)}`} onPress={() => go({ kind: "issue", ref: d.issues[i]!.ref })} />
+                ) : (
+                  <Box key={`u${j}`}>{issueLink(`row-${j}`, i, columns - 2)}</Box>
+                ),
+              )}
+            </Box>
+          );
         }
         return (
           <Box flexDirection="column" gap={1} height={rows}>
@@ -404,16 +418,14 @@ export const register: Register = (on) => {
             ) : d.groups.length > 0 ? (
               <Text dimColor>Nothing to take next: everything on the Map waits on another open Issue.</Text>
             ) : (
-              <Box flexDirection="row" gap={1} alignItems="center">
-                <Text dimColor>No Issue here links to another yet.</Text>
-                <Button key="suggest" label="Suggest Links ↗" onPress={() => void $.prompt.submit({ text: "suggest Links" })} />
-              </Box>
+              <Text dimColor>No Issue here links to another yet.</Text>
             )}
             {chart ?? <Box flexGrow={1} />}
             <Box flexDirection="row" gap={1} flexWrap="wrap">
               <Button key="next" hotkey="t" label={`${count(d.next.picks.length)} Take next`} onPress={() => go({ kind: "list", which: "next" })} />
               {d.groups.length > 0 && <Button key="groups" hotkey="g" label={`${count(d.groups.length)} Groups`} onPress={() => go({ kind: "list", which: "groups" })} />}
               <Button key="unlinked" hotkey="l" label={`${count(d.unlinked.length)} Unlinked`} onPress={() => go({ kind: "list", which: "unlinked" })} />
+              {d.groups.length === 0 && <Button key="suggest" label="Suggest Links ↗" onPress={() => void $.prompt.submit({ text: "suggest Links" })} />}
             </Box>
           </Box>
         );

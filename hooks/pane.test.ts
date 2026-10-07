@@ -192,6 +192,50 @@ test("an Issue in no Group goes up to the Unlinked list", async ($, on) => {
   }
 });
 
+/** A Project with no Group: three Issues, none linked to another, #80 Unblocked as its blocker closed. */
+const NO_GROUP = JSON.stringify({
+  map: {
+    project: "fixture-org/small",
+    projectUrl: "https://github.com/fixture-org/small",
+    tracker: "github.com",
+    readAt: "2026-09-23T00:00:00Z",
+    open: 3,
+    onMap: 0,
+    band: "Promised",
+    notes: [],
+    next: { head: "Take next: 1", why: "most waited on first", picks: [{ issue: 0, line: "#80 Apply for open source — unblocked 4d ago", why: "unblocked 4d ago" }], taken: [] },
+    groups: [],
+    unlinked: [2, 1, 0],
+    issues: [
+      { ref: "#80", title: "Apply for open source", url: "https://github.com/fixture-org/small/issues/80", unblocked: true, next: 1 },
+      { ref: "#131", title: "Run the hooks tests", url: "https://github.com/fixture-org/small/issues/131" },
+      { ref: "#137", title: "Fix the nightly reads", url: "https://github.com/fixture-org/small/issues/137" },
+    ],
+    because: ["Its blocker closed 4d ago"],
+    links: [[{ role: "blocker", ref: "#47", title: "Go public", open: false }], [], []],
+    assigned: [],
+  },
+});
+
+test("with no Group to draw, the Map screen lists the Unlinked Issues in the chart's room, and offers to suggest Links", async ($, on) => {
+  const { clock, submitted } = world(on, NO_GROUP);
+  await start($);
+  for (const surface of SURFACES) {
+    await command($, clock, "pane");
+    const ui = await mount($, surface);
+    const text = await shown(ui);
+    expect(text).toContain("#137 Fix the nightly reads");
+    expect(text).toContain("#131 Run the hooks tests");
+    expect(text.split("Apply for open source").length).toBe(2);
+    expect(await ui.find({ key: "groups" })).toBeUndefined();
+    await ui.press({ key: "suggest" });
+    await open(ui, surface, "row-0", "issue/%23137");
+    expect((await ui.find({ key: "up" }))?.text).toBe("← Unlinked");
+    await ui.unmount();
+  }
+  expect(submitted).toEqual(["suggest Links", "suggest Links"]);
+});
+
 test("where there's no Map, the pane says why, and reads again when asked", async ($, on) => {
   const { ran, clock } = world(on, JSON.stringify({ said: "No Home Project: /work/checkout isn't inside a git checkout." }));
   await start($);
