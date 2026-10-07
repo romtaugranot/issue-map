@@ -172,9 +172,6 @@ const refocus = ($: EngineInterface) => $.clock.after(REFOCUS_MS, () => void $.u
 /** Whether the pane is open; not, where nothing says. */
 const isOpen = async ($: EngineInterface) => (await $.ui.panes().catch(() => [])).some((pane) => pane.id === PANE);
 
-/** Whether a region taking the pane's presses failed on the desktop, so the pane is drawn without them. */
-let clientFailed = false;
-
 /** The last data read, parsed once. */
 let parsed: { json: string; data: PaneData } | null = null;
 function dataOf(read: IssueMapRead | undefined): PaneData | null {
@@ -218,13 +215,6 @@ export const register: Register = (on) => {
   });
   on("command.run", { command: "issue-map" }, async ($, e) => ({ text: await answer($, e.args) }));
 
-  // Where a link's region fails, the pane is drawn without them, Buttons standing in.
-  on("ui.fault", { requestId: PANE }, ($, e) => {
-    clientFailed = true;
-    $.ui.log(`The Issue Map pane's links can't be drawn here (${e.phase}: ${e.reason}); Buttons stand in for them.`);
-    return {};
-  });
-
   // What a link posts: the screen it leads to.
   on("ui.message", { requestId: PANE }, async ($, e) => {
     const post = e.data as LinkPost | null;
@@ -236,7 +226,7 @@ export const register: Register = (on) => {
     const { Box, Text, Button, Markdown, Link } = $.ui.resolve(e);
     // A chart where a surface draws one, its labels Buttons laid over it; and on the desktop, regions drawing the links, whose presses its Markdown hands no plugin.
     const pictured = e.surface === "terminal" ? null : $.ui.resolve(e);
-    const pressed = e.surface === "desktop" && !clientFailed ? $.ui.resolve(e) : null;
+    const pressed = e.surface === "desktop" ? $.ui.resolve(e) : null;
     const surface = e.surface;
     const columns = Math.max(20, e.props.bodyColumns);
     const rows = Math.max(8, e.props.scroll.bodyRows);
