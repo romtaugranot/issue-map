@@ -1,0 +1,3 @@
+# Built by pane.ts from the templates and the recorded Snapshots.
+*.html
+!*.template.html

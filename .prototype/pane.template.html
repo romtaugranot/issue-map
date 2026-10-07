@@ -1,0 +1,596 @@
+<!doctype html>
+<!--
+  PROTOTYPE — wipe me (branch prototype/pane-look). Built by .prototype/pane.ts.
+  Round 3: screens that lead one to another, each fitting the pane's height with no scroll bar,
+  and no caption explaining the drawing: the drawing says it.
+    Map (home) → an island, opened in place → an Issue
+    Map → Take next, Unlinked or Groups, paged to fit → an Issue
+  A real desktop pane draws the chart as one Svg, which takes no clicks itself; making islands
+  clickable there means a Client region laid over the chart that hit-tests the pointer. See NOTES.md.
+  Earlier rounds: pane.round1.html.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Issue Map pane · prototype</title>
+<style>
+:root {
+  --app: #faf9f5; --app-ink: #141413; --app-muted: #6b6a65; --app-line: #e6e4dc; --app-raise: #f0eee6;
+  --pane: #ffffff; --ink: #10242f; --muted: #4c6573; --faint: #86a0ad; --line: #dde7ec;
+  --go: #0e8a76; --stop: #cf4f3a; --pick: #a8720a;
+  --water: #e7f0f4; --shallow: #d7e7ee; --land: #fbfcfb; --coast: #a9c6d1; --pick-wash: #fbf1d8;
+  --btn: #ffffff; --btn-line: #d8d6cc; --btn-primary: #10242f; --btn-primary-ink: #f3f7f8;
+  --link: #1f5f86;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --app: #262624; --app-ink: #faf9f5; --app-muted: #a3a29b; --app-line: #3a3936; --app-raise: #30302e;
+  --pane: #1f1e1d; --ink: #e4edf1; --muted: #9fb3bf; --faint: #627d8e; --line: #33414a;
+  --go: #5fd0b9; --stop: #ff8a72; --pick: #f2c45c;
+  --water: #0f2536; --shallow: #14304a; --land: #16334a; --coast: #2d5470; --pick-wash: #2e2a1a;
+  --btn: #30302e; --btn-line: #4a4945; --btn-primary: #e4edf1; --btn-primary-ink: #0a1b29;
+  --link: #8cc4e6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--app); color: var(--app-ink); font: 14px/1.45 var(--sans); overflow: hidden; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+
+/* The stand-in desktop window: the transcript, and the pane docked beside it. The prototype's bar sits under the transcript. */
+.win { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--pane-w, 420px); grid-template-rows: minmax(0, 1fr); }
+.convo { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; border-right: 1px solid var(--app-line); position: relative; }
+.log { overflow: auto; padding: 28px clamp(16px, 6vw, 72px) 16px; display: flex; flex-direction: column; gap: 14px; }
+.msg { max-width: 62ch; color: var(--app-muted); }
+.msg.you { align-self: flex-end; background: var(--app-raise); color: var(--app-ink); padding: 8px 12px; border-radius: 12px; }
+.msg.new { outline: 2px solid var(--pick); outline-offset: 2px; }
+.ghost { height: 10px; border-radius: 5px; background: var(--app-raise); margin: 6px 0; }
+.composer { margin: 0 clamp(16px, 6vw, 72px) 64px; border: 1px solid var(--app-line); border-radius: 14px; padding: 12px 14px; min-height: 52px; background: var(--pane); color: var(--app-muted); }
+.composer.filled { color: var(--app-ink); border-color: var(--pick); }
+.browser { position: absolute; inset: 0; display: grid; grid-template-rows: auto 1fr; background: var(--app); z-index: 2; }
+.browser header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--app-line); font-size: 13px; color: var(--app-muted); }
+.browser header span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser iframe { border: 0; width: 100%; height: 100%; background: #0a1b29; }
+
+.pane { display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--pane); color: var(--ink); min-width: 0; min-height: 0; }
+.pane > .bar { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--app-line); font-size: 12.5px; color: var(--app-muted); }
+.pane > .body { position: relative; overflow: hidden; padding: 12px 14px 14px; min-height: 0; }
+
+/* One screen fills the body exactly; the chart, or a list, takes what the rest leaves. */
+.view { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.slot { flex: 1 1 auto; min-height: 120px; position: relative; border-radius: 10px; overflow: hidden; }
+.slot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* What a pane can draw: Text, Markdown, Buttons, one Svg. */
+.t { margin: 0; }
+.dim { color: var(--muted); }
+.faint { color: var(--faint); }
+.small { font-size: 12.5px; }
+.b { font-weight: 600; }
+.go { color: var(--go); } .stop { color: var(--stop); } .pick { color: var(--pick); }
+.h { font-size: 16px; line-height: 1.3; margin: 0; font-weight: 650; }
+.clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+a.link { color: var(--link); text-decoration: none; cursor: pointer; }
+a.link:hover { text-decoration: underline; }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .88em; background: color-mix(in srgb, var(--line) 60%, transparent); border-radius: 4px; padding: 0 3px; }
+.ref { color: var(--muted); font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.row > .grow { flex: 1; min-width: 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { border: 1px solid var(--btn-line); background: var(--btn); border-radius: 8px; padding: 4px 11px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn:hover { filter: brightness(.97); }
+.btn.primary { background: var(--btn-primary); color: var(--btn-primary-ink); border-color: var(--btn-primary); }
+.rule { height: 1px; background: var(--line); flex: none; }
+.top { justify-content: flex-start; gap: 10px; }
+.owner { color: var(--muted); font-weight: 500; }
+/* Where to start: the lantern's own wash, its dot the one the chart lights. */
+.start { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 9px; border-radius: 10px; background: var(--pick-wash); }
+.lamp { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pick); margin-right: 6px; vertical-align: 1px; }
+.count { font-weight: 650; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.state { font-size: 12px; font-weight: 600; white-space: nowrap; }
+
+/* Lists, paged to fit. */
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.list { margin: 0 -8px; }
+.list li { min-width: 0; padding: 5px 8px; border-radius: 8px; }
+.list li:hover { background: color-mix(in srgb, var(--line) 50%, transparent); }
+.list li.num { display: grid; grid-template-columns: 1.7em minmax(0, 1fr); column-gap: 4px; }
+.list li.num > .n { color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; padding-right: 4px; }
+.list li.linkrow { display: grid; grid-template-columns: 5.4em minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline; }
+.list li.marked { background: var(--pick-wash); }
+
+/* The chart. */
+.isle { cursor: pointer; }
+.isle .shore { transition: stroke .15s, stroke-width .15s; }
+.isle:hover .shore, .isle:focus-visible .shore { stroke: var(--ink); stroke-dasharray: none; stroke-width: 1.5; }
+.isle:focus, .node:focus, .pager:focus { outline: none; }
+.cap { opacity: 0; pointer-events: none; transition: opacity .12s; }
+.isle:hover .cap, .isle:focus-visible .cap { opacity: 1; }
+.node, .pager { cursor: pointer; }
+.node:hover rect.box { stroke-width: 2; }
+.node:focus-visible rect.box { stroke: var(--pick); stroke-width: 2.5; }
+.pager:hover text { text-decoration: underline; }
+.open .land { transition: x .45s cubic-bezier(.2,.7,.2,1), y .45s cubic-bezier(.2,.7,.2,1), width .45s cubic-bezier(.2,.7,.2,1), height .45s cubic-bezier(.2,.7,.2,1), rx .45s cubic-bezier(.2,.7,.2,1); }
+.open .sink { animation: sink .32s ease forwards; transform-box: fill-box; transform-origin: center; }
+.open .rise { opacity: 0; animation: rise .36s ease forwards; transform-box: fill-box; }
+.open .draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .4s ease forwards; }
+@keyframes sink { to { opacity: 0; transform: scale(.85); } }
+@keyframes rise { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .open .land { transition: none; } .open .sink, .open .rise, .open .draw { animation-duration: .01s; animation-delay: 0s !important; } }
+
+/* The prototype's own switcher: not part of any design. */
+.switch { position: fixed; left: calc((100vw - var(--pane-w, 420px)) / 2); bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 999px; background: #111; color: #fff; font: 12.5px/1 var(--sans); box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 9; white-space: nowrap; }
+.switch button, .switch select { background: #2a2a2a; color: #fff; border: 0; border-radius: 999px; padding: 6px 10px; cursor: pointer; font: inherit; }
+.toast { position: fixed; left: calc((100vw - var(--pane-w, 420px)) / 2); bottom: 60px; transform: translateX(-50%); background: #111; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 12.5px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+.toast.on { opacity: 1; }
+@media (max-width: 760px) {
+  .win { grid-template-columns: minmax(0, 1fr); bottom: 52px; }
+  .convo { display: none; }
+  .switch, .toast { left: 50%; }
+}
+</style>
+</head>
+<body>
+<div class="win">
+  <section class="convo">
+    <div class="log" id="log"></div>
+    <div class="composer" id="composer">Reply to Claude…</div>
+  </section>
+  <aside class="pane">
+    <div class="bar"><span>Issue Map</span><span aria-hidden="true">✕</span></div>
+    <div class="body" id="pane"></div>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+<div class="switch" id="switch">
+  <select id="project" aria-label="Project"></select>
+  <select id="width" aria-label="Pane width"><option value="340">340px</option><option value="420">420px</option><option value="520">520px</option></select>
+  <button id="theme">Theme</button>
+</div>
+<script>
+const PROJECTS = /*DATA*/null;
+const params = new URLSearchParams(location.search);
+const S = {
+  project: params.get("project") || "small",
+  width: params.get("width") || "420",
+  theme: params.get("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+  view: { kind: "map" },
+  /** Where the pressed island stood on screen, and the others, so the opened one grows from there. */
+  opening: null,
+};
+let P, I, GROUP_OF;
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+const titled = (s) => esc(s).split("`").map((part, k) => (k % 2 ? `<code>${part}</code>` : part)).join("");
+const plainTitle = (s) => s.replace(/`/g, "");
+const n = (x) => x.toLocaleString("en-US");
+const plural = (x, noun) => `${n(x)} ${noun}${x === 1 ? "" : "s"}`;
+const ordinal = (k) => k + (["st", "nd", "rd"][((k + 90) % 100 - 10) % 10 - 1] || "th");
+
+/* Text in the chart is fitted to its room by measuring it, so none runs past its island or box.
+   (The real pane draws the chart server-side, with a width table for the system face in place of a canvas.) */
+const ctx = document.createElement("canvas").getContext("2d");
+const FACE = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const textW = (s, size, weight = 400) => { ctx.font = `${weight} ${size}px ${FACE}`; return ctx.measureText(s).width; };
+function fitLine(s, room, size, weight) {
+  if (textW(s, size, weight) <= room) return s;
+  let lo = 0, hi = s.length;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (textW(s.slice(0, mid).trimEnd() + "…", size, weight) <= room) lo = mid; else hi = mid - 1; }
+  return s.slice(0, lo).trimEnd() + "…";
+}
+function wrap(s, room, size, max, weight = 400) {
+  const words = s.split(/\s+/).filter(Boolean), lines = [];
+  let line = "";
+  for (let k = 0; k < words.length; k++) {
+    const next = line ? `${line} ${words[k]}` : words[k];
+    if (textW(next, size, weight) <= room) { line = next; continue; }
+    if (lines.length === max - 1) return [...lines, fitLine([line, ...words.slice(k)].filter(Boolean).join(" "), room, size, weight)];
+    if (line) lines.push(line);
+    line = words[k];
+    if (textW(line, size, weight) > room) {
+      if (lines.length === max - 1) return [...lines, fitLine(words.slice(k).join(" "), room, size, weight)];
+      lines.push(fitLine(line, room, size, weight));
+      line = "";
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/* Presses: every link, button, island and node names a closure kept here until the next draw. */
+let acts = [];
+const act = (fn) => (acts.push(fn), `data-act="${acts.length - 1}"`);
+document.addEventListener("click", (e) => {
+  const at = e.target.closest("[data-act]");
+  if (!at) return;
+  e.preventDefault();
+  acts[Number(at.dataset.act)]?.(at, e);
+});
+document.addEventListener("keydown", (e) => {
+  const at = e.target.closest?.("svg [data-act], a[data-act]");
+  if (at && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); acts[Number(at.dataset.act)]?.(at, e); }
+});
+const btn = (label, fn, primary) => `<button class="btn${primary ? " primary" : ""}" ${act(fn)}>${label}</button>`;
+const go = (view) => { S.view = view; draw(); };
+const home = () => { S.view = { kind: "map" }; S.opening = null; draw(); };
+/**
+ * Where a screen sits: an island or a list under the Map; an Issue in its island, or, in none,
+ * in the Unlinked list. Up opens that, with the Issue just left marked on it.
+ */
+function upOf(v) {
+  if (v.kind === "island" || v.kind === "list") return { view: { kind: "map" }, label: "Map" };
+  if (v.kind === "issue") {
+    const k = GROUP_OF.get(v.i);
+    if (k !== undefined) return { view: { kind: "island", k, mark: v.i }, label: `Group ${k + 1}` };
+    if (P.page.unlinked.includes(v.i)) return { view: { kind: "list", which: "unlinked", mark: v.i }, label: "Unlinked" };
+    return { view: { kind: "map" }, label: "Map" };
+  }
+  return null;
+}
+const up = () => { const to = upOf(S.view); if (to) { S.view = to.view; S.opening = null; draw(); } };
+const openIssue = (i) => go({ kind: "issue", i });
+const issueLink = (i) => `<a class="link" role="link" tabindex="0" ${act(() => openIssue(i))}><span class="ref">${esc(I[i].ref)}</span> ${titled(I[i].title)}</a>`;
+/** The top row of every screen but the Map: the way up, named for where it leads, and what this screen is. */
+const topRow = (what = "") => `<div class="row top">${btn(`← ${upOf(S.view).label}`, up)}<p class="t b clamp1 grow">${what}</p></div>`;
+
+/* Hand-offs to Claude, stood in for: a send starts a turn, a fill waits in the prompt box. */
+function send(text) {
+  const log = document.getElementById("log");
+  log.querySelectorAll(".new").forEach((m) => m.classList.remove("new"));
+  log.insertAdjacentHTML("beforeend", `<div class="msg you new">${esc(text)}</div><div class="msg">Claude reads the Issue and briefs you here…</div>`);
+  log.scrollTop = log.scrollHeight;
+  toast(`Sent to Claude: “${text}”`);
+}
+function fill(text) {
+  const box = document.getElementById("composer");
+  box.textContent = text;
+  box.classList.add("filled");
+  toast("In the prompt box: press Enter to send");
+}
+function toast(text) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.classList.add("on");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("on"), 2200);
+}
+function openPicture() {
+  const convo = document.querySelector(".convo");
+  convo.querySelector(".browser")?.remove();
+  convo.insertAdjacentHTML("beforeend", `<div class="browser"><header><span>Browser: ${esc(P.page.project)}, the whole Map</span><button class="btn" ${act(() => convo.querySelector(".browser").remove())}>Close</button></header><iframe src="${esc(P.picture)}" title="HTML Picture"></iframe></div>`);
+}
+
+/* ---------- What the data says ---------- */
+
+function membersOf(g) {
+  return [...new Set([g.head, ...g.top, ...Array.from({ length: g.below.length / 3 }, (_, j) => g.below[3 * j + 1])])];
+}
+const holdsNext = (g) => membersOf(g).some((i) => I[i].next);
+const isBlocked = (i) => (P.links[i] || []).some(([role, , , , open]) => role === "blocker" && open);
+function via(pick) {
+  const m = /via (#\d+)/.exec(pick.why);
+  return m ? I.findIndex((x) => x.ref === m[1]) : -1;
+}
+/** Why a pick is in Take next, in as few words as say it. */
+function because(pick) {
+  const w = /(\d[\d,]*) wait on it/.exec(pick.why), parent = via(pick), freed = /unblocked ([^·,]+)/.exec(pick.why);
+  const parts = [];
+  if (w) parts.push(`${w[1]} wait on ${parent >= 0 ? `its parent ${I[parent].ref}` : "it"}`);
+  else if (parent >= 0) parts.push(`A first step of ${I[parent].ref}`);
+  if (freed) parts.push(`${parts.length ? "its" : "Its"} blocker closed ${freed[1].trim()}`);
+  return parts.join(", ");
+}
+/** An Issue's state, in the word the drawing writes beside it. */
+function state(i) {
+  const it = I[i];
+  if (it.ref.startsWith("↗")) return { word: "Outside", color: "var(--muted)" };
+  if (it.next) return { word: `${ordinal(it.next)} in Take next`, color: "var(--pick)" };
+  if (it.unblocked) return { word: "Unblocked", color: "var(--go)" };
+  if (isBlocked(i)) return { word: "Blocked", color: "var(--stop)" };
+  return { word: "", color: "var(--coast)" };
+}
+
+/* ---------- The sea chart, packed into the room it has ---------- */
+
+function packIn(w, h, max = 24) {
+  const groups = P.page.groups.slice(0, max);
+  const big = Math.max(...groups.map((g) => g.size + g.outside), 1);
+  for (let scale = 1; scale > 0.3; scale *= 0.92) {
+    const R = (g) => Math.max(13, scale * Math.min(w / 4, h / 3, 13 + (Math.min(w, h * 1.4) / 4.6 - 13) * Math.sqrt((g.size + g.outside) / big)));
+    const cx = w / 2, cy = h / 2, placed = [];
+    const fits = (x, y, r) => x - r >= 4 && x + r <= w - 4 && y - r >= 4 && y + r <= h - 4 && placed.every((c) => Math.hypot(c.x - x, c.y - y) >= c.r + r + 6);
+    let ok = true;
+    for (const [k, g] of groups.entries()) {
+      const r = R(g);
+      let best = placed.length ? null : fits(cx, cy, r) ? { x: cx, y: cy, score: 0 } : null;
+      for (const c of placed) for (let a = 0; a < 360; a += 8) {
+        const x = c.x + (c.r + r + 6) * Math.cos((a * Math.PI) / 180), y = c.y + (c.r + r + 6) * Math.sin((a * Math.PI) / 180);
+        if (!fits(x, y, r)) continue;
+        const score = Math.hypot((x - cx) / w, (y - cy) / h);
+        if (!best || score < best.score) best = { x, y, score };
+      }
+      if (!best) { ok = false; break; }
+      placed.push({ x: best.x, y: best.y, r, g, k });
+    }
+    if (ok) return placed;
+  }
+  return [];
+}
+
+function islandSvg(c, w, h, { sink } = {}) {
+  const { g, k } = c, share = g.size ? g.unblocked / g.size : 0, C = 2 * Math.PI * (c.r - 2);
+  const count = c.r > 23 ? fitLine(plural(g.size, "Issue"), 2 * c.r - 14, 10) : "";
+  const name = wrap(plainTitle(I[g.head].title), w - 28, 13, 2, 600);
+  const counts = `${plural(g.size, "Issue")}, ${g.unblocked ? `${n(g.unblocked)} Unblocked` : "none Unblocked"}`;
+  const capH = 18 + name.length * 17 + 16;
+  const starts = P.page.next.picks.length && membersOf(g).includes(P.page.next.picks[0].issue);
+  return `<g class="isle${sink ? " sink" : ""}" tabindex="0" role="button" aria-label="${esc(`${plainTitle(I[g.head].title)}: ${counts}`)}" ${act((el) => openIsland(c, el))}>
+    <circle cx="${c.x}" cy="${c.y}" r="${c.r + 4}" fill="var(--shallow)"/>
+    <circle class="shore" cx="${c.x}" cy="${c.y}" r="${c.r}" fill="var(--land)" stroke="var(--coast)" stroke-dasharray="2 3"/>
+    <circle cx="${c.x}" cy="${c.y}" r="${c.r - 2}" fill="none" stroke="var(--go)" stroke-width="3" stroke-dasharray="${share * C} ${C}" transform="rotate(-90 ${c.x} ${c.y})"/>
+    ${holdsNext(g) ? `<circle cx="${c.x + (c.r - 2) * Math.SQRT1_2}" cy="${c.y - (c.r - 2) * Math.SQRT1_2}" r="${starts ? 6 : 4.5}" fill="var(--pick)" ${starts ? 'stroke="var(--pick-wash)" stroke-width="3" paint-order="stroke"' : ""}/>` : ""}
+    <text x="${c.x}" y="${c.y + (count ? 0 : 4.5)}" text-anchor="middle" font-size="${c.r > 23 ? 15 : 12}" font-weight="650" fill="var(--ink)">${k + 1}</text>
+    ${count ? `<text x="${c.x}" y="${c.y + 14}" text-anchor="middle" font-size="10" fill="var(--muted)">${esc(count)}</text>` : ""}
+    ${sink ? "" : `<g class="cap"><rect x="6" y="${h - capH - 6}" width="${w - 12}" height="${capH}" rx="8" fill="var(--pane)" stroke="var(--coast)"/>
+      ${name.map((l, j) => `<text x="16" y="${h - capH - 6 + 20 + j * 17}" font-size="13" font-weight="600" fill="var(--ink)">${esc(l)}</text>`).join("")}
+      <text x="16" y="${h - capH - 6 + 20 + name.length * 17}" font-size="12" fill="var(--muted)">${esc(counts)}</text></g>`}
+  </g>`;
+}
+
+function seaChart(w, h) {
+  const placed = packIn(w, h);
+  S.placed = placed;
+  return `<svg viewBox="0 0 ${w} ${h}" font-family="${esc(FACE)}" role="group" aria-label="Groups as islands"><rect width="${w}" height="${h}" fill="var(--water)"/>${placed.map((c) => islandSvg(c, w, h)).join("")}</svg>`;
+}
+
+/* ---------- An opened island: the Group as an outline, paged to fit ---------- */
+
+function outlineRows(g) {
+  const beneath = new Map();
+  for (let j = 0; j < g.below.length; j += 3) {
+    if (!beneath.has(g.below[j])) beneath.set(g.below[j], []);
+    beneath.get(g.below[j]).push([g.below[j + 1], g.below[j + 2] === 1]);
+  }
+  const rows = [], seen = new Set();
+  const walk = (i, d, from, blocks) => {
+    if (seen.has(i)) return;
+    seen.add(i);
+    rows.push({ i, d: Math.min(d, 4), from, blocks });
+    for (const [j, b] of beneath.get(i) || []) walk(j, d + 1, i, b);
+  };
+  for (const t of g.top) walk(t, 0, null, false);
+  return rows;
+}
+
+/** As many rows as the room holds, from `first`: titles on two lines where that fits as many, on one where it fits more. */
+function outlinePage(rows, w, h, first) {
+  const PAD = 12, TOP = 38, IN = 16, GY = 7, PAGER = 26;
+  const room = h - TOP - PAD;
+  const fits = (lines) => {
+    const out = [];
+    let y = TOP;
+    for (let k = first; k < rows.length; k++) {
+      const r = rows[k], x = PAD + r.d * IN, nw = w - PAD - x;
+      const t = wrap(plainTitle(I[r.i].title) || "an Issue this login can't read", nw - 18, 12, lines);
+      const nh = 24 + 15 * t.length;
+      if (y + nh - TOP > room - (k < rows.length - 1 ? PAGER : 0) && out.length) break;
+      out.push({ ...r, x, y, w: nw, h: nh, lines: t, k });
+      y += nh + GY;
+    }
+    return out;
+  };
+  const two = fits(2), one = fits(1);
+  return one.length > two.length ? one : two;
+}
+
+function nodeSvg(nd, { mark, rise }) {
+  const it = I[nd.i], st = state(nd.i), outside = it.ref.startsWith("↗");
+  const wordW = st.word ? textW(st.word, 11, 600) : 0;
+  return `<g class="node${rise ? " rise" : ""}" style="animation-delay:${380 + Math.min(nd.k * 45, 900)}ms" tabindex="0" role="button" aria-label="${esc(`${it.ref} ${plainTitle(it.title)}${st.word ? `, ${st.word}` : ""}`)}" ${act(() => { S.view.mark = nd.i; openIssue(nd.i); })}>
+    <rect class="box" x="${nd.x}" y="${nd.y}" width="${nd.w}" height="${nd.h}" rx="7" fill="var(--pane)" stroke="${nd.i === mark ? "var(--ink)" : "var(--coast)"}" stroke-width="${nd.i === mark ? 2.5 : 1}" ${outside ? 'stroke-dasharray="3 3"' : ""}/>
+    ${st.word ? `<circle cx="${nd.x + 12}" cy="${nd.y + 11}" r="3.5" fill="${st.color}"/>` : ""}
+    <text x="${nd.x + (st.word ? 21 : 9)}" y="${nd.y + 15}" font-size="11" font-weight="600" fill="var(--muted)">${esc(fitLine(it.ref, nd.w - (st.word ? 38 : 26) - wordW, 11, 600))}</text>
+    ${st.word ? `<text x="${nd.x + nd.w - 9}" y="${nd.y + 15}" text-anchor="end" font-size="11" font-weight="600" fill="${st.color}">${esc(st.word)}</text>` : ""}
+    ${nd.lines.map((l, j) => `<text x="${nd.x + 9}" y="${nd.y + 30 + j * 15}" font-size="12" fill="var(--ink)">${esc(l)}</text>`).join("")}
+  </g>`;
+}
+
+function openChart(w, h) {
+  const v = S.view, g = P.page.groups[v.k], rows = outlineRows(g);
+  // Coming back from an Issue, the page shows the one just visited.
+  let first = v.from ?? 0;
+  const markAt = v.mark === undefined ? -1 : rows.findIndex((r) => r.i === v.mark);
+  if (markAt >= 0 && !(markAt >= first && markAt < first + outlinePage(rows, w, h, first).length)) first = Math.max(0, markAt - 1);
+  v.from = first;
+  const laid = outlinePage(rows, w, h, first);
+  const at = new Map(laid.map((nd) => [nd.i, nd]));
+  const from = S.opening && S.opening.k === v.k ? S.opening : null;
+  let out = `<rect width="${w}" height="${h}" fill="var(--water)"/>`;
+  if (from) out += from.others.map((c) => islandSvg(c, w, h, { sink: true })).join("");
+  // The island is as tall as what it holds, the sea below it when that is less than the room.
+  const lastRow = laid[laid.length - 1], paged = first > 0 || first + laid.length < rows.length;
+  const landH = Math.min(h - 8, (lastRow ? lastRow.y + lastRow.h : 40) + (paged ? 30 : 0) + 12 - 4);
+  const to = `x:4px;y:4px;width:${w - 8}px;height:${landH}px;rx:16px`;
+  out += `<rect class="land" x="4" y="4" width="${w - 8}" height="${landH}" rx="16" fill="var(--land)" stroke="var(--ink)" stroke-width="1.5" ${from ? `style="x:${from.x - from.r}px;y:${from.y - from.r}px;width:${2 * from.r}px;height:${2 * from.r}px;rx:${from.r}px" data-to="${to}"` : ""}/>`;
+  const head = `${plural(g.size, "Issue")}, ${g.unblocked ? `${n(g.unblocked)} Unblocked` : "none Unblocked"}`;
+  out += `<text class="${from ? "rise" : ""}" style="animation-delay:300ms" x="16" y="25" font-size="12" font-weight="650" fill="var(--muted)">${esc(fitLine(head, w - 32, 12, 650))}</text>`;
+  for (const nd of laid) {
+    const a = nd.from !== null ? at.get(nd.from) : null;
+    if (!a) continue;
+    const sx = a.x + 10, ey = nd.y + 15;
+    out += `<path class="${from ? "draw" : ""}" pathLength="1" style="animation-delay:${480 + Math.min(nd.k * 45, 900)}ms" d="M${sx} ${a.y + a.h} L${sx} ${ey - 6} Q${sx} ${ey} ${sx + 6} ${ey} L${nd.x - 1} ${ey}" fill="none" stroke="${nd.blocks ? "var(--stop)" : "var(--faint)"}" stroke-width="1.6" ${nd.blocks ? 'marker-end="url(#arr)"' : 'stroke-dasharray="2 3"'}/>`;
+  }
+  out += laid.map((nd) => nodeSvg(nd, { mark: v.mark, rise: !!from })).join("");
+  // Paging inside the island, where the rest of a large Group is.
+  const last = laid[laid.length - 1], end = first + laid.length;
+  if (first > 0 || end < rows.length) {
+    const y = (last ? last.y + last.h : 40) + 18;
+    if (end < rows.length) out += `<g class="pager" tabindex="0" role="button" ${act(() => { S.view = { ...v, from: end, mark: undefined }; draw(); })}><text x="${w - 16}" y="${y}" text-anchor="end" font-size="12" font-weight="600" fill="var(--link)">${n(rows.length - end)} more</text></g>`;
+    if (first > 0) out += `<g class="pager" tabindex="0" role="button" ${act(() => { S.view = { ...v, from: Math.max(0, first - laid.length), mark: undefined }; draw(); })}><text x="16" y="${y}" font-size="12" font-weight="600" fill="var(--link)">Earlier</text></g>`;
+  }
+  return `<svg class="${from ? "open" : ""}" viewBox="0 0 ${w} ${h}" font-family="${esc(FACE)}" role="group" aria-label="${esc(head)}">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="var(--stop)" stroke-width="1.6"/></marker></defs>${out}</svg>`;
+}
+
+function openIsland(c, el) {
+  const slot = el.closest(".slot").getBoundingClientRect();
+  const others = (S.placed || []).filter((x) => x.k !== c.k).map((x) => ({ ...x, sx: x.x + slot.left, sy: x.y + slot.top }));
+  S.opening = { k: c.k, sx: c.x + slot.left, sy: c.y + slot.top, r: c.r, others };
+  go({ kind: "island", k: c.k });
+}
+
+/* ---------- Screens ---------- */
+
+/** Home: the Project at a glance, where to start, and the chart. */
+function mapScreen() {
+  const d = P.page, first = d.next.picks[0];
+  const nextLinked = d.next.picks.filter((p) => !d.unlinked.includes(p.issue)).length;
+  const parts = [d.next.picks.length, Math.max(0, d.onMap - nextLinked), d.unlinked.length - (d.next.picks.length - nextLinked)];
+  const total = parts.reduce((a, b) => a + b, 0) || 1;
+  const bar = `<div style="display:flex;gap:2px;height:7px;border-radius:4px;overflow:hidden">${parts.map((v, k) => (v ? `<i style="flex:${v / total};background:${["var(--pick)", "var(--stop)", "var(--faint)"][k]}"></i>` : "")).join("")}</div>`;
+  const start = first
+    ? `<div class="start"><p class="t small clamp1"><span class="lamp"></span><span class="pick b">Start with</span>&ensp;<span class="dim">${esc(because(first))}</span></p><p class="t clamp1">${issueLink(first.issue)}</p></div>`
+    : d.groups.length
+      ? `<p class="t small dim">Nothing to take next: everything on the Map waits on another open Issue.</p>`
+      : `<div class="row"><p class="t small dim grow">No Issue here links to another yet.</p>${btn("Suggest Links ↗", () => send("suggest Links"))}</div>`;
+  return `<div class="view">
+    <div class="row"><p class="t h clamp1 grow">${d.project.includes("/") ? `<span class="owner">${esc(d.project.slice(0, d.project.lastIndexOf("/") + 1))}</span>${esc(d.project.slice(d.project.lastIndexOf("/") + 1))}` : esc(d.project)}</p>${d.groups.length ? btn("Open in browser", openPicture) : ""}</div>
+    <div>${bar}<p class="t small" style="margin-top:6px"><span class="pick b">${n(parts[0])}</span> <span class="dim">to take next,</span> <span class="stop b">${n(parts[1])}</span> <span class="dim">waiting,</span> <span class="faint b">${n(parts[2])}</span> <span class="dim">${parts[2] === d.unlinked.length ? "Unlinked" : "other Unlinked"}</span></p></div>
+    ${start}
+    ${d.groups.length ? `<div class="slot" data-fill="sea"></div>` : `<div style="flex:1"></div>`}
+    <div class="btns">${btn(`<span class="count">${n(d.next.picks.length)}</span>Take next`, () => go({ kind: "list", which: "next", page: 0 }))}${d.groups.length ? btn(`<span class="count">${n(d.groups.length)}</span>Groups`, () => go({ kind: "list", which: "groups", page: 0 })) : ""}${btn(`<span class="count">${n(d.unlinked.length)}</span>Unlinked`, () => go({ kind: "list", which: "unlinked", page: 0 }))}</div>
+  </div>`;
+}
+
+/** An island, opened: its Issues as an outline filling the screen. */
+function islandScreen() {
+  const g = P.page.groups[S.view.k];
+  return `<div class="view">${topRow(`Group ${S.view.k + 1} <span class="dim" style="font-weight:400">of ${n(P.page.groups.length)}</span>`)}<div class="slot" data-fill="island"></div></div>`;
+}
+
+/** An Issue: what it is, what to do with it, and its Links to go on to. */
+const ROLES = { blocker: "Blocked by", blocked: "Blocking", parent: "Parent", child: "Child", related: "Related" };
+function issueScreen() {
+  const i = S.view.i, it = I[i], k = GROUP_OF.get(i);
+  const blockers = (P.links[i] || []).filter(([role, , , , open]) => role === "blocker" && open);
+  const said = blockers.length ? `<span class="stop b">Blocked</span> by ${blockers.slice(0, 2).map(([, , ref]) => esc(ref)).join(" and ")}${blockers.length > 2 ? ` and ${n(blockers.length - 2)} more` : ""}.` : it.unblocked ? `<span class="go b">Unblocked.</span>` : `Waits on its children.`;
+  return `<div class="view">
+    ${topRow()}
+    <div><p class="t h clamp3"><span class="ref">${esc(it.ref)}</span> ${titled(it.title)}</p>
+      <p class="t small" style="margin-top:4px">${said} ${P.assigned[i] ? "Assigned." : "Unassigned."}${it.next ? ` <span class="pick b">${ordinal(it.next)} in Take next.</span>` : ""}</p></div>
+    <div class="btns">${btn("Brief me ↗", () => send(`start work on ${it.ref}`), true)}${P.assigned[i] ? "" : btn("Assign to me ↗", () => fill(`assign ${it.ref} to me`))}${btn("Open on GitHub", () => toast(`Opens ${it.url} in your browser`))}</div>
+    <div class="rule"></div>
+    <ol class="list" data-fill="list"></ol>
+    <div class="row" data-pager></div>
+  </div>`;
+}
+
+function listScreen() {
+  const d = P.page, which = S.view.which;
+  return `<div class="view">
+    ${topRow(`${{ groups: "Groups", next: "Take next", unlinked: "Unlinked" }[which]} <span class="dim" style="font-weight:400">${n({ groups: d.groups.length, next: d.next.picks.length, unlinked: d.unlinked.length }[which])}</span>`)}
+    <ol class="list" data-fill="list"></ol>
+    <div class="row" data-pager></div>
+  </div>`;
+}
+
+/** The rows a list screen pages through. */
+function rowsOf() {
+  const d = P.page, v = S.view;
+  if (v.kind === "issue") {
+    return (P.links[v.i] || []).map(([role, to, ref, title, open]) => {
+      const st = !open ? { word: "Closed", color: "var(--faint)" } : to >= 0 ? state(to) : { word: "", color: "" };
+      return `<li class="linkrow"><span class="small dim">${ROLES[role]}</span><span class="clamp1">${to >= 0 ? issueLink(to) : `<span class="ref">${esc(ref)}</span> <span class="${open ? "" : "faint"}">${titled(title)}</span>`}</span><span class="state" style="color:${st.color}">${esc(st.word)}</span></li>`;
+    });
+  }
+  if (v.which === "groups") return d.groups.map((g, k) => `<li class="num"><span class="n">${k + 1}</span><div style="min-width:0"><p class="t clamp1"><a class="link" ${act(() => go({ kind: "island", k }))}>${titled(I[g.head].title)}</a></p><p class="t dim small clamp1">${plural(g.size, "Issue")}, ${g.unblocked ? `${n(g.unblocked)} Unblocked` : "none Unblocked"}${holdsNext(g) ? `, <span class="pick">holds Take next</span>` : ""}</p></div></li>`);
+  if (v.which === "next") return d.next.picks.map((p, k) => `<li class="num"><span class="n">${k + 1}</span><div style="min-width:0"><p class="t clamp1">${issueLink(p.issue)}</p><p class="t dim small clamp1">${esc(because(p) || "Nothing open blocks it")}</p></div></li>`);
+  return d.unlinked.map((i) => `<li${i === v.marked ? ' class="marked"' : ""}><p class="t clamp1">${issueLink(i)}</p></li>`);
+}
+
+/** As many rows as the room holds; Earlier and More page through the rest. */
+function fillList(ol) {
+  const v = S.view, all = rowsOf();
+  let page = v.page || 0;
+  const pager = ol.parentElement.querySelector("[data-pager]");
+  // Measured with the pager in place, since it takes its room from the list's.
+  pager.innerHTML = '<button class="btn">More</button>';
+  ol.innerHTML = "";
+  let per = 0;
+  for (; per < all.length; per++) {
+    ol.insertAdjacentHTML("beforeend", all[per]);
+    if (ol.scrollHeight > ol.clientHeight + 1) { ol.lastElementChild.remove(); break; }
+  }
+  per = Math.max(1, per);
+  if (v.mark !== undefined && v.which === "unlinked") {
+    const at = P.page.unlinked.indexOf(v.mark);
+    if (at >= 0) page = Math.floor(at / per);
+    S.view = { ...v, page, mark: undefined, marked: v.mark };
+  }
+  const first = page * per;
+  // The rows' closures were registered as they were made; those for the page shown are made again.
+  ol.innerHTML = rowsOf().slice(first, first + per).join("");
+  pager.innerHTML = all.length > per
+    ? `${first > 0 ? btn("Earlier", () => { S.view = { ...S.view, page: page - 1 }; draw(); }) : "<span></span>"}<span class="dim small">${n(first + 1)}–${n(Math.min(all.length, first + per))} of ${n(all.length)}</span>${first + per < all.length ? btn("More", () => { S.view = { ...S.view, page: page + 1 }; draw(); }) : "<span></span>"}`
+    : "";
+  if (!all.length) ol.innerHTML = `<li><p class="t dim small">No Links.</p></li>`;
+}
+
+/* ---------- Drawing ---------- */
+
+function draw() {
+  acts = [];
+  S.placed = [];
+  P = PROJECTS.find((p) => p.key === S.project) || PROJECTS[0];
+  I = P.page.issues;
+  GROUP_OF = new Map();
+  P.page.groups.forEach((g, k) => membersOf(g).forEach((i) => GROUP_OF.has(i) || GROUP_OF.set(i, k)));
+  document.documentElement.dataset.theme = S.theme;
+  document.documentElement.style.setProperty("--pane-w", `${S.width}px`);
+  const body = document.getElementById("pane");
+  body.innerHTML = { map: mapScreen, island: islandScreen, issue: issueScreen, list: listScreen }[S.view.kind]();
+  // Second pass: what fills the room the first pass left.
+  const slot = body.querySelector(".slot");
+  if (slot) {
+    const w = Math.floor(slot.clientWidth), h = Math.floor(slot.clientHeight);
+    if (slot.dataset.fill === "sea") slot.innerHTML = seaChart(w, h);
+    else {
+      if (S.opening) {
+        const r = slot.getBoundingClientRect();
+        S.opening = { ...S.opening, x: S.opening.sx - r.left, y: S.opening.sy - r.top, others: S.opening.others.map((c) => ({ ...c, x: c.sx - r.left, y: c.sy - r.top })) };
+      }
+      slot.innerHTML = openChart(w, h);
+      const land = slot.querySelector(".land[data-to]");
+      if (land) requestAnimationFrame(() => requestAnimationFrame(() => land.setAttribute("style", land.dataset.to)));
+    }
+  }
+  const ol = body.querySelector(".list");
+  if (ol) fillList(ol);
+  S.opening = null;
+  history.replaceState(null, "", `?${new URLSearchParams({ project: S.project, width: S.width, theme: S.theme })}`);
+}
+
+const select = document.getElementById("project");
+select.innerHTML = PROJECTS.map((p) => `<option value="${p.key}">${esc(p.label)}</option>`).join("");
+select.value = S.project;
+select.onchange = () => { S.project = select.value; document.querySelector(".browser")?.remove(); home(); };
+const width = document.getElementById("width");
+width.value = S.width;
+width.onchange = () => { S.width = width.value; draw(); };
+document.getElementById("theme").onclick = () => { S.theme = S.theme === "dark" ? "light" : "dark"; draw(); };
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (e.key === "Escape" && S.view.kind !== "map") up();
+});
+let resizing;
+addEventListener("resize", () => { clearTimeout(resizing); resizing = setTimeout(() => { S.opening = null; draw(); }, 120); });
+document.getElementById("log").innerHTML = `<div class="msg you">what should I take next?</div><div class="msg"><div class="ghost" style="width:80%"></div><div class="ghost" style="width:64%"></div><div class="ghost" style="width:72%"></div></div><div class="msg"><div class="ghost" style="width:58%"></div><div class="ghost" style="width:40%"></div></div>`;
+draw();
+</script>
+</body>
+</html>
