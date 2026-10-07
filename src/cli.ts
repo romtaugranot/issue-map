@@ -282,7 +282,8 @@ function openStore() {
 /** Runs this CLI again in a process of its own that outlives this one; what it prints goes to a log beside the Snapshots. */
 function detach(args: string[]): void {
   const log = openBackgroundLog(stateDir());
-  spawn(process.execPath, [fileURLToPath(import.meta.url), ...args], { detached: true, stdio: ["ignore", log, log] }).unref();
+  // Hidden, or on Windows it opens a console window of its own.
+  spawn(process.execPath, [fileURLToPath(import.meta.url), ...args], { detached: true, stdio: ["ignore", log, log], windowsHide: true }).unref();
 }
 
 /**
