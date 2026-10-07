@@ -14,6 +14,7 @@
  * `issue-map picture <n | ref>`: draws Group `n` of the overview whole, or its outline when it's too large for a Picture; or the Picture around the Issue `ref` names, what it waits on and what waits on it. `--mermaid` or `--dot` prints that Picture as Mermaid or DOT, to paste where GitHub or GitLab render it.
  * `issue-map html`: writes the HTML Picture of the whole Map of the Project on screen beside its Snapshot, and says where it is and how to open it; where the user is doesn't change.
  * `issue-map html --artifact`: writes the same page, and prints for Claude the question to ask before publishing it as a private claude.ai Artifact, or why it can't be here; it publishes nothing itself.
+ * `issue-map pane`: prints what the Issue Map pane draws the Project on screen from, as one line of JSON: `{"map": …}`, or `{"said": …}` with what to show in its place when there's no Map to draw; where the user is doesn't change.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
  * `issue-map start <ref>`: the body and comments of the Issue `ref` names, cut to a fixed budget, for Claude to brief the user from; where the user is doesn't change.
@@ -58,7 +59,7 @@ import { confirm, offer, suggest, type Pending, type PendingSuggestions, type Pr
 import { localCheckouts, move, pickHome, type Answer, type MoveChoice, type Position, type Recent, type Recents, type Request, type Trail } from "./move/move.ts";
 
 const USAGE =
-  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--remove] — each takes [--pick <URL>] [--shown]";
+  "usage: issue-map map | refresh | unlinked [--page <n>] | groups [--page <n>] | next [--page <n>] | taken [--page <n>] | group <n | ref> [--page <n>] | picture <n | ref> [--mermaid | --dot] | html [--artifact] | pane | issue <ref> [--page <n>] | assign <ref> | start <ref> | suggest | offer < proposals.json | confirm [<n>]... | go [<target>] [--dir <path>]... [--pick-there <URL>] | back | home | statusline [--remove] — each takes [--pick <URL>] [--shown]";
 
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -119,6 +120,7 @@ async function main(argv: string[]): Promise<number> {
       break;
     case "home":
     case "html":
+    case "pane":
     case "map":
     case "refresh":
     case "unlinked":
@@ -147,7 +149,7 @@ async function main(argv: string[]): Promise<number> {
     : { text: `No Home Project: ${cwd} isn't inside a git checkout.`, choices: [], others: [] };
   // A tie is asked before any Map is drawn.
   if (home.choices.length > 0) {
-    console.log(render(await shown(pickHome(home), values.shown)));
+    console.log(verb === "pane" ? said(render(pickHome(home))) : render(await shown(pickHome(home), values.shown)));
     return 0;
   }
 
@@ -160,6 +162,8 @@ async function main(argv: string[]): Promise<number> {
           ? { kind: "home", picked: values.pick !== undefined }
           : verb === "html"
             ? { kind: "html", ...(values.artifact ? { artifact: true as const } : {}) }
+          : verb === "pane"
+            ? { kind: "pane" }
           : verb === "assign" || verb === "start"
             ? { kind: verb, ref: cardRef! }
             : verb === "suggest"
@@ -198,6 +202,10 @@ async function main(argv: string[]): Promise<number> {
     },
     request,
   );
+  if (verb === "pane") {
+    console.log(answer.text.startsWith('{"map":') ? answer.text : said(render(answer)));
+    return 0;
+  }
   // What `start`, `suggest` and `html --artifact` print is for Claude to work from, not to show.
   console.log(render(verb === "start" || verb === "suggest" || (verb === "html" && values.artifact) ? answer : await shown(answer, values.shown)));
   return 0;
@@ -207,6 +215,11 @@ async function main(argv: string[]): Promise<number> {
 async function shown(answer: Answer, plain = false): Promise<Answer> {
   if (plain) return answer;
   return { ...answer, text: await withLine(stateDir(), answer.text, process.env.CLAUDE_CODE_SESSION_ID) };
+}
+
+/** What the pane shows in place of a Map, as `pane` prints it. */
+function said(text: string): string {
+  return JSON.stringify({ said: text });
 }
 
 /** `group`'s argument: a bare number is a Group's place on the overview, from 1; anything else names an Issue. */

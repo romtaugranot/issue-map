@@ -114,6 +114,22 @@ test("the HTML Picture is drawn from the Snapshot the Map is, written beside it,
   assert.match(readFileSync(path!, "utf8"), /"project":"fixture-org\/tools"/);
 });
 
+test("the pane's data is drawn from the Snapshot the Map is, and printed as one line of JSON (ADR 0014)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "issue-map-show-"));
+  const store = snapshotStore(dir, { now: () => Date.parse("2026-09-23T10:00:00Z") });
+  const { tracker, release } = heldTracker();
+  release();
+  await store.read({ tracker: "github.com", project: project.id, login: "fixture-viewer" }, tracker, project);
+  const deps = { store, startRead: () => assert.fail("no read: the Snapshot is there"), sleep: async () => {}, startRefresher: async () => {} };
+  const shown = await showMap(deps, tracker, project, { kind: "pane" });
+  assert.equal(shown.drew, "map");
+  assert.doesNotMatch(shown.text, /\n/);
+  const { map } = JSON.parse(shown.text);
+  assert.equal(map.project, "fixture-org/tools");
+  assert.equal(map.open, 150);
+  assert.deepEqual(map.links[0], [{ role: "child", to: 1, ref: "#2", title: "Issue 2", open: true }]);
+});
+
 test("to publish as an Artifact, the same page is written and the question asked of it; where Artifacts can't be had, nothing is written (#86)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "issue-map-show-"));
   const store = snapshotStore(dir, { now: () => Date.parse("2026-09-23T10:00:00Z") });
