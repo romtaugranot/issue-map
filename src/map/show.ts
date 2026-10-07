@@ -95,7 +95,10 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     const text = await drawn(state.snapshot, home === undefined ? {} : { home });
     return bandOf(state.snapshot.support).kind === "refused" ? nothing(text) : map(text);
   }
-  return { text: drawProgress(project.path, progress(state, project)).text, drew: "progress" };
+  const read = progress(state, project);
+  // The pane draws the read's progress itself, and asks again until it finishes.
+  if (command.kind === "pane") return { text: JSON.stringify({ reading: { project: project.path, ...read } }), drew: "progress" };
+  return { text: drawProgress(project.path, read).text, drew: "progress" };
 }
 
 function progress(state: Exclude<SnapshotState, { kind: "ready" }>, project: Project) {

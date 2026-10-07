@@ -130,6 +130,24 @@ test("the pane's data is drawn from the Snapshot the Map is, and printed as one 
   assert.deepEqual(map.links[0], [{ role: "child", to: 1, ref: "#2", title: "Issue 2", open: true }]);
 });
 
+test("during a first read, the pane is told how far it's got, as JSON it draws itself (ADR 0014)", async () => {
+  const store = snapshotStore(mkdtempSync(join(tmpdir(), "issue-map-show-")), { now: () => Date.parse("2026-09-23T10:00:00Z") });
+  const { tracker, release, paged } = heldTracker();
+  let reading: Promise<unknown> | undefined;
+  const deps = {
+    store,
+    startRead: () => void (reading = store.read({ tracker: "github.com", project: project.id, login: "fixture-viewer" }, tracker, project)),
+    sleep: () => paged,
+    startRefresher: async () => {},
+  };
+  const shown = await showMap(deps, tracker, project, { kind: "pane" });
+  release();
+  await reading;
+  assert.equal(shown.drew, "progress");
+  const { reading: progress } = JSON.parse(shown.text);
+  assert.deepEqual({ ...progress, elapsedMs: 0 }, { project: "fixture-org/tools", read: 100, total: 150, elapsedMs: 0 });
+});
+
 test("to publish as an Artifact, the same page is written and the question asked of it; where Artifacts can't be had, nothing is written (#86)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "issue-map-show-"));
   const store = snapshotStore(dir, { now: () => Date.parse("2026-09-23T10:00:00Z") });

@@ -11,8 +11,11 @@ export type IssueMapScreen =
   | { kind: "issue"; ref: string; page?: number }
   | { kind: "list"; which: "next" | "groups" | "unlinked"; page?: number; mark?: string };
 
-/** What the pane last read with `issue-map pane`, when: the Map's data as printed, or what to show in its place. */
-export type IssueMapRead = { at: number; map?: string; said?: string };
+/** How far a first read of the Project has got: Issues read of all open, how long it's taken, and why it stopped, when it has. */
+export type IssueMapProgress = { project: string; read: number; total: number; elapsedMs: number; stopped?: string };
+
+/** What the pane last read with `issue-map pane`, when: the Map's data as printed, a first read's progress, or what to show in its place. */
+export type IssueMapRead = { at: number; map?: string; reading?: IssueMapProgress; said?: string };
 
 declare module "claude-code" {
   interface PluginState {

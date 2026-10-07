@@ -19,7 +19,7 @@
  * only sends Claude a prompt, or fills the prompt box for the person to send.
  */
 import type { EngineInterface, Register, RenderElement } from "claude-code";
-import type { IssueMapRead, IssueMapScreen } from "../types";
+import type { IssueMapProgress, IssueMapRead, IssueMapScreen } from "../types";
 import type { PaneData, PaneLink } from "../src/map/pane.ts";
 import { earlier, islandChart, islandPage, seaChart } from "../src/pane/chart.ts";
 import { fitLine } from "../src/pane/fit.ts";
@@ -38,6 +38,7 @@ import {
   outline,
   plain,
   plural,
+  readSaid,
   ROLES,
   shares,
   stateOf,
@@ -65,6 +66,8 @@ const READING = { plugin: "issue-map", key: "reading" } as const;
 
 /** How often an open pane's data is read again while nothing else happens. */
 const READ_EVERY_MS = 120_000;
+/** How soon a first read is asked after again, while it runs: each ask also waits a few seconds on it. */
+const FOLLOW_MS = 1_000;
 /** How long an opened island grows into the chart: its screen draws the growing only this soon after. */
 const GROWS_MS = 1_500;
 
@@ -77,15 +80,18 @@ const GROWS_MS = 1_500;
 const CELL_W = 8;
 const CELL_H = 20;
 
-/** The plugin's CLI: its launcher, or on Windows, where a bash script can't be started without a shell, Node on its source. */
-function cli($: EngineInterface): string[] {
+/** One of the plugin's launchers: itself, or on Windows, where a bash script can't be started without a shell, Node on its source. */
+function launch($: EngineInterface, bin: string, source: string): string[] {
   const root = $.plugin.root;
-  return /^[A-Za-z]:[\\/]/.test(root) ? ["node", `${root}/src/cli.ts`] : [`${root}/bin/issue-map`];
+  return /^[A-Za-z]:[\\/]/.test(root) ? ["node", `${root}/src/${source}`] : [`${root}/bin/${bin}`];
 }
+
+/** The plugin's CLI. */
+const cli = ($: EngineInterface) => launch($, "issue-map", "cli.ts");
 
 /** Pins the row for where the session is, or takes the line away when there is none. */
 async function pin($: EngineInterface): Promise<void> {
-  const ran = await $.process.run([`${$.plugin.root}/bin/issue-map-status-line`], { cwd: await $.session.cwd(), timeoutMs: 10_000 }).catch(() => null);
+  const ran = await $.process.run(launch($, "issue-map-status-line", "status-line.ts"), { cwd: await $.session.cwd(), timeoutMs: 10_000 }).catch(() => null);
   $.ui.status(ran?.stdout.trim() || undefined);
 }
 
@@ -120,20 +126,24 @@ async function openPane($: EngineInterface): Promise<string> {
   return opened.isPlaced ? "Opened the Issue Map pane." : `The Issue Map pane is open, but not shown: ${opened.reason}`;
 }
 
-/** Reads what the pane draws, once at a time. */
+/** Reads what the pane draws, once at a time; while a first read runs, again until it finishes, so the Map draws as soon as it can. */
 async function readPane($: EngineInterface): Promise<void> {
   if ((await $.state.get(READING)).value) return;
   await $.state.set(READING, true);
+  let following = false;
   try {
     const ran = await run($, ["pane"], 120_000);
     const read: IssueMapRead = { at: await $.clock.now() };
     const printed = ran.ok ? parse(ran.text) : null;
     if (printed && typeof printed.map === "object") read.map = ran.text.trim();
+    else if (printed && typeof printed.reading === "object" && printed.reading) read.reading = printed.reading as IssueMapProgress;
     else read.said = printed && typeof printed.said === "string" ? printed.said : ran.text || "Issue Map printed nothing.";
     await $.state.set(READ, read);
+    following = read.reading !== undefined && !read.reading.stopped;
   } finally {
     await $.state.set(READING, false);
   }
+  if (following) $.clock.after(FOLLOW_MS, () => void isOpen($).then((open) => (open ? readPane($) : undefined)));
 }
 
 function parse(text: string): Record<string, unknown> | null {
@@ -230,11 +240,35 @@ export const register: Register = (on) => {
     /** On the terminal Buttons are one row; a desktop's are about two. */
     const BUTTON = surface === "terminal" ? 1 : 2;
 
-    if (!data) {
-      const said = read?.said ?? (reading ? "Reading the Map…" : "No Map read yet.");
+    if (!data && read?.reading) {
+      const progress = read.reading;
       return (
         <Box flexDirection="column" gap={1}>
-          <Markdown text={said.slice(0, 9_000)} />
+          <Text>
+            <Text bold>{progress.project}</Text>
+            {" · reading it for the first time"}
+          </Text>
+          <Text>{readSaid(progress)}</Text>
+          {progress.stopped && <Text>{`The read stopped: ${progress.stopped}.`}</Text>}
+          {progress.stopped && !reading && <Button key="again" label="Read it again" onPress={() => void readPane($)} />}
+        </Box>
+      );
+    }
+    if (!data) {
+      const said = read?.said ?? (reading ? "Reading the Map…" : "No Map read yet.");
+      // Each line its own, as printed: Markdown would run a paragraph's lines together.
+      return (
+        <Box flexDirection="column" gap={1}>
+          {said
+            .slice(0, 9_000)
+            .split(/\n{2,}/)
+            .map((paragraph, k) => (
+              <Box key={`said-${k}`} flexDirection="column">
+                {paragraph.split("\n").map((line, j) => (
+                  <Markdown key={`line-${j}`} text={line} />
+                ))}
+              </Box>
+            ))}
           {!reading && <Button key="again" label="Read it again" onPress={() => void readPane($)} />}
         </Box>
       );

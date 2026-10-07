@@ -206,6 +206,38 @@ test("where there's no Map, the pane says why, and reads again when asked", asyn
   expect(ran.length).toBe(3);
 });
 
+test("while a first read runs, the pane says how far it's got, and reads again until the Map draws", async ($, on) => {
+  const reading = (read: number) => JSON.stringify({ reading: { project: "fixture-org/tools", read, total: 12, elapsedMs: 3_000 } });
+  const { ran, clock } = world(on, reading(3), [reading(12), PRINTED]);
+  await start($);
+  await command($, clock, "pane");
+  const ui = await mount($, "terminal");
+  expect(await shown(ui)).toContain("3 of 12 Issues read · about 9s left");
+  expect(await ui.find({ key: "again" })).toBeUndefined();
+  await clock.advance(1_000);
+  expect(await shown(ui)).toContain("12 Issues read · finishing");
+  await clock.advance(1_000);
+  expect(ran.length).toBe(3);
+  expect((await ui.find({ key: "next" }))?.text).toBe("4 Take next");
+  await clock.advance(10_000);
+  expect(ran.length).toBe(3);
+  await ui.unmount();
+});
+
+test("a first read that stopped says why, and resumes when asked", async ($, on) => {
+  const { ran, clock } = world(on, JSON.stringify({ reading: { project: "fixture-org/tools", read: 3, total: 12, elapsedMs: 3_000, stopped: "GitHub's rate limit" } }));
+  await start($);
+  await command($, clock, "pane");
+  await clock.advance(5_000);
+  expect(ran.length).toBe(1);
+  const ui = await mount($, "terminal");
+  expect(await shown(ui)).toContain("The read stopped: GitHub's rate limit.");
+  await ui.press({ key: "again" });
+  await clock.settle();
+  expect(ran.length).toBe(2);
+  await ui.unmount();
+});
+
 test("after a turn the open pane reads the Map again, and a screen whose Issue is gone falls back to the Map", async ($, on) => {
   const gone = JSON.parse(PRINTED);
   gone.map.issues[6].ref = "#70";

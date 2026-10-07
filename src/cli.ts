@@ -14,7 +14,7 @@
  * `issue-map picture <n | ref>`: draws Group `n` of the overview whole, or its outline when it's too large for a Picture; or the Picture around the Issue `ref` names, what it waits on and what waits on it. `--mermaid` or `--dot` prints that Picture as Mermaid or DOT, to paste where GitHub or GitLab render it.
  * `issue-map html`: writes the HTML Picture of the whole Map of the Project on screen beside its Snapshot, and says where it is and how to open it; where the user is doesn't change.
  * `issue-map html --artifact`: writes the same page, and prints for Claude the question to ask before publishing it as a private claude.ai Artifact, or why it can't be here; it publishes nothing itself.
- * `issue-map pane`: prints what the Issue Map pane draws the Project on screen from, as one line of JSON: `{"map": …}`, or `{"said": …}` with what to show in its place when there's no Map to draw; where the user is doesn't change.
+ * `issue-map pane`: prints what the Issue Map pane draws the Project on screen from, as one line of JSON: `{"map": …}`; `{"reading": …}`, how far a first read has got; or `{"said": …}` with what to show in its place when there's no Map to draw; where the user is doesn't change.
  * `issue-map issue <ref> [--page <n>]`: the Issue card of the Issue `ref` names, read live, and the Links to follow from it.
  * `issue-map assign <ref>`: assigns the Issue `ref` names to the viewer, once the user has confirmed, and shows its card.
  * `issue-map start <ref>`: the body and comments of the Issue `ref` names, cut to a fixed budget, for Claude to brief the user from; where the user is doesn't change.
@@ -203,7 +203,7 @@ async function main(argv: string[]): Promise<number> {
     request,
   );
   if (verb === "pane") {
-    console.log(answer.text.startsWith('{"map":') ? answer.text : said(render(answer)));
+    console.log(/^\{"(map|reading)":/.test(answer.text) ? answer.text : said(render(answer)));
     return 0;
   }
   // What `start`, `suggest` and `html --artifact` print is for Claude to work from, not to show.

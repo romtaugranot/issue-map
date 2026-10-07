@@ -2,7 +2,7 @@
 
 The Map lives in the conversation, where each move scrolls the last away, and the HTML Picture lives outside Claude Code. Claude Code now lets a plugin's hooks module open a pane beside the transcript and draw it. So `/issue-map pane` opens the Issue Map pane, drawn by the hooks module, `hooks/plugin.tsx`, with no model turn.
 
-It is drawn from what `issue-map pane` prints: the HTML Picture's own data (ADR 0010), with each of the Project's own Issues' Links and whether it's assigned, as one line of JSON, from the same Snapshot the Map is drawn from. So it never disagrees with the Map on Take next or the Groups. It is read again when the pane opens, after each turn, and every two minutes while it's open.
+It is drawn from what `issue-map pane` prints: the HTML Picture's own data (ADR 0010), with each of the Project's own Issues' Links and whether it's assigned, as one line of JSON, from the same Snapshot the Map is drawn from. So it never disagrees with the Map on Take next or the Groups. It is read again when the pane opens, after each turn, and every two minutes while it's open. During a Project's first read, when there's no Map to draw yet, `issue-map pane` prints how far the read has got instead, and the pane asks again every few seconds, so the Map draws as soon as the read finishes.
 
 It is made of screens that lead one to another, each fitting the pane with no scroll bar:
 
@@ -21,7 +21,7 @@ Writes stay with Claude (ADR 0012). Brief me ↗ and Suggest Links ↗ send Clau
 
 - **The chart takes no presses of its own.** A desktop `Svg` is an image. So a `Client` region is laid over it, which names the island under the pointer and posts what a press lands on. The chart is drawn as wide as the pane, and as tall as a cell is reckoned to be, so the region finds a cell's place on the chart by its share of the region.
 - **The terminal has no `Svg`.** There the numbered Groups stand in for the chart, an opened Group is an indented list, and each row's Button takes a hotkey.
-- **On Windows the CLI is run through Node.** `bin/issue-map` is a bash script, which a process started with no shell can't run, so there the hooks module runs `node src/cli.ts` itself, for the pane and for `/issue-map` alike.
+- **On Windows the CLI is run through Node.** `bin/issue-map` is a bash script, which a process started with no shell can't run, so there the hooks module runs `node src/cli.ts` itself, for the pane, `/issue-map` and the status line alike. Every process the CLI starts is started hidden: a read runs detached, with no console, so each `gh` or `git` it ran opened a window of its own.
 
 ## Considered Options
 

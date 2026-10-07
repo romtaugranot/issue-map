@@ -70,7 +70,7 @@ It needs a Claude Code build that loads plugins' hooks modules.
 
 Select an Issue for its screen: its state, its Links to go on to, a link to the Tracker, **Brief me ↗**, which asks Claude to start work on it, and **Assign to me ↗**, which puts the request in the prompt box for you to send. The "←" button goes up a level and names where: an Issue to its Group, or in none to the Unlinked list, and a Group or a list to the Map. Take next, the Groups and the Unlinked list each have a button on the Map.
 
-On the terminal, where no chart is drawn, the Groups are a numbered list, and each row's number presses it while the pane has the keys. The pane reads the Map again after each turn, and every two minutes while it's open. It needs a Claude Code build that opens plugins' panes.
+On the terminal, where no chart is drawn, the Groups are a numbered list, and each row's number presses it while the pane has the keys. The pane reads the Map again after each turn, and every two minutes while it's open. On a Project's first read it shows how far the read has got, and draws the Map as soon as it finishes. It needs a Claude Code build that opens plugins' panes.
 
 ## The status line
 

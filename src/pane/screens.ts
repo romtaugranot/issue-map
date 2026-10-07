@@ -159,5 +159,14 @@ export function issueSaid(d: PaneData, i: number): { blocked: string | null; sta
   return { blocked: null, state: `${issue.unblocked ? "Unblocked. " : ""}${assigned}`, next };
 }
 
+/** How far a first read has got, as the pane says it while it waits to draw: what's read, then what's left. */
+export function readSaid({ read, total, elapsedMs }: { read: number; total: number; elapsedMs: number }): string {
+  if (total > 0 && read >= total) return `⏳ ${plural(total, "Issue")} read · finishing`;
+  const said = `⏳ ${count(read)} of ${plural(total, "Issue")} read`;
+  if (read === 0) return said;
+  const seconds = (elapsedMs / read) * (total - read) / 1000;
+  return `${said} · about ${seconds > 90 ? `${Math.round(seconds / 60)} min` : `${Math.max(1, Math.round(seconds))}s`} left`;
+}
+
 /** A Link's kind as the Issue screen lists it, from what the far end is to the Issue. */
 export const ROLES = { blocker: "Blocked by", blocked: "Blocks", parent: "Parent", child: "Child", related: "Related" } as const;
