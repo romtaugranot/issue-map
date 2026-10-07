@@ -6,7 +6,14 @@
 import { expect, mock, test, type Engine } from "claude-code/testing";
 import type { On, ProcessRunResult } from "claude-code";
 
-/** Answers each run of `bin/issue-map` with `result`, `null` failing it, and records what ran and what was registered. */
+/**
+ * What the plugin's CLI was run with: its own `bin/issue-map`, or on
+ * Windows, where a bash script can't be started without a shell, Node on its
+ * `src/cli.ts`; `null` for anything else.
+ */
+const cliArgs = (argv: readonly string[]) => (/^\/.*\/bin\/issue-map$/.test(argv[0]!) ? argv.slice(1) : argv[0] === "node" && /^[A-Za-z]:[\\/].*\/src\/cli\.ts$/.test(argv[1] ?? "") ? argv.slice(2) : null);
+
+/** Answers each run of the plugin's CLI with `result`, `null` failing it, and records what ran and what was registered. */
 function world(on: On, result: Partial<ProcessRunResult> | null = { stdout: "**owner/map** · 3 open\n" }) {
   const ran: { argv: readonly string[]; cwd?: string; env?: Record<string, string> }[] = [];
   const registered: string[] = [];
@@ -17,9 +24,10 @@ function world(on: On, result: Partial<ProcessRunResult> | null = { stdout: "**o
   mock.clock(on);
   on("ui.status", () => ({ value: undefined }));
   on("process.run", (_$, e) => {
-    // The status line's own process runs too; only bin/issue-map is this command's.
-    if (!e.argv[0]!.endsWith("/bin/issue-map")) return { value: { exitCode: 0, stdout: "", stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
-    ran.push({ argv: e.argv, cwd: e.init?.cwd, env: e.init?.env });
+    // The status line's own process runs too; only the plugin's CLI is this command's.
+    const args = cliArgs(e.argv);
+    if (!args) return { value: { exitCode: 0, stdout: "", stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
+    ran.push({ argv: args, cwd: e.init?.cwd, env: e.init?.env });
     if (result === null) return { deny: "node: not found" };
     return { value: { exitCode: 0, stdout: "", stderr: "", isStdoutTruncated: false, isStderrTruncated: false, ...result } };
   });
@@ -40,8 +48,7 @@ test("on its own draws the Map, from the plugin's own bin/issue-map, where the s
   await start($);
   const { text } = await command($, "");
   expect(ran.length).toBe(1);
-  expect(ran[0]!.argv[0]).toMatch(/^\/.*\/bin\/issue-map$/);
-  expect(ran[0]!.argv.slice(1)).toEqual(["--shown", "map"]);
+  expect(ran[0]!.argv).toEqual(["--shown", "map"]);
   expect(ran[0]!.cwd).toBe("/work/checkout");
   expect(ran[0]!.env).toEqual({ CLAUDE_CODE_SESSION_ID: "session-1" });
   expect(text).toBe("**owner/map** · 3 open");
@@ -53,7 +60,7 @@ test("followed by a view's command, shows that view", async ($, on) => {
   await command($, " group  2 ");
   await command($, "issue owner/map#7");
   await command($, "back");
-  expect(ran.map((r) => r.argv.slice(1))).toEqual([
+  expect(ran.map((r) => r.argv)).toEqual([
     ["--shown", "group", "2"],
     ["--shown", "issue", "owner/map#7"],
     ["--shown", "back"],

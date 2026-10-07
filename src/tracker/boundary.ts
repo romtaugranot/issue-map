@@ -76,7 +76,8 @@ export const processCli: Cli = (command, args, unset = [], seconds = CALL_SECOND
   new Promise((resolve) => {
     const env = { ...process.env };
     for (const name of unset) delete env[name];
-    execFile(command, args, { maxBuffer: 64 * 1024 * 1024, env, timeout: seconds * 1000, killSignal: "SIGKILL" }, (error, stdout, stderr) => {
+    // Hidden on Windows, where a console program started from a detached process would open a window of its own.
+    execFile(command, args, { maxBuffer: 64 * 1024 * 1024, env, timeout: seconds * 1000, killSignal: "SIGKILL", windowsHide: true }, (error, stdout, stderr) => {
       if (error && (error as NodeJS.ErrnoException).code === "ENOENT") return resolve({ kind: "missing" });
       // Only the timeout kills it.
       if (error?.killed) return resolve({ kind: "exited", code: 1, stdout: "", stderr: "", timedOut: seconds });

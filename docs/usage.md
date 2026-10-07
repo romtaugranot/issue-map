@@ -64,6 +64,14 @@ Type `/issue-map` for the Map, or `/issue-map` followed by a view, such as `/iss
 
 It needs a Claude Code build that loads plugins' hooks modules.
 
+## The Issue Map pane
+
+`/issue-map pane` opens the Map in a pane beside the conversation ([ADR 0014](adr/0014-a-pane-draws-the-map-beside-the-conversation.md)). It opens on the Map: the Project, how many Issues are there to take next, waiting and Unlinked, the Issue to start with, and each Group as an island, its ring filling with the share Unblocked and a lantern on one holding an Issue in Take next. Point at an island's number to name it, and select it to open it. Its Issues stand in one column, each under the one it was reached from: a red arrow is a Blocks Link and a dotted line a Parent Link. Select an Issue's title to open it.
+
+Select an Issue for its screen: its state, its Links to go on to, a link to the Tracker, **Brief me ↗**, which asks Claude to start work on it, and **Assign to me ↗**, which puts the request in the prompt box for you to send. The "←" button goes up a level and names where: an Issue to its Group, or in none to the Unlinked list, and a Group or a list to the Map. Take next, the Groups and the Unlinked list each have a button on the Map.
+
+On the terminal, where no chart is drawn, the Groups are a numbered list, and each row's number presses it while the pane has the keys. The pane reads the Map again after each turn, and every two minutes while it's open. On a Project's first read it shows how far the read has got, and draws the Map as soon as it finishes. It needs a Claude Code build that opens plugins' panes.
+
 ## The status line
 
 The plugin pins a status line of its own under the prompt, beside yours, with nothing to set up. It shows the Home Project's first Issue in Take next ([example](../README.md#usage)) and never reads the Tracker itself. It needs a Claude Code build that loads plugins' hooks modules ([ADR 0011](adr/0011-the-status-line-is-the-plugins-own.md)).

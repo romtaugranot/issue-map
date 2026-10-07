@@ -27,9 +27,10 @@ claude --plugin-dir path/to/issue-map
 | Path | What's there |
 |---|---|
 | `bin/` | The entry points Claude Code runs: `issue-map`, the display hook, and the status line |
-| `hooks/` | `hooks.json`, which declares the display hook, and `plugin.ts`, the hooks module behind the status line and `/issue-map` |
+| `hooks/` | `hooks.json`, which declares the display hook; `plugin.tsx`, the hooks module behind the status line, `/issue-map` and the Issue Map pane; and `chart.tsx`, the region laid over the pane's chart |
+| `types/` | The contract of what the hooks module keeps in `$.state` |
 | `skills/map/SKILL.md` | The skill that tells Claude how to run the Map |
-| `src/` | The CLI: `map/` draws, `tracker/` holds the GitHub and GitLab adapters, `snapshot/` holds the Snapshot store and refresher, and `home/`, `move/`, `show/` and `status/` hold the rest |
+| `src/` | The CLI: `map/` draws, `tracker/` holds the GitHub and GitLab adapters, `snapshot/` holds the Snapshot store and refresher, and `home/`, `move/`, `show/` and `status/` hold the rest. `pane/` is what the hooks module draws the pane with, with no Node in it |
 | `test/` | The contract suite, its fakes, the recorded Snapshots and schemas, and the live reads in `test/live/` |
 | `scripts/` | CI helpers in `ci/`, and the fixture seeder in `fixtures/` |
 | `docs/` | User guides, [ADRs](docs/adr), and the [fixture](docs/fixtures.md) and [release](docs/releasing.md) notes |

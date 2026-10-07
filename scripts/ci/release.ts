@@ -16,8 +16,8 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** What the plugin runs from: launchers, hooks, skill, source and manifest, and what a user reads. */
-export const RUNTIME = ["bin", "hooks", "skills", "src", ".claude-plugin/plugin.json", "LICENSE", "README.md", "SECURITY.md"];
+/** What the plugin runs from: launchers, hooks and the contract of what they keep, skill, source and manifest, and what a user reads. */
+export const RUNTIME = ["bin", "hooks", "skills", "src", "types", ".claude-plugin/plugin.json", "LICENSE", "README.md", "SECURITY.md"];
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 

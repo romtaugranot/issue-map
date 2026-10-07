@@ -9,6 +9,7 @@
   "homepage": "https://github.com/romtaugranot/issue-map",
   "repository": "https://github.com/romtaugranot/issue-map",
   "license": "MIT",
+  "types": "./types/index.d.ts",
   "keywords": [
     "github",
     "gitlab",
