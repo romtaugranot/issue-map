@@ -10,7 +10,7 @@
  */
 import type { PaneData } from "../map/pane.ts";
 import { fitLine, textWidth, wrap } from "./fit.ts";
-import { count, firstPick, groupSaid, holdsNext, isOutside, membersOf, nameOf, outline, plain, plural, type OutlineRow } from "./screens.ts";
+import { count, firstPick, groupSaid, holdsNext, membersOf, nameOf, outline, plain, plural, type OutlineRow } from "./screens.ts";
 
 /** Islands drawn at most; the Groups list holds every Group. */
 const ISLANDS = 24;
@@ -104,7 +104,7 @@ function islandSvg(d: PaneData, c: Isle, { sink }: { sink?: boolean } = {}): str
 /** What the pane writes on island `c`: its number, and its size where the island holds it. */
 export function isleLabel(d: PaneData, c: Isle): { n: string; size: string } {
   const size = plural(d.groups[c.k]!.size, "Issue");
-  return { n: count(c.k + 1), size: textWidth(size, TEXT) <= 2 * c.r - 10 ? size : "" };
+  return { n: count(c.k + 1), size: textWidth(size, TEXT, 600) <= 2 * c.r - 10 ? size : "" };
 }
 
 /** Group `k`'s name card, `w` across and whole rows tall, the card at its foot: what the pane shows over the chart's foot while the pointer is on the island. */
@@ -158,7 +158,7 @@ export function seaChart(d: PaneData, w: number, h: number): { source: string; i
   return { source: svg(w, h, label, isles.map((c) => islandSvg(d, c)).join("")), isles };
 }
 
-/** An Issue box of an opened island, in whole cells: a row for its ref, then its title on `lines`, which the pane writes in it. */
+/** An Issue box of an opened island, in whole cells: a row for its reference, its title on `lines`, and a row for the frame the pane draws round them. */
 export interface Box extends OutlineRow {
   x: number;
   y: number;
@@ -169,13 +169,14 @@ export interface Box extends OutlineRow {
   row: number;
 }
 
-/** In cells: the row the island's head takes, which the pane writes what the Group holds in, the boxes' margin, and how far in each step of the outline goes. */
+/** In cells: the room above the boxes, the boxes' margin, how far in each step of the outline goes, and the row a box's frame takes beside its words. */
 const HEAD = 1;
 const PAD = 1;
 const INDENT = 2;
-/** In pixels: the room kept below the boxes, and the gap between two, which each takes half of within its rows. */
+const FRAME = 1;
+/** In pixels: the room kept below the boxes; and how far down a box its first row of words lies, its frame above them, as the desktop app was measured to draw it. */
 const FOOT = 12;
-const GAP = 6;
+const INSIDE = 9;
 
 /** The boxes of outline rows from `first` that fit `h`: titles on two lines where that fits as many, on one where that fits more. */
 function boxesFrom(d: PaneData, rows: OutlineRow[], w: number, h: number, first: number): Box[] {
@@ -188,9 +189,9 @@ function boxesFrom(d: PaneData, rows: OutlineRow[], w: number, h: number, first:
       const r = rows[row]!;
       const x = PAD + r.depth * INDENT;
       const bw = across - x;
-      // Room to spare: the pane's text runs a little wider than measured, and its Buttons have padding.
-      const title = wrap(nameOf(d, r.i) || "an Issue this login can't read", (bw - 2) * CELL.w - 24, TEXT, lines);
-      const bh = 1 + title.length;
+      // Room to spare for the frame, its padding and the Buttons' own; a Button's label is drawn semi-bold.
+      const title = wrap(nameOf(d, r.i) || "an Issue this login can't read", (bw - 4) * CELL.w, TEXT, lines, 600);
+      const bh = 1 + title.length + FRAME;
       if (y + bh > down && out.length > 0) break;
       out.push({ ...r, x: x * CELL.w, y: y * CELL.h, w: bw * CELL.w, h: bh * CELL.h, lines: title, row });
       y += bh;
@@ -219,20 +220,15 @@ export function earlier(d: PaneData, k: number, w: number, h: number, first: num
   return start;
 }
 
-/** An Issue box's frame, its words left to the pane. */
-function boxSvg(d: PaneData, b: Box, { mark }: { mark?: number }): string {
-  const marked = b.i === mark;
-  return `<rect x="${px(b.x)}" y="${px(b.y + GAP / 2)}" width="${px(b.w)}" height="${px(b.h - GAP)}" rx="7" fill="var(--box)" stroke="${marked ? "var(--ink)" : "var(--coast)"}" stroke-width="${marked ? 2.5 : 1}"${isOutside(d, b.i) ? ' stroke-dasharray="3 3"' : ""}/>`;
-}
-
 /**
  * Group `k` opened: one island as tall as what it holds, its Issues as an
  * outline with a line running down the left into each from the one above
  * it, a red arrow for Blocks and a dotted line for Parent, so no line
- * crosses a box. `grow`, just opened from the Map, grows it from its island
- * while the others sink.
+ * crosses a box. The boxes are the pane's, drawn round their words, so the
+ * words always fit them. `grow`, just opened from the Map, grows it from its
+ * island while the others sink.
  */
-export function islandChart(d: PaneData, k: number, w: number, h: number, page: { first: number; boxes: Box[]; rows: number }, { mark, grow }: { mark?: number; grow?: boolean } = {}): string {
+export function islandChart(d: PaneData, k: number, w: number, h: number, page: { first: number; boxes: Box[]; rows: number }, { grow }: { grow?: boolean } = {}): string {
   const g = d.groups[k]!;
   const { boxes } = page;
   const at = new Map(boxes.map((b) => [b.i, b]));
@@ -241,21 +237,21 @@ export function islandChart(d: PaneData, k: number, w: number, h: number, page: 
   const animate = !!from;
   let body = isles.filter((c) => c.k !== k).map((c) => islandSvg(d, c, { sink: true })).join("");
   const last = boxes[boxes.length - 1];
-  const tall = Math.min(h - 4, (last ? last.y + last.h : 40) + FOOT - 4);
+  const top = (HEAD * CELL.h) / 2;
+  const tall = Math.min(h - 2 - top, (last ? last.y + last.h : 40) - top + FOOT - 6);
   const start = from ? ` class="grow" style="--x0:${px(from.x - from.r)}px;--y0:${px(from.y - from.r)}px;--d0:${px(2 * from.r)}px;--r0:${px(from.r)}px"` : "";
-  body += `<rect${start} x="2" y="2" width="${px(w - 4)}" height="${px(tall)}" rx="14" fill="var(--land)" stroke="var(--ink)" stroke-width="1.5"/>`;
+  body += `<rect${start} x="2" y="${top}" width="${px(w - 4)}" height="${px(tall)}" rx="14" fill="var(--land)" stroke="var(--ink)" stroke-width="1.5"/>`;
   body += `<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="var(--stop)" stroke-width="1.6"/></marker></defs>`;
   for (const b of boxes) {
     const above = b.from === null ? undefined : at.get(b.from);
     if (!above) continue;
     const sx = above.x + 10;
-    const ey = b.y + CELL.h / 2;
+    const ey = b.y + INSIDE + CELL.h / 2;
     // A Blocks line draws itself in; a Parent's dots fade in, since drawing in would take their dashes.
     const motion = animate ? ` class="${b.blocks ? "draw" : "fade"}" style="animation-delay:${480 + Math.min(b.row * 45, 900)}ms"` : "";
-    body += `<path${motion} d="M${px(sx)} ${px(above.y + above.h - GAP / 2)} L${px(sx)} ${px(ey - 6)} Q${px(sx)} ${px(ey)} ${px(sx + 6)} ${px(ey)} L${px(b.x - 1)} ${px(ey)}" fill="none" stroke="${b.blocks ? "var(--stop)" : "var(--faint)"}" stroke-width="1.6"${
+    body += `<path${motion} d="M${px(sx)} ${px(above.y + above.h - 4)} L${px(sx)} ${px(ey - 6)} Q${px(sx)} ${px(ey)} ${px(sx + 6)} ${px(ey)} L${px(b.x - 1)} ${px(ey)}" fill="none" stroke="${b.blocks ? "var(--stop)" : "var(--faint)"}" stroke-width="1.6"${
       b.blocks ? ' pathLength="1" marker-end="url(#arrow)"' : ' stroke-dasharray="2 3"'
     }/>`;
   }
-  body += boxes.map((b) => boxSvg(d, b, mark === undefined ? {} : { mark })).join("");
   return svg(w, h, `${plain(nameOf(d, g.head))}: ${groupSaid(g)}`, body);
 }

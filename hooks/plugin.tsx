@@ -32,6 +32,7 @@ import {
   holdsNext,
   island,
   issueAt,
+  isOutside,
   issueSaid,
   LISTS,
   nameOf,
@@ -367,7 +368,7 @@ export const register: Register = (on) => {
               {drawn.isles.map((c) => {
                 const label = isleLabel(d, c);
                 const tall = label.size ? 2 : 1;
-                const span = Math.ceil(textWidth(label.size || label.n, TEXT) / CELL.w) + 2;
+                const span = Math.ceil(textWidth(label.size || label.n, TEXT, 600) / CELL.w) + 2;
                 const top = Math.max(0, Math.round(c.y / CELL.h - tall / 2));
                 const left = Math.max(0, Math.round(c.x / CELL.w - span / 2));
                 const caption = isleCaption(d, c.k, w);
@@ -463,7 +464,8 @@ export const register: Register = (on) => {
         const k = groupAt(d, screen.head)!;
         const g = d.groups[k]!;
         const room = rows - Math.ceil(size.button + size.gap + size.gap + size.button);
-        const head = topRow(`Group ${count(k + 1)}`, `of ${count(d.groups.length)}`);
+        // Where the chart is drawn, what the Group holds is said beside its name; on the terminal, on a line of its own.
+        const head = topRow(`Group ${count(k + 1)}`, `of ${count(d.groups.length)}${pictured ? ` · ${groupSaid(g)}` : ""}`);
         const mark = screen.mark === undefined ? undefined : issueAt(d, screen.mark);
         if (pictured) {
           const { Svg } = pictured;
@@ -471,24 +473,21 @@ export const register: Register = (on) => {
           const high = room * CELL.h;
           const page = islandPage(d, k, w, high, { ...(screen.from === undefined ? {} : { from: screen.from }), ...(mark === undefined ? {} : { mark }) });
           const grow = screen.openedAt !== undefined && now - screen.openedAt < GROWS_MS;
-          const source = islandChart(d, k, w, high, page, { ...(mark === undefined ? {} : { mark }), grow });
-          // The chart draws each Issue's box; its words are laid over it, its title Buttons that open it.
+          const source = islandChart(d, k, w, high, page, { grow });
+          // The chart draws the island and its lines; each Issue's box is the pane's, round its words, its title Buttons that open it.
           return (
             <Box flexDirection="column" gap={1} height={rows}>
               {head}
               <Box key="island" height={room} overflow="hidden">
                 <Svg source={wide(source, w)} alt={`${nameOf(d, g.head)}: ${groupSaid(g)}`} />
-                <Box position="absolute" top={0} left={2}>
-                  <Text dimColor bold wrap="truncate-end">
-                    {groupSaid(g)}
-                  </Text>
-                </Box>
                 {page.boxes.map((b, j) => {
                   const issue = d.issues[b.i]!;
                   const state = stateOf(d, b.i);
                   const open = () => go({ kind: "issue", ref: issue.ref });
+                  // The Issue just left in a bright frame, an Outside Issue's dim.
+                  const frame = b.i === mark ? { borderColor: "text" } : { borderColor: COLOR.muted, borderDimColor: isOutside(d, b.i) };
                   return (
-                    <Box key={`b${j}`} position="absolute" top={b.y / CELL.h} left={b.x / CELL.w + 1} width={b.w / CELL.w - 2} flexDirection="column">
+                    <Box key={`b${j}`} position="absolute" top={b.y / CELL.h} left={b.x / CELL.w} width={b.w / CELL.w} flexDirection="column" borderStyle="round" paddingX={1} {...frame}>
                       <Box flexDirection="row" justifyContent="space-between">
                         <Text wrap="truncate-end">
                           {state && <Text color={COLOR[state.tone]}>● </Text>}

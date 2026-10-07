@@ -186,13 +186,13 @@ describe("the chart", () => {
     }
   });
 
-  test("an opened island's boxes lie on the pane's cells, a row for the reference and one for each line of the title, so the pane can write them in", () => {
+  test("an opened island's boxes lie on the pane's cells, a row for the reference, one for each line of the title and one for the frame, so the pane can draw them", () => {
     const d = paneData(recorded("opentofu__opentofu"));
     for (const [w, h] of SIZES) {
       for (const b of islandPage(d, 0, w, h, {}).boxes) {
         assert.deepEqual([b.x % CELL.w, b.y % CELL.h, b.w % CELL.w, b.h % CELL.h], [0, 0, 0, 0]);
-        assert.equal(b.h / CELL.h, 1 + b.lines.length);
-        for (const line of b.lines) assert.ok(textWidth(line, TEXT) <= b.w - 2 * CELL.w, line);
+        assert.equal(b.h / CELL.h, 1 + b.lines.length + 1);
+        for (const line of b.lines) assert.ok(textWidth(line, TEXT, 600) <= b.w - 4 * CELL.w, line);
       }
     }
   });
@@ -202,7 +202,7 @@ describe("the chart", () => {
     for (const c of packIslands(d, 420, 600)) {
       const { n, size } = isleLabel(d, c);
       assert.equal(n, String(c.k + 1));
-      if (size) assert.ok(textWidth(size, TEXT) <= 2 * c.r - 10);
+      if (size) assert.ok(textWidth(size, TEXT, 600) <= 2 * c.r - 10);
     }
   });
 
