@@ -8,7 +8,8 @@
  * that read runs in the background. A Project where the Map can read no Link
  * kind is refused before a first read starts. An Issue card reads its Issue live instead,
  * so it opens even during a first read (ADR 0006). The HTML Picture is drawn
- * from the same Snapshot, written beside it, and said where (ADR 0010).
+ * from the same Snapshot, written beside it, and said where (ADR 0010); so is
+ * the pane's data, printed as JSON (ADR 0014).
  */
 import type { SnapshotKey, SnapshotState, SnapshotStore } from "../snapshot/store.ts";
 import type { CantAnswer, IssueRead, Project, Tracker } from "../tracker/tracker.ts";
@@ -17,6 +18,7 @@ import { drawCard, type Card, type CardContext } from "./card.ts";
 import type { Snapshot } from "../snapshot/snapshot.ts";
 import { draw, drawProgress, type Command, type Context, type Drawing } from "./draw.ts";
 import { artifactSaid, htmlPicture, noArtifacts, pageSaid } from "./page.ts";
+import { paneData } from "./pane.ts";
 import { OUTSIDE } from "./text.ts";
 
 export interface ShowDeps {
@@ -38,8 +40,8 @@ export interface Shown extends Drawing {
   drew: "map" | "progress" | "nothing";
 }
 
-/** A drawing of the Map: one in the conversation, or the HTML Picture of it all; `artifact` asks to publish it (#86). */
-export type MapCommand = Command | { kind: "html"; artifact?: true };
+/** A drawing of the Map: one in the conversation, the HTML Picture of it all, `artifact` asking to publish it (#86), or the pane's data. */
+export type MapCommand = Command | { kind: "html"; artifact?: true } | { kind: "pane" };
 
 /** What publishing the HTML Picture sends, and under whose Tracker login it was read. */
 const about = (snapshot: Snapshot) => ({ project: `${snapshot.tracker}/${snapshot.project.path}`, open: snapshot.issues.length, tracker: snapshot.tracker, login: snapshot.login });
@@ -58,10 +60,11 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     return nothing(`No Map of ${project.host}/${project.path}: ${cantAnswer(tracker, viewer)}. What was kept of it is deleted.`);
   }
   if (viewer.kind === "viewer") await deps.startRefresher(key);
-  /** The drawing's text; the HTML Picture is written, and said where, unless the Project is Refused, which the overview says. */
+  /** The drawing's text; the HTML Picture is written, and said where, and the pane's data printed, unless the Project is Refused, which the overview says. */
   const drawn = async (snapshot: Snapshot, context: Context): Promise<string> => {
-    if (command.kind !== "html") return draw(snapshot, command, context).text;
+    if (command.kind !== "html" && command.kind !== "pane") return draw(snapshot, command, context).text;
     if (bandOf(snapshot.support).kind === "refused") return draw(snapshot, { kind: "overview" }).text;
+    if (command.kind === "pane") return JSON.stringify({ map: paneData(snapshot, context) });
     // Where Artifacts can't be had, there's nothing to publish, so nothing is written.
     if (command.artifact && noArtifacts()) return artifactSaid("", about(snapshot));
     const path = await deps.store.page(key, htmlPicture(snapshot, context));
@@ -92,7 +95,10 @@ export async function showMap(deps: ShowDeps, tracker: Tracker, project: Project
     const text = await drawn(state.snapshot, home === undefined ? {} : { home });
     return bandOf(state.snapshot.support).kind === "refused" ? nothing(text) : map(text);
   }
-  return { text: drawProgress(project.path, progress(state, project)).text, drew: "progress" };
+  const read = progress(state, project);
+  // The pane draws the read's progress itself, and asks again until it finishes.
+  if (command.kind === "pane") return { text: JSON.stringify({ reading: { project: project.path, ...read } }), drew: "progress" };
+  return { text: drawProgress(project.path, read).text, drew: "progress" };
 }
 
 function progress(state: Exclude<SnapshotState, { kind: "ready" }>, project: Project) {

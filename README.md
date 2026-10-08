@@ -89,6 +89,7 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 - **Pictures.** You can draw a Group whole, or the Issues around one Issue. Either can be exported as Mermaid or DOT to paste into a GitHub or GitLab comment. The whole Map can also be one read-only HTML page in your browser, or a private claude.ai Artifact.
 - **A status line of its own.** The Home Project's first Issue in Take next, pinned under the prompt beside your status line, with nothing to set up.
 - **`/issue-map`.** Shows the Map, a Group or a card at once, with no reply to wait for.
+- **A pane beside the conversation.** `/issue-map pane` draws the Groups as islands in a pane of their own. Open one, then an Issue, and go back up a level at a time.
 - **Briefings.** `start work on #2` has Claude read the Issue's body and comments and brief you in about a dozen lines.
 - **Writes only what you confirm.** It writes two things, assigning you and the Link Suggestions you tick, and asks every time.
 - **GitHub and GitLab, cloud and self-managed.** It works through your existing `gh` and `glab` logins, with no token of its own and no runtime dependencies.
@@ -98,7 +99,7 @@ Claude doesn't retype any of this. Each output ends with a line such as `⟦issu
 | Requirement | Details |
 |---|---|
 | OS | Linux, or macOS 13 or later. On Windows, run Claude Code under WSL: the plugin is untested on Windows itself. |
-| Claude Code | 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. The status line and `/issue-map` also need a build that loads plugins' hooks modules, which are early access. They're tested on 2.1.287. Without such a build, everything else still works, through Claude. |
+| Claude Code | 2.1.152 or later, the first to run `MessageDisplay` hooks, which the plugin shows its output through. The status line, `/issue-map` and its pane also need a build that loads plugins' hooks modules, which are early access. They're tested on 2.1.287, and the pane on 2.1.289. Without such a build, everything else still works, through Claude. |
 | Node.js | 22.18 or later on your `PATH`. Node runs the plugin's TypeScript directly, and a release holds only what it runs, so there is nothing to install or build. |
 | Tools | `bash`, and `git`, which the plugin uses to read the checkout's remotes. |
 | GitHub | The [GitHub CLI](https://cli.github.com/), logged in to the host: `gh auth login --hostname <host>` |
@@ -202,7 +203,7 @@ Run Claude Code in a git checkout. The Map opens on the checkout's Home Project,
 
 Every phrase, paging, and how the Map behaves under `claude -p` are in **[docs/usage.md](docs/usage.md)**.
 
-You can also skip Claude. Type `/issue-map` for the Map, or `/issue-map` followed by a view, such as `/issue-map group 1`, `/issue-map issue 2` or `/issue-map back`. It shows the output at once, with no reply to wait for, and Claude reads it too, so you can carry on by asking ([ADR 0012](docs/adr/0012-a-slash-command-shows-the-map-without-claude.md)).
+You can also skip Claude. Type `/issue-map` for the Map, or `/issue-map` followed by a view, such as `/issue-map group 1`, `/issue-map issue 2` or `/issue-map back`. It shows the output at once, with no reply to wait for, and Claude reads it too, so you can carry on by asking ([ADR 0012](docs/adr/0012-a-slash-command-shows-the-map-without-claude.md)). `/issue-map pane` opens the Map in a pane beside the conversation instead ([ADR 0014](docs/adr/0014-a-pane-draws-the-map-beside-the-conversation.md)).
 
 The plugin also pins a status line of its own under the prompt, beside yours, with nothing to set up. It shows the Home Project's first Issue in Take next, and never reads the Tracker itself:
 

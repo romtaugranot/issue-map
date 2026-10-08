@@ -93,6 +93,8 @@ export type Request =
   | { kind: "start"; ref: string }
   /** The HTML Picture of the Project on screen, written beside its Snapshot; `artifact` asks to publish it. */
   | { kind: "html"; artifact?: true }
+  /** What the pane draws the Project on screen from. */
+  | { kind: "pane" }
   /** Link Suggestions from what is on screen: its text to propose from, the proposals to offer, or the ones ticked to write. */
   | { kind: "suggest" }
   | { kind: "offer"; proposals: Proposal[] }
@@ -133,7 +135,7 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
   const isHome = (project: Project) => project.id === home?.project.id;
 
   /** Draws `at`; `opened` when it drew something to stand on, `drewMap` when that was a Map. */
-  const show = async (at: Position | { project: Project; view: { kind: "html"; artifact?: true } }): Promise<{ answer: Answer; opened: boolean; drewMap: boolean }> => {
+  const show = async (at: Position | { project: Project; view: { kind: "html"; artifact?: true } | { kind: "pane" } }): Promise<{ answer: Answer; opened: boolean; drewMap: boolean }> => {
     const found = await trackerAt(deps, at.project.host);
     if ("why" in found) return { answer: say(`No Map of ${at.project.host}/${at.project.path}: ${found.why}`), opened: false, drewMap: false };
     const { tracker } = found;
@@ -173,8 +175,9 @@ export async function move(deps: MoveDeps, request: Request): Promise<Answer> {
     }
 
     case "html":
+    case "pane":
       if (!here) return say(deps.home.text);
-      // A page beside the Map, not a place on it, so the user stays where they are.
+      // A page or a pane beside the Map, not a place on it, so the user stays where they are.
       return (await show({ project: here.project, view: request })).answer;
 
     case "assign": {

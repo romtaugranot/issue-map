@@ -12,5 +12,5 @@
       }
     ]
   },
-  "modules": ["./plugin.ts"]
+  "modules": ["./plugin.tsx"]
 }
