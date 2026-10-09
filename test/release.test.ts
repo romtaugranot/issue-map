@@ -47,10 +47,10 @@ test("a release's notes are its section of the changelog", () => {
   assert.throws(() => releaseNotes("## 1.2.3\n\n## 1.2.2\n- x\n", "1.2.3"), /empty/);
 });
 
-test("the marketplace installs the plugin from the release branch, so a commit on main reaches nobody until it's released", () => {
+test("the marketplace installs the plugin from the release branch over HTTPS, so a commit on main reaches nobody until it's released, and installing needs no GitHub SSH key", () => {
   const marketplace = JSON.parse(readFileSync(join(ROOT, ".claude-plugin/marketplace.json"), "utf8"));
   const manifest = JSON.parse(readFileSync(join(ROOT, ".claude-plugin/plugin.json"), "utf8"));
   assert.deepEqual(marketplace.plugins.map((p: { source: unknown }) => p.source), [
-    { source: "github", repo: new URL(manifest.repository).pathname.slice(1), ref: "release" },
+    { source: "url", url: `${manifest.repository}.git`, ref: "release" },
   ]);
 });
