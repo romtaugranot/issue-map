@@ -133,7 +133,7 @@ jobs:
             if (!JSON.parse(text).data?.__schema) throw new Error(`no schema in the answer: ${text.slice(0, 500)}`);
             writeFileSync("schema.json", text);'
       - if: matrix.edition == 'ee'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: gitlab-${{ matrix.version }}-ee-schema
           path: schema.json
